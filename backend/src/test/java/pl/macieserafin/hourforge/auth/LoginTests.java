@@ -3,6 +3,8 @@ package pl.macieserafin.hourforge.auth;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -49,10 +51,12 @@ class LoginTests {
     void requiresAuthenticationAndDoesNotEnableSeedingInTestProfile() throws Exception {
         assertThat(context.containsBean("seedUsers")).isFalse();
         mvc.perform(get("/api/me")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/me")).andExpect(status().isUnauthorized());
     }
 
-    @Test
-    void csrfLoginSessionAndLogoutFlow() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"/me", "/api/me"})
+    void csrfLoginSessionAndLogoutFlow(String profilePath) throws Exception {
         var session = new MockHttpSession();
         String originalSessionId = session.getId();
         String token = csrfToken(session);
@@ -63,7 +67,7 @@ class LoginTests {
                 .andExpect(status().isNoContent());
         assertThat(session.getId()).isNotEqualTo(originalSessionId);
 
-        mvc.perform(get("/api/me").session(session))
+        mvc.perform(get(profilePath).session(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(user.getId().toString()))
                 .andExpect(jsonPath("$.email").value(EMAIL))
@@ -75,7 +79,7 @@ class LoginTests {
                         .header("X-CSRF-TOKEN", csrfToken(session)))
                 .andExpect(status().isNoContent());
         assertThat(session.isInvalid()).isTrue();
-        mvc.perform(get("/api/me")).andExpect(status().isUnauthorized());
+        mvc.perform(get(profilePath)).andExpect(status().isUnauthorized());
     }
 
     @Test

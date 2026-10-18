@@ -24,7 +24,7 @@ public class AuthController {
         return new CsrfResponse(csrf.getToken(), csrf.getHeaderName(), csrf.getParameterName());
     }
 
-    @GetMapping("/api/me")
+    @GetMapping({"/me", "/api/me"})
     public MeResponse me(@AuthenticationPrincipal AppUserPrincipal principal) {
         var user = users.findById(principal.getUserId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
