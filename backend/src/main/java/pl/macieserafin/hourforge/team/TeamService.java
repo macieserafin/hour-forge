@@ -8,6 +8,7 @@ import pl.macieserafin.hourforge.user.UserRepository;
 
 import java.time.Instant;
 import java.util.UUID;
+import java.util.List;
 
 @Service
 public class TeamService {
@@ -19,6 +20,14 @@ public class TeamService {
         this.teams = teams;
         this.members = members;
         this.users = users;
+    }
+
+    @Transactional(readOnly = true)
+    public List<TeamResponse> getTeams(UUID currentUserId) {
+        if (!users.existsById(currentUserId)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+        return members.findActiveTeamsByUserId(currentUserId);
     }
 
     @Transactional
