@@ -1,12 +1,16 @@
 import { AlertCircle, LoaderCircle, RefreshCw } from 'lucide-react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router-dom'
 import { Brand } from './components/Brand'
 import { useSession } from './lib/auth'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { InvitePage } from './pages/InvitePage'
+import { loginUrl, safeReturnTo } from './lib/navigation'
 
 export function App() {
   const session = useSession()
+  const location = useLocation()
+  const [search] = useSearchParams()
 
   if (session.isPending) return <div className="session-screen" aria-busy="true">
     <Brand /><div className="session-loader"><LoaderCircle className="spin" size={22} />
@@ -25,9 +29,12 @@ export function App() {
   </main>
 
   const user = session.data
+  const signIn = <Navigate to={loginUrl(location.pathname + location.search)} replace />
   return <Routes>
-    <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
-    <Route path="/dashboard" element={user ? <DashboardPage user={user} /> : <Navigate to="/login" replace />} />
+    <Route path="/login" element={user ? <Navigate to={safeReturnTo(search.get('returnTo'))} replace /> : <LoginPage />} />
+    <Route path="/dashboard" element={user ? <DashboardPage user={user} /> : signIn} />
+    <Route path="/teams" element={user ? <DashboardPage user={user} section="teams" /> : signIn} />
+    <Route path="/invite/:token" element={user ? <InvitePage user={user} /> : signIn} />
     <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
   </Routes>
 }

@@ -3,6 +3,8 @@ import { Clock3, Folder, LayoutDashboard, LoaderCircle, LogOut, Menu, Users, X }
 import { Brand } from '../components/Brand'
 import type { User } from '../lib/api'
 import { useLogout } from '../lib/auth'
+import { Link, NavLink } from 'react-router-dom'
+import { TeamsPanel } from './TeamsPanel'
 
 function initials(name: string) {
   return name.trim().split(/\s+/).slice(0, 2).map(part => part.charAt(0)).join('').toLocaleUpperCase('pl-PL') || 'U'
@@ -20,10 +22,10 @@ function Sidebar({ user, isLoggingOut, onLogout, onNavigate }: SidebarProps) {
     <div className="sidebar-brand"><Brand compact /></div>
     <p className="nav-caption">Panel użytkownika</p>
     <nav className="sidebar-nav" aria-label="Nawigacja główna">
-      <a href="/dashboard" className="nav-item active" aria-current="page" onClick={event => { event.preventDefault(); onNavigate() }}><LayoutDashboard size={18} />Pulpit</a>
+      <NavLink to="/dashboard" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={onNavigate}><LayoutDashboard size={18} />Pulpit</NavLink>
       <button className="nav-item" disabled title="Dostępne wkrótce"><Clock3 size={18} />Rejestr czasu</button>
       <button className="nav-item" disabled title="Dostępne wkrótce"><Folder size={18} />Projekty</button>
-      <button className="nav-item" disabled title="Dostępne wkrótce"><Users size={18} />Zespół</button>
+      <NavLink to="/teams" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={onNavigate}><Users size={18} />Zespoły</NavLink>
     </nav>
     <div className="sidebar-bottom">
       <div className="sidebar-profile"><span className="avatar">{initials(user.displayName)}</span><div><strong title={user.displayName}>{user.displayName}</strong><span title={user.email}>{user.email}</span></div></div>
@@ -34,7 +36,7 @@ function Sidebar({ user, isLoggingOut, onLogout, onNavigate }: SidebarProps) {
   </div>
 }
 
-export function DashboardPage({ user }: { user: User }) {
+export function DashboardPage({ user, section = 'dashboard' }: { user: User; section?: 'dashboard' | 'teams' }) {
   const logout = useLogout()
   const menu = useRef<HTMLDialogElement>(null)
   const firstName = user.displayName.trim().split(/\s+/)[0] || user.displayName
@@ -50,21 +52,22 @@ export function DashboardPage({ user }: { user: User }) {
     </dialog>
     <div className="workspace-main">
       <header className="topbar">
-        <div className="breadcrumbs"><button className="icon-button menu-trigger" aria-label="Otwórz menu" onClick={() => menu.current?.showModal()}><Menu size={20} /></button><strong>Pulpit</strong></div>
+        <div className="breadcrumbs"><button className="icon-button menu-trigger" aria-label="Otwórz menu" onClick={() => menu.current?.showModal()}><Menu size={20} /></button><strong>{section === 'teams' ? 'Zespoły' : 'Pulpit'}</strong></div>
         <div className="topbar-right"><span className="topbar-user">{user.displayName}</span><span className="avatar avatar-small" aria-label={user.displayName}>{initials(user.displayName)}</span></div>
       </header>
 
       <main id="main" className="dashboard-content">
-        <div className="page-heading"><div><h1>Cześć, {firstName}.</h1><p>To jest Twój pulpit w HourForge.</p></div><p className="date-label">{date}</p></div>
+        <div className="page-heading"><div><h1>{section === 'teams' ? 'Zespoły' : `Cześć, ${firstName}.`}</h1><p>{section === 'teams' ? 'Wspólna praca zaczyna się od zespołu.' : 'To jest Twój pulpit w HourForge.'}</p></div><p className="date-label">{date}</p></div>
         {logout.isError && <div className="dashboard-error" role="alert">{logout.error.message}<button onClick={() => logout.mutate()}>Spróbuj ponownie</button></div>}
 
-        <div className="dashboard-overview">
+        {section === 'teams' ? <TeamsPanel userId={user.id} /> : <div className="dashboard-overview">
           <section className="overview-panel" aria-labelledby="overview-title">
             <header className="section-heading"><h2 id="overview-title">Przegląd pracy</h2></header>
             <div className="empty-state">
               <Clock3 size={28} strokeWidth={1.4} aria-hidden="true" />
-              <h3>Pulpit czeka na pierwsze moduły.</h3>
-              <p>Rejestrowanie czasu, projekty i zarządzanie zespołem są w przygotowaniu.</p>
+              <h3>Zacznij od swojego zespołu.</h3>
+              <p>Utwórz zespół, wybierz jeden z istniejących lub przekaż współpracownikom link zaproszeniowy.</p>
+              <Link className="text-link dashboard-teams-link" to="/teams">Przejdź do zespołów</Link>
             </div>
           </section>
           <section className="account-details" aria-labelledby="account-title">
@@ -74,7 +77,7 @@ export function DashboardPage({ user }: { user: User }) {
               <dt>Adres e-mail</dt><dd className="account-email">{user.email}</dd>
             </dl>
           </section>
-        </div>
+        </div>}
         <footer className="dashboard-footer"><span>HourForge</span><span>Panel użytkownika</span></footer>
       </main>
     </div>

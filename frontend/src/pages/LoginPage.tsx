@@ -2,12 +2,16 @@ import { useState, type FormEvent } from 'react'
 import { ArrowRight, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail } from 'lucide-react'
 import { Brand } from '../components/Brand'
 import { useLogin } from '../lib/auth'
+import { useSearchParams } from 'react-router-dom'
+import { safeReturnTo } from '../lib/navigation'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const login = useLogin()
+  const [search] = useSearchParams()
+  const isInvitation = safeReturnTo(search.get('returnTo')).startsWith('/invite/')
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -29,7 +33,7 @@ export function LoginPage() {
       <div className="login-top"><span className="mobile-brand"><Brand /></span><span className="login-context">Panel użytkownika</span></div>
       <div className="login-form-wrap">
         <h2>Zaloguj się</h2>
-        <p className="form-intro">Użyj adresu e-mail przypisanego do Twojego konta.</p>
+        <p className="form-intro">{isInvitation ? 'Zaloguj się, aby wrócić do zaproszenia i potwierdzić dołączenie do zespołu.' : 'Użyj adresu e-mail przypisanego do Twojego konta.'}</p>
 
         <form onSubmit={submit} aria-label="Logowanie">
           <div className="field-group">
