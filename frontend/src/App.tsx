@@ -34,6 +34,7 @@ export function App() {
     <Route path="/login" element={user ? <Navigate to={safeReturnTo(search.get('returnTo'))} replace /> : <LoginPage />} />
     <Route path="/dashboard" element={user ? <DashboardPage user={user} /> : signIn} />
     <Route path="/teams" element={user ? <DashboardPage user={user} section="teams" /> : signIn} />
+    <Route path="/projects" element={user ? <DashboardPage user={user} section="projects" /> : signIn} />
     <Route path="/invite/:token" element={user ? <InvitePage user={user} /> : signIn} />
     <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
   </Routes>

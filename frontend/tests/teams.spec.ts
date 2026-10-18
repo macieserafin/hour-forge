@@ -6,7 +6,7 @@ const password = process.env.E2E_PASSWORD
 
 async function signIn(page: Page, email: string) {
   await page.getByLabel('Adres e-mail', { exact: true }).fill(email)
-  await page.getByLabel('Hasło', { exact: true }).fill(password!)
+  await page.getByLabel('Hasło', { exact: true }).fill(email === member ? process.env.E2E_MEMBER_PASSWORD ?? password! : password!)
   await page.getByRole('button', { name: 'Zaloguj się', exact: true }).click()
 }
 

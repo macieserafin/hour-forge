@@ -21,6 +21,20 @@ export interface Invitation {
   maxUses: number | null
 }
 
+export interface Project {
+  id: string
+  teamId: string
+  name: string
+  description: string | null
+  createdAt: string
+  archivedAt: string | null
+}
+
+export interface ProjectInput {
+  name: string
+  description: string | null
+}
+
 interface CsrfToken {
   token: string
   headerName: string
@@ -103,3 +117,36 @@ export const createTeam = (body: { name: string; timezone: string }) => teamRequ
 export const createInvitation = ({ teamId, ...body }: { teamId: string; expiresAt: string; maxUses: number | null }) =>
   teamRequest<Invitation>(`/api/teams/${encodeURIComponent(teamId)}/invites`, body)
 export const acceptInvitation = (token: string) => teamRequest<Team>(`/api/invites/${encodeURIComponent(token)}/accept`, {})
+
+async function projectRequest<T>(path: string, method = 'GET', body?: ProjectInput, signal?: AbortSignal): Promise<T> {
+  const csrf = method === 'GET' ? null : await getCsrf()
+  const response = await request(path, {
+    method, signal,
+    headers: csrf ? { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token } : undefined,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: 'Wpisz nazwę projektu (maksymalnie 255 znaków) i sprawdź dane formularza.',
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
+      404: 'Nie znaleziono projektu lub zespołu albo nie masz już do niego dostępu.',
+      409: path.endsWith('/archive')
+        ? 'Projekt ma aktywny timer. Zatrzymaj go przed archiwizacją.'
+        : 'Projekt jest już zarchiwizowany i nie można go edytować.',
+    }
+    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wczytać lub zapisać projektu. Spróbuj ponownie.')
+  }
+  return response.json() as Promise<T>
+}
+
+const projectsPath = (teamId: string) => `/api/teams/${encodeURIComponent(teamId)}/projects`
+export const getProjects = (teamId: string, includeArchived: boolean, signal?: AbortSignal) =>
+  projectRequest<Project[]>(`${projectsPath(teamId)}?includeArchived=${includeArchived}`, 'GET', undefined, signal)
+export const getProject = (teamId: string, projectId: string, signal?: AbortSignal) =>
+  projectRequest<Project>(`${projectsPath(teamId)}/${encodeURIComponent(projectId)}`, 'GET', undefined, signal)
+export const createProject = (teamId: string, body: ProjectInput) => projectRequest<Project>(projectsPath(teamId), 'POST', body)
+export const updateProject = (teamId: string, projectId: string, body: ProjectInput) =>
+  projectRequest<Project>(`${projectsPath(teamId)}/${encodeURIComponent(projectId)}`, 'PUT', body)
+export const archiveProject = (teamId: string, projectId: string) =>
+  projectRequest<Project>(`${projectsPath(teamId)}/${encodeURIComponent(projectId)}/archive`, 'POST')

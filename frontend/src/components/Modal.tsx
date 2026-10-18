@@ -14,7 +14,7 @@ export function Modal({ title, busy, onClose, children }: { title: string; busy:
   return <dialog ref={ref} className="form-dialog" aria-labelledby={titleId}
     onKeyDown={event => {
       if (event.key !== 'Tab') return
-      const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), a[href]')]
+      const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href]')]
         .filter(control => control.getClientRects().length > 0)
       const first = controls[0]
       const last = controls.at(-1)

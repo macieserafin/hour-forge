@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Check, Copy, Link2, LoaderCircle, Plus, Users } from 'lucide-react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Modal } from '../components/Modal'
 import type { Team } from '../lib/api'
 import { useCreateInvitation, useCreateTeam, useTeams } from '../lib/teams'
@@ -104,7 +104,7 @@ export function TeamsPanel({ userId }: { userId: string }) {
         <div className="team-table-wrap"><table className="team-table"><caption className="sr-only">Lista Twoich zespołów</caption><thead><tr><th>Zespół</th><th>Strefa czasowa</th><th>Twoja rola</th></tr></thead><tbody>
           {teams.data.map(team => <tr key={team.id} className={team.id === selected?.id ? 'selected-team-row' : ''}><td><button aria-pressed={team.id === selected?.id} onClick={() => select(team)}>{team.name}{team.id === selected?.id && <Check size={14} aria-label="Wybrany zespół" />}</button></td><td>{team.timezone}</td><td>{roleLabel(team.role)}</td></tr>)}
         </tbody></table></div>
-        {selected && <section className="selected-team" aria-label="Wybrany zespół"><div><h3>{selected.name}</h3><p>Twoja rola: {roleLabel(selected.role)}</p></div>{selected.role === 'OWNER' ? <button className="button-secondary" onClick={() => setModal('invite')}><Link2 size={16} />Zaproś do zespołu</button> : <p className="field-hint">Linki zaproszeniowe generuje właściciel zespołu.</p>}</section>}
+        {selected && <section className="selected-team" aria-label="Wybrany zespół"><div><h3>{selected.name}</h3><p>Twoja rola: {roleLabel(selected.role)}</p></div><div className="team-actions"><Link className="button-secondary" to={`/projects?${new URLSearchParams({ team: selected.id })}`}>Projekty zespołu</Link>{selected.role === 'OWNER' ? <button className="button-secondary" onClick={() => setModal('invite')}><Link2 size={16} />Zaproś do zespołu</button> : <p className="field-hint">Linki zaproszeniowe generuje właściciel zespołu.</p>}</div></section>}
       </>}
     {modal === 'create' && <CreateTeamModal userId={userId} onClose={() => setModal(null)} onCreated={team => { select(team); setModal(null) }} />}
     {modal === 'invite' && selected?.role === 'OWNER' && <InviteModal key={selected.id} team={selected} onClose={() => setModal(null)} />}

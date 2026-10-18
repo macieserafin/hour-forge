@@ -5,12 +5,13 @@ import { sessionOptions } from './auth'
 
 export const teamsKey = (userId: string) => ['teams', userId] as const
 
-function useAuthError() {
+export function useAuthError() {
   const client = useQueryClient()
   return useCallback((error: Error) => {
     if (error instanceof ApiError && error.status === 401) {
       client.setQueryData(sessionOptions.queryKey, null)
       client.removeQueries({ queryKey: ['teams'], type: 'inactive' })
+      client.removeQueries({ queryKey: ['projects'], type: 'inactive' })
     }
   }, [client])
 }
