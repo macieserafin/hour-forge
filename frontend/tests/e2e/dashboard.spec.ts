@@ -1,6 +1,6 @@
 import { test, expect, setupTeam, create } from '../support/e2e'
 
-test('personal dashboard sums saved time, follows corrections and keeps a timer visible across teams', async ({ page }, info) => {
+test('personal dashboard sums saved time, follows corrections and keeps a timer visible across teams', { tag: '@responsive' }, async ({ page }, info) => {
   const { team, project } = await setupTeam(page, `Dashboard ${info.project.name} ${Date.now()}`)
   const second = await create(page.request, '/api/teams', { name: 'Other dashboard team', timezone: 'UTC' })
   await page.goto(`/dashboard?team=${team.id}`)

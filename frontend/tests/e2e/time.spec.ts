@@ -1,6 +1,6 @@
 import { test, expect, member as memberEmail, memberPassword, login, post, create, createTeamProject as setup } from '../support/e2e'
 
-test('timer survives refresh and team changes while manual entries can be saved', async ({ page }, testInfo) => {
+test('timer survives refresh and team changes while manual entries can be saved', { tag: '@responsive' }, async ({ page }, testInfo) => {
   await login(page)
   const suffix = `${testInfo.project.name} ${Date.now()}`
   const first = await setup(page, suffix)

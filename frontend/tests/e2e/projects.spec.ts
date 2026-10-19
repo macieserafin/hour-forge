@@ -1,6 +1,6 @@
 import { test, expect, owner as ownerEmail, member as memberEmail, password as ownerPassword, memberPassword, login as signIn, write } from '../support/e2e'
 
-test('select team, create, inspect, edit and archive projects', async ({ page }, testInfo) => {
+test('select team, create, inspect, edit and archive projects', { tag: '@responsive' }, async ({ page }, testInfo) => {
   await signIn(page, ownerEmail!, ownerPassword!)
   const suffix = `${testInfo.project.name} ${Date.now()}`
   const first = await write(page.request, '/api/teams', { name: `Studio ${suffix}`, timezone: 'UTC' })

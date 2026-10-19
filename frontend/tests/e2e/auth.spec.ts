@@ -1,6 +1,6 @@
 import { test, expect, owner, password, submitLogin, login, signOut } from '../support/e2e'
 
-test('rejects invalid credentials and revokes access after logout', async ({ page }) => {
+test('rejects invalid credentials and revokes access after logout', { tag: '@responsive' }, async ({ page }) => {
   await page.goto('/login')
   await submitLogin(page, owner, 'incorrect-password')
   await expect(page.getByRole('alert')).toHaveText('Nieprawidłowy adres e-mail lub hasło.')

@@ -1,6 +1,6 @@
 import { test, expect, owner, member, submitLogin as signIn, signOut } from '../support/e2e'
 
-test('create and select a team, share invitation and join after login', async ({ page, context }, testInfo) => {
+test('create and select a team, share invitation and join after login', { tag: '@responsive' }, async ({ page, context }, testInfo) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   const name = `Zespół ${testInfo.project.name} ${Date.now()}`
   await page.goto('/login')

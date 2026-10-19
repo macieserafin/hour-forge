@@ -1,6 +1,6 @@
 import { test, expect, setupTeam, create, login, member } from '../support/e2e'
 
-test('owner filters and pages team reports while a member only sees personal time', async ({ page, browser }, info) => {
+test('owner filters and pages team reports while a member only sees personal time', { tag: '@responsive' }, async ({ page, browser }, info) => {
   const { team, project } = await setupTeam(page, `Reports ${info.project.name} ${Date.now()}`)
   const historical = await create(page.request, `/api/teams/${team.id}/projects`, { name: 'Historical project', description: null })
   const dates = await (await page.request.get(`/api/dashboard/summary?teamId=${team.id}`)).json()
