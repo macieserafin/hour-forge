@@ -299,3 +299,130 @@ async function changeTimeEntry(id: string, method: 'PATCH' | 'DELETE', body?: Up
 
 export const updateTimeEntry = ({ id, ...body }: UpdateTimeEntryInput & { id: string }) => changeTimeEntry(id, 'PATCH', body)
 export const deleteTimeEntry = (id: string) => changeTimeEntry(id, 'DELETE')
+
+export interface ReportFilters {
+  from: string
+  to: string
+  userId: string
+  projectId: string
+  entryType: '' | 'TIMER' | 'MANUAL'
+}
+
+export interface ReportContext {
+  teamId: string
+  teamName: string
+  timezone: string
+  filter: { from: string; to: string; userIds: string[]; projectIds: string[]; entryType: 'TIMER' | 'MANUAL' | null } | null
+}
+
+export interface ReportPage<T> {
+  content: T[]
+  page: number
+  size: number
+  hasNext: boolean
+}
+
+export interface ReportResult<T> {
+  context: ReportContext
+  data: ReportPage<T>
+}
+
+export interface ReportSummary {
+  context: ReportContext
+  totals: { durationSeconds: number; entryCount: number }
+}
+
+export interface ReportBucket {
+  workDate: string | null
+  userId: string | null
+  displayName: string | null
+  projectId: string | null
+  projectName: string | null
+  projectArchivedAt: string | null
+  durationSeconds: number
+  entryCount: number
+}
+
+export interface ReportMember {
+  userId: string
+  displayName: string
+  role: 'OWNER' | 'MEMBER'
+  joinedAt: string
+  leftAt: string | null
+}
+
+export interface ReportProject {
+  projectId: string
+  name: string
+  description: string | null
+  createdAt: string
+  archivedAt: string | null
+}
+
+export interface ReportEntry {
+  id: string
+  userId: string
+  displayName: string
+  projectId: string
+  projectName: string
+  projectArchivedAt: string | null
+  entryType: 'TIMER' | 'MANUAL'
+  workDate: string
+  startedAt: string | null
+  endedAt: string | null
+  durationSeconds: number
+  description: string | null
+  pausedAt: string | null
+  pausedDurationMicros: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type ReportSort = 'WORK_DATE:DESC' | 'WORK_DATE:ASC' | 'DURATION:DESC' | 'DURATION:ASC' | 'CREATED_AT:DESC' | 'CREATED_AT:ASC'
+
+function reportParams(filters: ReportFilters, page?: number) {
+  const params = new URLSearchParams()
+  if (filters.from) params.set('from', filters.from)
+  if (filters.to) params.set('to', filters.to)
+  if (filters.userId) params.set('userIds', filters.userId)
+  if (filters.projectId) params.set('projectIds', filters.projectId)
+  if (filters.entryType) params.set('entryType', filters.entryType)
+  if (page !== undefined) { params.set('page', String(page)); params.set('size', '20') }
+  return params
+}
+
+async function reportRequest<T>(teamId: string, endpoint: string, params: URLSearchParams, signal?: AbortSignal): Promise<T> {
+  const response = await request(`/api/teams/${encodeURIComponent(teamId)}/reports/${endpoint}?${params}`, { signal })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: 'Sprawdź zakres dat i filtry raportu.',
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Widok zespołu jest dostępny wyłącznie dla jego właściciela.',
+      404: 'Zespół lub wybrane dane są niedostępne. Sprawdź swoje uprawnienia i filtry.',
+    }
+    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wczytać raportu zespołu. Spróbuj ponownie.')
+  }
+  return response.json() as Promise<T>
+}
+
+export const getReportSummary = (teamId: string, filters: ReportFilters, signal?: AbortSignal) =>
+  reportRequest<ReportSummary>(teamId, 'summary', reportParams(filters), signal)
+
+export function getReportBreakdown(teamId: string, filters: ReportFilters, groupBy: 'MEMBER' | 'PROJECT', page: number, signal?: AbortSignal) {
+  const params = reportParams(filters, page)
+  params.set('groupBy', groupBy)
+  return reportRequest<ReportResult<ReportBucket> & { groupBy: 'MEMBER' | 'PROJECT' }>(teamId, 'breakdown', params, signal)
+}
+
+export function getReportEntries(teamId: string, filters: ReportFilters, sort: ReportSort, page: number, signal?: AbortSignal) {
+  const params = reportParams(filters, page)
+  const [field, direction] = sort.split(':')
+  params.set('sort', field!)
+  params.set('direction', direction!)
+  return reportRequest<ReportResult<ReportEntry>>(teamId, 'entries', params, signal)
+}
+
+export const getReportMembers = (teamId: string, page: number, signal?: AbortSignal) =>
+  reportRequest<ReportResult<ReportMember>>(teamId, 'members', new URLSearchParams({ page: String(page), size: '100' }), signal)
+export const getReportProjects = (teamId: string, page: number, signal?: AbortSignal) =>
+  reportRequest<ReportResult<ReportProject>>(teamId, 'projects', new URLSearchParams({ page: String(page), size: '100' }), signal)

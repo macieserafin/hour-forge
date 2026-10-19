@@ -37,7 +37,11 @@ export default async function globalSetup() {
     started = true
     const { stdout } = await exec('docker', ['port', container, '5432'])
     const databasePort = stdout.trim().split(':').at(-1)!
-    await exec('./mvnw', ['-q', '-DskipTests', 'package'], { cwd: backendPath, maxBuffer: 8 * 1024 * 1024 })
+    if (process.platform === 'win32') {
+      await exec('cmd.exe', ['/d', '/s', '/c', 'mvnw.cmd -q -DskipTests package'], { cwd: backendPath, maxBuffer: 8 * 1024 * 1024 })
+    } else {
+      await exec('./mvnw', ['-q', '-DskipTests', 'package'], { cwd: backendPath, maxBuffer: 8 * 1024 * 1024 })
+    }
     backend = spawn('java', ['-jar', 'target/hour-forge-0.0.1-SNAPSHOT.jar', `--server.port=${backendPort}`], {
       cwd: backendPath,
       env: { ...process.env, DB_URL: `jdbc:postgresql://127.0.0.1:${databasePort}/hourforge_e2e`,

@@ -6,6 +6,7 @@ import { useDashboardSummary } from '../lib/dashboard'
 import { useProject } from '../lib/projects'
 import { useTeams } from '../lib/teams'
 import { formatDuration, useActiveTimer } from '../lib/time'
+import { OwnerDashboard } from './OwnerDashboard'
 
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
 const timeLink = (teamId: string) => `/time?${new URLSearchParams({ team: teamId })}`
@@ -49,15 +50,20 @@ export function PersonalDashboard({ userId }: { userId: string }) {
   const [search, setSearch] = useSearchParams()
   const selectedId = search.get('team')
   const selected = selectedId ? teams.data?.find(team => team.id === selectedId) : teams.data?.[0]
+  const teamView = selected?.role === 'OWNER' && search.get('view') === 'team'
   return <div className="personal-dashboard">
     {teams.isPending ? <p className="teams-loading" role="status"><LoaderCircle size={18} className="spin" />Ładowanie zespołów…</p>
       : teams.isError ? <div className="dashboard-error" role="alert">{teams.error.message}<button onClick={() => void teams.refetch()}>Wczytaj zespoły ponownie</button></div>
       : teams.data.length === 0 ? <section className="overview-panel empty-state"><Clock3 size={28} strokeWidth={1.4} /><h2>Zacznij od swojego zespołu.</h2><p>Utwórz zespół lub dołącz do istniejącego, aby zobaczyć podsumowanie pracy.</p><Link className="text-link dashboard-teams-link" to="/teams">Przejdź do zespołów</Link></section>
       : <>
-        <div className="project-team-picker"><div className="field-group"><label htmlFor="dashboard-team">Zespół na pulpicie</label><select id="dashboard-team" className="text-input" value={selected?.id ?? ''} onChange={event => setSearch({ team: event.target.value })}>
+        <div className="project-team-picker"><div className="field-group"><label htmlFor="dashboard-team">Zespół na pulpicie</label><select id="dashboard-team" className="text-input" value={selected?.id ?? ''} onChange={event => setSearch({ team: event.target.value, ...(search.get('view') === 'team' ? { view: 'team' } : {}) })}>
           {!selected && <option value="" disabled>Wybierz dostępny zespół</option>}{teams.data.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
         </select></div></div>
-        {selected ? <Summary key={selected.id} userId={userId} team={selected} /> : <p className="form-error" role="alert">Ten zespół nie istnieje lub nie masz do niego dostępu. Wybierz inny zespół.</p>}
+        {selected?.role === 'OWNER' && <div className="dashboard-view-switch" role="group" aria-label="Widok pulpitu">
+          <button className="button-secondary" aria-pressed={!teamView} onClick={() => setSearch({ team: selected.id })}>Mój czas</button>
+          <button className="button-secondary" aria-pressed={teamView} onClick={() => setSearch({ team: selected.id, view: 'team' })}>Zespół</button>
+        </div>}
+        {selected ? teamView ? <OwnerDashboard key={`${userId}:${selected.id}`} userId={userId} team={selected} /> : <Summary key={selected.id} userId={userId} team={selected} /> : <p className="form-error" role="alert">Ten zespół nie istnieje lub nie masz do niego dostępu. Wybierz inny zespół.</p>}
       </>}
     {active.isPending ? <p className="teams-loading" role="status"><LoaderCircle size={18} className="spin" />Sprawdzanie aktywnego timera…</p>
       : active.isError ? <div className="dashboard-error" role="alert">{active.error.message}<button onClick={() => void active.refetch()}>Odśwież timer</button></div>

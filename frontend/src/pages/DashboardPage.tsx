@@ -43,6 +43,7 @@ function Sidebar({ user, isLoggingOut, onLogout, onNavigate }: SidebarProps) {
 
 export function DashboardPage({ user, section = 'dashboard' }: { user: User; section?: 'dashboard' | 'teams' | 'projects' | 'time' }) {
   const logout = useLogout()
+  const [search] = useSearchParams()
   const menu = useRef<HTMLDialogElement>(null)
   const firstName = user.displayName.trim().split(/\s+/)[0] || user.displayName
   const date = new Date().toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -66,7 +67,7 @@ export function DashboardPage({ user, section = 'dashboard' }: { user: User; sec
         <div className="page-heading"><div><h1>{section === 'dashboard' ? `Cześć, ${firstName}.` : sectionTitle}</h1><p>{section === 'teams' ? 'Wspólna praca zaczyna się od zespołu.' : section === 'projects' ? 'Projekty i historia pracy Twojego zespołu.' : section === 'time' ? 'Uruchom timer lub dodaj czas wykonanej pracy.' : 'To jest Twój pulpit w HourForge.'}</p></div><p className="date-label">{date}</p></div>
         {logout.isError && <div className="dashboard-error" role="alert">{logout.error.message}<button onClick={() => logout.mutate()}>Spróbuj ponownie</button></div>}
 
-        {section === 'teams' ? <TeamsPanel userId={user.id} /> : section === 'projects' ? <ProjectsPanel userId={user.id} /> : section === 'time' ? <TimePanel userId={user.id} /> : <div className="dashboard-overview">
+        {section === 'teams' ? <TeamsPanel userId={user.id} /> : section === 'projects' ? <ProjectsPanel userId={user.id} /> : section === 'time' ? <TimePanel userId={user.id} /> : <div className={`dashboard-overview${search.get('view') === 'team' ? ' team-overview' : ''}`}>
           <PersonalDashboard userId={user.id} />
           <section className="account-details" aria-labelledby="account-title">
             <h2 id="account-title">Twoje konto</h2>

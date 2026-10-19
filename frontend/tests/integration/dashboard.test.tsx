@@ -56,11 +56,13 @@ it.each(writes)('invalidates cached dashboard summaries after %s', async (_name,
   mockApi({ [path]: () => json(timer) })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   client.setQueryData(['dashboard', 'actor', 'team'], { todaySeconds: 0 })
+  client.setQueryData(['dashboard', 'actor', 'team', 'reports', 'summary'], { totals: { durationSeconds: 0 } })
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>
   const { result, unmount } = renderHook(() => hook('actor'), { wrapper })
   // Each row couples the hook with its corresponding input shape.
   await act(async () => { await (result.current.mutateAsync as (data: unknown) => Promise<unknown>)(input) })
   await waitFor(() => expect(client.getQueryState(['dashboard', 'actor', 'team'])?.isInvalidated).toBe(true))
+  expect(client.getQueryState(['dashboard', 'actor', 'team', 'reports', 'summary'])?.isInvalidated).toBe(true)
   unmount()
   client.clear()
 })
