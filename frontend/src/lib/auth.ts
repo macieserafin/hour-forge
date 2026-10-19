@@ -1,5 +1,5 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getUser, login, logout } from './api'
+import { getUser, login, logout, register } from './api'
 
 export const sessionOptions = queryOptions({
   queryKey: ['session'],
@@ -8,6 +8,10 @@ export const sessionOptions = queryOptions({
 
 export function useSession() {
   return useQuery(sessionOptions)
+}
+
+export function useRegister() {
+  return useMutation({ mutationFn: register, retry: false, gcTime: 0 })
 }
 
 export function useLogin() {

@@ -178,6 +178,28 @@ export async function login({ email, password }: { email: string; password: stri
   if (!response.ok) throw new ApiError(response.status, 'Logowanie jest chwilowo niedostępne. Spróbuj ponownie.')
 }
 
+export interface RegistrationInput {
+  displayName: string
+  email: string
+  password: string
+}
+
+export async function register(input: RegistrationInput): Promise<void> {
+  const csrf = await getCsrf()
+  const response = await request('/api/auth/register', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
+    body: JSON.stringify({ displayName: input.displayName.trim(), email: input.email.trim(), password: input.password }),
+  })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: 'Sprawdź nazwę, adres e-mail i hasło. Hasło musi mieć co najmniej 12 znaków i mieścić się w dozwolonej długości.',
+      403: 'Sesja formularza wygasła. Spróbuj ponownie.',
+      409: 'Ten adres e-mail jest już zarejestrowany. Zaloguj się lub użyj innego adresu.',
+    }
+    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się utworzyć konta. Jeśli konto mogło już powstać, spróbuj się zalogować.')
+  }
+}
+
 export async function logout(): Promise<void> {
   // Authentication rotates the CSRF token: always obtain a fresh token for logout.
   const csrf = await getCsrf()

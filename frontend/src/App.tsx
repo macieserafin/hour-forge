@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useSearchParams } from 'react-rou
 import { Brand } from './components/Brand'
 import { useSession } from './lib/auth'
 import { LoginPage } from './pages/LoginPage'
+import { RegisterPage } from './pages/RegisterPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { InvitePage } from './pages/InvitePage'
 import { loginUrl, safeReturnTo } from './lib/navigation'
@@ -32,6 +33,7 @@ export function App() {
   const signIn = <Navigate to={loginUrl(location.pathname + location.search)} replace />
   return <Routes>
     <Route path="/login" element={user ? <Navigate to={safeReturnTo(search.get('returnTo'))} replace /> : <LoginPage />} />
+    <Route path="/register" element={user ? <Navigate to={safeReturnTo(search.get('returnTo'))} replace /> : <RegisterPage />} />
     <Route path="/dashboard" element={user ? <DashboardPage user={user} /> : signIn} />
     <Route path="/teams" element={user ? <DashboardPage user={user} section="teams" /> : signIn} />
     <Route path="/projects" element={user ? <DashboardPage user={user} section="projects" /> : signIn} />

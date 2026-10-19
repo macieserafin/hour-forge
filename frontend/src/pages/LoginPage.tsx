@@ -1,12 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowRight, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail } from 'lucide-react'
-import { Brand } from '../components/Brand'
+import { AuthLayout } from '../components/AuthLayout'
 import { useLogin } from '../lib/auth'
-import { useSearchParams } from 'react-router-dom'
-import { safeReturnTo } from '../lib/navigation'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { registrationUrl, safeReturnTo } from '../lib/navigation'
 
 export function LoginPage() {
-  const [email, setEmail] = useState('')
+  const location = useLocation()
+  const registered = location.state?.registered === true
+  const [email, setEmail] = useState(() => registered && typeof location.state?.email === 'string' ? location.state.email : '')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const login = useLogin()
@@ -18,22 +20,10 @@ export function LoginPage() {
     login.mutate({ email, password }, { onSuccess: () => setPassword('') })
   }
 
-  return <main className="login-layout">
-    <section className="login-story" aria-label="HourForge — przestrzeń do pracy">
-      <Brand />
-      <div className="story-content">
-        <p className="product-category">REJESTRACJA CZASU PRACY</p>
-        <h1>Czas pracy<br />Twojego zespołu.</h1>
-        <p>Rejestracja pracy nad projektami w jednym panelu, dla małych zespołów.</p>
-      </div>
-      <div className="story-footer"><span>HourForge</span><span>Panel użytkownika</span></div>
-    </section>
-
-    <section className="login-form-panel">
-      <div className="login-top"><span className="mobile-brand"><Brand /></span><span className="login-context">Panel użytkownika</span></div>
-      <div className="login-form-wrap">
+  return <AuthLayout>
         <h2>Zaloguj się</h2>
         <p className="form-intro">{isInvitation ? 'Zaloguj się, aby wrócić do zaproszenia i potwierdzić dołączenie do zespołu.' : 'Użyj adresu e-mail przypisanego do Twojego konta.'}</p>
+        {registered && <p className="project-notice auth-success" role="status">Konto zostało utworzone. Zaloguj się, aby kontynuować.</p>}
 
         <form onSubmit={submit} aria-label="Logowanie">
           <div className="field-group">
@@ -63,8 +53,6 @@ export function LoginPage() {
             {login.isPending ? <><LoaderCircle size={17} className="spin" />Logowanie…</> : <>Zaloguj się<ArrowRight size={17} /></>}
           </button>
         </form>
-      </div>
-      <footer className="login-footer"><span>© {new Date().getFullYear()} HourForge</span></footer>
-    </section>
-  </main>
+        <p className="auth-alternative">Nie masz konta? <Link className="text-link" to={registrationUrl(safeReturnTo(search.get('returnTo')))}>Utwórz konto</Link></p>
+  </AuthLayout>
 }

@@ -11,3 +11,4 @@ export function safeReturnTo(value: string | null): string {
 }
 
 export const loginUrl = (returnTo: string) => `/login?returnTo=${encodeURIComponent(returnTo)}`
+export const registrationUrl = (returnTo: string) => `/register?returnTo=${encodeURIComponent(returnTo)}`

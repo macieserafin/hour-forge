@@ -71,6 +71,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid #b9a9f1; outline-offs
 .login-submit svg:last-child { margin-left: auto; }
 .login-submit:not(:disabled) { padding-left: 18px; justify-content: flex-start; }
 .login-footer { font-size: 11px; color: #787b85; }
+.auth-alternative { margin-top: 24px; font-size: 13px; line-height: 1.8; color: var(--muted); }
+.auth-alternative a { margin-left: 4px; }
+.auth-success { margin-top: 20px; }
 .form-error { margin-top: 14px; padding: 11px 13px; border-left: 3px solid #b64b57; background: #fcf2f3; color: #963b47; font-size: 13px; line-height: 1.6; }
 
 /* Workspace: navigation, a task overview and a separate account column. */
