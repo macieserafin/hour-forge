@@ -12,6 +12,7 @@ export function useAuthError() {
       client.setQueryData(sessionOptions.queryKey, null)
       client.removeQueries({ queryKey: ['teams'], type: 'inactive' })
       client.removeQueries({ queryKey: ['projects'], type: 'inactive' })
+      client.removeQueries({ queryKey: ['timer'], type: 'inactive' })
     }
   }, [client])
 }

@@ -37,4 +37,16 @@ public class TimerController {
         return entries.active(principal.getUserId()).map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }
+
+    @PostMapping("/pause")
+    public TimeEntryResponse pause(@AuthenticationPrincipal AppUserPrincipal principal,
+                                   @Valid @RequestBody TimerStateRequest request) {
+        return entries.pause(principal.getUserId(), request);
+    }
+
+    @PostMapping("/resume")
+    public TimeEntryResponse resume(@AuthenticationPrincipal AppUserPrincipal principal,
+                                    @Valid @RequestBody TimerStateRequest request) {
+        return entries.resume(principal.getUserId(), request);
+    }
 }

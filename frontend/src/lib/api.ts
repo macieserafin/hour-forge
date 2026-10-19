@@ -35,6 +35,34 @@ export interface ProjectInput {
   description: string | null
 }
 
+export interface TimeEntry {
+  id: string
+  userId: string
+  teamId: string
+  projectId: string
+  entryType: 'TIMER' | 'MANUAL'
+  workDate: string
+  startedAt: string | null
+  endedAt: string | null
+  durationSeconds: number | null
+  description: string | null
+  createdAt: string
+  updatedAt: string
+  pausedAt: string | null
+  pausedDurationSeconds: number
+}
+
+export interface StartTimerInput {
+  teamId: string
+  projectId: string
+  description: string | null
+}
+
+export interface ManualTimeInput extends StartTimerInput {
+  workDate: string
+  durationSeconds: number
+}
+
 interface CsrfToken {
   token: string
   headerName: string
@@ -150,3 +178,33 @@ export const updateProject = (teamId: string, projectId: string, body: ProjectIn
   projectRequest<Project>(`${projectsPath(teamId)}/${encodeURIComponent(projectId)}`, 'PUT', body)
 export const archiveProject = (teamId: string, projectId: string) =>
   projectRequest<Project>(`${projectsPath(teamId)}/${encodeURIComponent(projectId)}/archive`, 'POST')
+
+async function timeRequest(path: string, body?: unknown, signal?: AbortSignal): Promise<TimeEntry | null> {
+  const csrf = body === undefined ? null : await getCsrf()
+  const response = await request(path, {
+    method: body === undefined ? 'GET' : 'POST', signal,
+    headers: csrf ? { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token } : undefined,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: 'Sprawdź projekt, datę i czas trwania wpisu. Czas musi być dodatnią liczbą pełnych sekund.',
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
+      404: 'Nie znaleziono wpisu, projektu lub zespołu albo nie masz już do niego dostępu.',
+      409: path.endsWith('/pause') || path.endsWith('/resume') ? 'Stan timera uległ zmianie. Sprawdź aktualny stan i spróbuj ponownie.'
+        : path.endsWith('/start') ? 'Nie można uruchomić timera. Sprawdź aktywny timer i status projektu.'
+        : path.endsWith('/stop') ? 'Nie można zatrzymać tego timera. Mógł już zostać zatrzymany lub nie upłynęła jeszcze pełna sekunda.'
+        : 'Projekt jest zarchiwizowany i nie można dodać do niego czasu.',
+    }
+    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się odczytać lub zapisać czasu. Odśwież stan przed ponowieniem operacji.')
+  }
+  return response.status === 204 ? null : response.json() as Promise<TimeEntry>
+}
+
+export const getActiveTimer = (signal?: AbortSignal) => timeRequest('/api/timer/active', undefined, signal)
+export const startTimer = (body: StartTimerInput) => timeRequest('/api/timer/start', body) as Promise<TimeEntry>
+export const stopTimer = (body: { entryId: string; description: string | null }) => timeRequest('/api/timer/stop', body) as Promise<TimeEntry>
+export const changeTimerState = ({ action, ...body }: { action: 'pause' | 'resume'; entryId: string; description: string | null }) =>
+  timeRequest(`/api/timer/${action}`, body) as Promise<TimeEntry>
+export const createManualTimeEntry = (body: ManualTimeInput) => timeRequest('/api/time-entries', body) as Promise<TimeEntry>

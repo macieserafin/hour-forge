@@ -291,3 +291,41 @@ fieldset:disabled { opacity: .65; }
   .project-table th, .project-table td { padding-left: 12px; padding-right: 12px; }
   .project-table td:first-child { min-width: 130px; }
 }
+
+/* Time tracking separates the running session from new entries. */
+.running-timer { padding: 25px 28px; margin-bottom: 30px; border-top: 2px solid var(--accent); }
+.timer-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.timer-heading .field-hint { margin: 0; }
+.timer-running-label { display: inline-flex; align-items: center; gap: 9px; color: #6250b9; font-size: 12px; font-weight: 550; }
+.timer-running-label > span { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.timer-project-name { font-size: 20px; font-weight: 550; overflow-wrap: anywhere; }
+.timer-team-name { font-size: 12px; color: var(--muted); line-height: 1.8; margin-top: 6px; overflow-wrap: anywhere; }
+.timer-counter { margin: 22px 0; font-size: clamp(36px, 5vw, 52px); line-height: 1.3; font-weight: 450; letter-spacing: -1.5px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.timer-description { height: auto; min-height: 75px; resize: vertical; font: inherit; font-size: 14px; line-height: 1.7; }
+.timer-stop-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px; }
+.timer-stop-row .field-hint { margin: 0; }
+.timer-stop { background: #46414f; }
+.timer-stop:hover:not(:disabled) { background: #332f3b; }
+.timer-idle { display: flex; align-items: center; gap: 10px; padding: 0 0 25px; color: var(--muted); font-size: 13px; }
+.time-entry-form { padding: 25px 28px; }
+.time-entry-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.time-entry-form > form > .field-hint { margin-top: 16px; }
+.time-entry-section .teams-toolbar h2 { overflow-wrap: anywhere; }
+.duration-label { font-size: 13px; font-weight: 550; margin-bottom: 12px; }
+.duration-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.duration-fields label { color: var(--muted); font-size: 11px; font-weight: 400; }
+@media (max-width: 720px) {
+  .running-timer, .time-entry-form { padding: 22px; }
+}
+@media (max-width: 420px) {
+  .running-timer, .time-entry-form { padding: 19px; }
+  .timer-stop-row .button-primary, .time-entry-actions > button { width: 100%; }
+}
+.timer-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.timer-paused { border-top-color: #a28c5e; }
+.timer-paused .timer-running-label { color: #836b3e; }
+.timer-paused .timer-running-label > span { background: #a28c5e; }
+@media (max-width: 420px) {
+  .timer-controls { width: 100%; }
+  .timer-controls > button { width: 100%; }
+}

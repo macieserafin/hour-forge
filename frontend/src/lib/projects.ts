@@ -14,10 +14,10 @@ export function useProjects(userId: string, teamId: string, includeArchived: boo
   return query
 }
 
-export function useProject(userId: string, teamId: string, projectId: string) {
+export function useProject(userId: string, teamId: string, projectId: string, enabled = true) {
   const handleError = useAuthError()
   const query = useQuery({ queryKey: [...projectsKey(userId, teamId), 'detail', projectId],
-    queryFn: ({ signal }) => getProject(teamId, projectId, signal), retry })
+    queryFn: ({ signal }) => getProject(teamId, projectId, signal), retry, enabled })
   useEffect(() => { if (query.error) handleError(query.error) }, [query.error, handleError])
   return query
 }

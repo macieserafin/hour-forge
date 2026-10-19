@@ -52,23 +52,68 @@ public class TimeEntryService {
     @Transactional
     public TimeEntryResponse stop(UUID userId, StopTimerRequest request) {
         lockUser(userId);
-        var entry = entries.findByIdAndUserId(request.entryId(), userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (entry.getEntryType() != EntryType.TIMER || entry.getEndedAt() != null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "This entry is not an active timer");
-        }
+        var entry = unfinishedTimer(userId, request.entryId());
         var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
-        long seconds = Duration.between(entry.getStartedAt(), now).getSeconds();
+        var effectiveEnd = entry.getPausedAt() == null ? now : entry.getPausedAt();
+        long seconds = Duration.between(entry.getStartedAt(), effectiveEnd)
+                .minus(entry.getPausedDurationMicros(), ChronoUnit.MICROS).getSeconds();
         if (seconds < 1 || seconds > Integer.MAX_VALUE) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Timer duration must fit a positive number of whole seconds");
         }
         // Ownership is sufficient: leaving a team must not prevent stopping one's own timer.
+        completePause(entry, now);
         entry.setEndedAt(now);
         entry.setDurationSeconds((int) seconds);
         if (request.description() != null) {
             entry.setDescription(request.description().isBlank() ? null : request.description());
         }
         return response(entries.saveAndFlush(entry));
+    }
+
+    @Transactional
+    public TimeEntryResponse pause(UUID userId, TimerStateRequest request) {
+        lockUser(userId);
+        var entry = unfinishedTimer(userId, request.entryId());
+        if (entry.getPausedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Timer is already paused");
+        }
+        entry.setPausedAt(Instant.now().truncatedTo(ChronoUnit.MICROS));
+        updateDescription(entry, request.description());
+        return response(entries.saveAndFlush(entry));
+    }
+
+    @Transactional
+    public TimeEntryResponse resume(UUID userId, TimerStateRequest request) {
+        lockUser(userId);
+        var entry = unfinishedTimer(userId, request.entryId());
+        if (entry.getPausedAt() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Timer is not paused");
+        }
+        writableProject(userId, entry.getTeam().getId(), entry.getProject().getId());
+        completePause(entry, Instant.now().truncatedTo(ChronoUnit.MICROS));
+        updateDescription(entry, request.description());
+        return response(entries.saveAndFlush(entry));
+    }
+
+    private TimeEntry unfinishedTimer(UUID userId, UUID entryId) {
+        var entry = entries.findByIdAndUserId(entryId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (entry.getEntryType() != EntryType.TIMER || entry.getEndedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This entry is not an active timer");
+        }
+        return entry;
+    }
+
+    private void completePause(TimeEntry entry, Instant now) {
+        if (entry.getPausedAt() != null) {
+            entry.setPausedDurationMicros(Math.addExact(entry.getPausedDurationMicros(),
+                    ChronoUnit.MICROS.between(entry.getPausedAt(), now)));
+            entry.setPausedAt(null);
+        }
+    }
+
+    private void updateDescription(TimeEntry entry, String description) {
+        if (description != null) entry.setDescription(description.isBlank() ? null : description);
     }
 
     @Transactional(readOnly = true)
@@ -114,6 +159,7 @@ public class TimeEntryService {
     private TimeEntryResponse response(TimeEntry entry) {
         return new TimeEntryResponse(entry.getId(), entry.getUser().getId(), entry.getTeam().getId(),
                 entry.getProject().getId(), entry.getEntryType(), entry.getWorkDate(), entry.getStartedAt(),
-                entry.getEndedAt(), entry.getDurationSeconds(), entry.getDescription(), entry.getCreatedAt(), entry.getUpdatedAt());
+                entry.getEndedAt(), entry.getDurationSeconds(), entry.getDescription(), entry.getCreatedAt(), entry.getUpdatedAt(),
+                entry.getPausedAt(), entry.getPausedDurationMicros() / 1_000_000.0);
     }
 }

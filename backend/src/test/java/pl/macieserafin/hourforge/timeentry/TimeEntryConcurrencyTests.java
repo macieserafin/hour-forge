@@ -129,6 +129,32 @@ class TimeEntryConcurrencyTests {
         return outcome(() -> service.start(user.getId(), new StartTimerRequest(project.getTeam().getId(), project.getId(), null)), 201);
     }
 
+    @Test
+    void concurrentPausesAndResumesApplyEachTransitionOnlyOnce() throws Exception {
+        var timer = service.start(first.getId(), new StartTimerRequest(team.getId(), project.getId(), null));
+        var request = new TimerStateRequest(timer.id(), null);
+        assertThat(concurrently(() -> outcome(() -> service.pause(first.getId(), request), 200),
+                () -> outcome(() -> service.pause(first.getId(), request), 200)))
+                .containsExactlyInAnyOrder(200, 409);
+        assertThat(concurrently(() -> outcome(() -> service.resume(first.getId(), request), 200),
+                () -> outcome(() -> service.resume(first.getId(), request), 200)))
+                .containsExactlyInAnyOrder(200, 409);
+        assertThat(service.active(first.getId()).orElseThrow().pausedAt()).isNull();
+    }
+
+    @Test
+    void finishingAndPausingConcurrentlyNeverLeaveAFinishedTimerPaused() throws Exception {
+        var timer = new TransactionTemplate(transactionManager).execute(status -> entries.saveAndFlush(
+                new TimeEntry(first, team, project, EntryType.TIMER, LocalDate.now(), Instant.now().minusSeconds(10), null, null, null)));
+        var outcomes = concurrently(() -> outcome(() -> service.pause(first.getId(), new TimerStateRequest(timer.getId(), null)), 200),
+                () -> outcome(() -> service.stop(first.getId(), new StopTimerRequest(timer.getId(), null)), 200));
+        assertThat(List.of(List.of(200, 200), List.of(409, 200))).contains(outcomes);
+        var finished = entries.findById(timer.getId()).orElseThrow();
+        assertThat(finished.getEndedAt()).isNotNull();
+        assertThat(finished.getPausedAt()).isNull();
+        assertThat(finished.getDurationSeconds()).isPositive();
+    }
+
     private int outcome(Callable<?> action, int success) throws Exception {
         try { action.call(); return success; }
         catch (ResponseStatusException exception) { return exception.getStatusCode().value(); }

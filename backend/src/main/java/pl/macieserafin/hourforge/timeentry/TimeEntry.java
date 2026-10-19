@@ -56,6 +56,12 @@ public class TimeEntry {
     @Column(name = "duration_seconds")
     private Integer durationSeconds;
 
+    @Column(name = "paused_at")
+    private Instant pausedAt;
+
+    @Column(name = "paused_duration_micros", nullable = false)
+    private long pausedDurationMicros;
+
     @Column(name = "description", columnDefinition = "text")
     private String description;
 
@@ -116,6 +122,22 @@ public class TimeEntry {
 
     public Integer getDurationSeconds() {
         return durationSeconds;
+    }
+
+    public Instant getPausedAt() {
+        return pausedAt;
+    }
+
+    public void setPausedAt(Instant pausedAt) {
+        this.pausedAt = pausedAt;
+    }
+
+    public long getPausedDurationMicros() {
+        return pausedDurationMicros;
+    }
+
+    public void setPausedDurationMicros(long pausedDurationMicros) {
+        this.pausedDurationMicros = pausedDurationMicros;
     }
 
     public String getDescription() {
