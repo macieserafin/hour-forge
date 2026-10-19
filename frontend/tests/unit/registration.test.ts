@@ -19,6 +19,12 @@ it('applies the bcrypt byte limit and counts Unicode characters without splittin
   expect(registrationError({ ...input, password: 'a'.repeat(72) }, 'a'.repeat(72))).toBe('')
 })
 
+it.each([400, 403, 409, 500])('reports registration HTTP %s without retrying the write', async status => {
+  const fetcher = mockApi({ 'POST /api/auth/register': () => json({}, status) })
+  await expect(register(input)).rejects.toMatchObject({ name: 'ApiError', status })
+  expect(fetcher.mock.calls.filter(([path]) => String(path) === '/api/auth/register')).toHaveLength(1)
+})
+
 it('registers using fresh CSRF and cookies while trimming identity but preserving the password', async () => {
   const fetcher = mockApi({ 'POST /api/auth/register': () => json(null, 201) })
   await register({ displayName: ' New User ', email: ' New@Example.test ', password: ' password 2026! ' })

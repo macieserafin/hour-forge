@@ -3,6 +3,7 @@ package pl.macieserafin.hourforge.auth.integration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -75,5 +76,27 @@ class RegistrationIT extends ApiIntegrationTestSupport {
         mvc.perform(post("/api/auth/register").with(csrf()).contentType("application/json").content(body)).andExpect(status().isBadRequest());
         assertThat(users.count()).isEqualTo(userCount);
         assertThat(credentials.count()).isEqualTo(credentialCount);
+    }
+
+    static java.util.stream.Stream<String> boundaryPasswords() {
+        return java.util.stream.Stream.of("a".repeat(12), "a".repeat(72), "ą".repeat(36), "😀".repeat(18), " leading password ");
+    }
+
+    @ParameterizedTest
+    @MethodSource("boundaryPasswords")
+    void acceptsBoundaryPasswordsAndPreservesWhitespace(String password) throws Exception {
+        mvc.perform(post("/api/auth/register").with(csrf()).contentType("application/json")
+                        .content(BODY.replace("Valid-password-2026!", password)))
+                .andExpect(status().isCreated());
+        var hash = credentials.findByUserEmailIgnoreCase("new@example.test").orElseThrow().getPasswordHash();
+        assertThat(encoder.matches(password, hash)).isTrue();
+    }
+
+    @Test void rejectsOversizedUnicodePasswordsWithoutReturningTheirValue() throws Exception {
+        String password = "ą".repeat(37);
+        mvc.perform(post("/api/auth/register").with(csrf()).contentType("application/json")
+                        .content(BODY.replace("Valid-password-2026!", password)))
+                .andExpect(status().isBadRequest()).andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(password))));
+        assertThat(users.findByEmailIgnoreCase("new@example.test")).isEmpty();
     }
 }

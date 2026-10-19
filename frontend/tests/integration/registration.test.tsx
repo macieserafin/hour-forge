@@ -44,3 +44,27 @@ it('reports a duplicate address and keeps a safe link back to login', async () =
   expect(screen.getByRole('link', { name: 'Zaloguj się' })).toHaveAttribute('href', '/login?returnTo=%2Fdashboard')
   await waitFor(() => expect(fetcher.mock.calls.filter(([path]) => String(path) === '/api/auth/register')).toHaveLength(1))
 })
+
+it('disables repeated submissions and never sends the confirmation password', async () => {
+  let complete!: (response: Response) => void
+  const pending = new Promise<Response>(resolve => { complete = resolve })
+  const fetcher = mockApi({ 'GET /api/me': () => json(null, 401), 'POST /api/auth/register': () => pending })
+  renderApp(<App />, '/register')
+  await fillRegistration()
+  await userEvent.click(screen.getByRole('button', { name: 'Utwórz konto' }))
+  expect(await screen.findByRole('button', { name: 'Tworzenie konta…' })).toBeDisabled()
+  expect(screen.getByLabelText('Adres e-mail')).toBeDisabled()
+  await userEvent.click(screen.getByRole('button', { name: 'Tworzenie konta…' }))
+  const calls = fetcher.mock.calls.filter(([path]) => String(path) === '/api/auth/register')
+  expect(calls).toHaveLength(1)
+  expect(JSON.parse(String(calls[0]![1]?.body))).not.toHaveProperty('passwordConfirmation')
+  complete(json(null, 201))
+  expect(await screen.findByRole('heading', { name: 'Zaloguj się' })).toBeVisible()
+})
+
+it('does not show registration to an already signed-in user', async () => {
+  mockApi()
+  renderApp(<App />, '/register?returnTo=%2Fteams')
+  expect(await screen.findByRole('heading', { name: 'Zespoły' })).toBeVisible()
+  expect(screen.queryByLabelText('Nazwa wyświetlana')).not.toBeInTheDocument()
+})
