@@ -54,6 +54,14 @@ class ReportIT extends ApiIntegrationTestSupport {
         return new AppUserPrincipal(actor.getId(), actor.getEmail(), "unused");
     }
 
+    @Test
+    void reportRangeIsLimitedTo366Days() throws Exception {
+        for (String endpoint : List.of("summary", "breakdown", "entries", "active-timers")) {
+            mvc.perform(request(endpoint).param("from", "2025-10-20").param("to", "2026-10-20")).andExpect(status().isOk());
+            mvc.perform(request(endpoint).param("from", "2025-10-19").param("to", "2026-10-20")).andExpect(status().isBadRequest());
+        }
+    }
+
     private MockHttpServletRequestBuilder request(String endpoint) {
         var request = get("/api/teams/" + team.getId() + "/reports/" + endpoint).with(user(principal(owner)));
         return request;

@@ -5,6 +5,7 @@ import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,8 @@ import pl.macieserafin.hourforge.user.UserRepository;
 @Service
 @Transactional(readOnly = true)
 public class ReportService {
+    private static final int MAX_REPORT_DAYS = 366;
+
     private final UserRepository users;
     private final TeamMemberRepository members;
     private final ReportRepository reports;
@@ -99,6 +102,9 @@ public class ReportService {
                 || from.getYear() < 1 || to.getYear() > 9999))
                 || input.userIds().size() > 100 || input.projectIds().size() > 100) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Use a valid from/to pair and at most 100 IDs per filter");
+        }
+        if (from != null && ChronoUnit.DAYS.between(from, to) + 1 > MAX_REPORT_DAYS) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A report can cover at most " + MAX_REPORT_DAYS + " days");
         }
         if (!reports.containsMembers(team.getId(), input.userIds()) || !reports.containsProjects(team.getId(), input.projectIds())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);

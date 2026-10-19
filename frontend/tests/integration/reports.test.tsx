@@ -74,6 +74,19 @@ it('rejects reversed dates without requesting an invalid report', async () => {
   expect(fetcher.mock.calls.some(([path]) => String(path).includes('from=2027'))).toBe(false)
 })
 
+it('rejects a report range longer than 366 days without requesting it', async () => {
+  const fetcher = mockApi(reportHandlers())
+  ownerView()
+  await screen.findByRole('region', { name: 'Łączny czas zespołu' })
+  await userEvent.clear(screen.getByLabelText('Data od'))
+  await userEvent.type(screen.getByLabelText('Data od'), '2025-01-01')
+  await userEvent.clear(screen.getByLabelText('Data do'))
+  await userEvent.type(screen.getByLabelText('Data do'), '2026-01-02')
+  await userEvent.click(screen.getByRole('button', { name: 'Filtruj raport' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('najwyżej 366 dni')
+  expect(fetcher.mock.calls.some(([path]) => String(path).includes('from=2025-01-01'))).toBe(false)
+})
+
 it('paginates each table independently and resets entry pagination when sorting changes', async () => {
   const fetcher = mockApi({ ...reportHandlers(),
     [`${base}/entries`]: url => json(reportPage([{ ...reportEntry, description: `Page ${url.searchParams.get('page')}` }], Number(url.searchParams.get('page')), true)),

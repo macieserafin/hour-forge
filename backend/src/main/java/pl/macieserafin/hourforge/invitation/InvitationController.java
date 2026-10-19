@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
+import pl.macieserafin.hourforge.security.RequestRateLimits;
 import pl.macieserafin.hourforge.team.TeamResponse;
 
 import java.util.UUID;
@@ -16,15 +17,18 @@ import java.util.UUID;
 @RestController
 public class InvitationController {
     private final InvitationService invitations;
+    private final RequestRateLimits rateLimits;
 
-    public InvitationController(InvitationService invitations) {
+    public InvitationController(InvitationService invitations, RequestRateLimits rateLimits) {
         this.invitations = invitations;
+        this.rateLimits = rateLimits;
     }
 
     @PostMapping("/api/teams/{teamId}/invites")
     public ResponseEntity<InviteResponse> create(@AuthenticationPrincipal AppUserPrincipal principal,
                                                 @PathVariable UUID teamId,
                                                 @Valid @RequestBody CreateInviteRequest request) {
+        rateLimits.invitationCreation(principal.getUserId());
         return ResponseEntity.status(HttpStatus.CREATED).body(invitations.create(principal.getUserId(), teamId, request));
     }
 

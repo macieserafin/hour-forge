@@ -144,6 +144,13 @@ export class ApiError extends Error {
   }
 }
 
+export function tooManyRequestsMessage(response: Response) {
+  const seconds = Number(response.headers.get('Retry-After'))
+  return Number.isFinite(seconds) && seconds > 0
+    ? `Zbyt wiele prób. Spróbuj ponownie za ${Math.ceil(seconds / 60)} min.`
+    : 'Zbyt wiele prób. Spróbuj ponownie później.'
+}
+
 async function request(path: string, options?: RequestInit): Promise<Response> {
   try {
     return await fetch(path, { ...options, credentials: 'include', cache: 'no-store' })
@@ -173,6 +180,7 @@ export async function login({ email, password }: { email: string; password: stri
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', [csrf.headerName]: csrf.token },
     body: new URLSearchParams({ email: email.trim(), password }),
   })
+  if (response.status === 429) throw new ApiError(429, tooManyRequestsMessage(response))
   if (response.status === 401) throw new ApiError(401, 'Nieprawidłowy adres e-mail lub hasło.')
   if (response.status === 403) throw new ApiError(403, 'Sesja formularza wygasła. Spróbuj zalogować się ponownie.')
   if (!response.ok) throw new ApiError(response.status, 'Logowanie jest chwilowo niedostępne. Spróbuj ponownie.')
@@ -195,6 +203,7 @@ export async function register(input: RegistrationInput): Promise<void> {
       400: 'Sprawdź nazwę, adres e-mail i hasło. Hasło musi mieć co najmniej 12 znaków i mieścić się w dozwolonej długości.',
       403: 'Sesja formularza wygasła. Spróbuj ponownie.',
       409: 'Ten adres e-mail jest już zarejestrowany. Zaloguj się lub użyj innego adresu.',
+      429: tooManyRequestsMessage(response),
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się utworzyć konta. Jeśli konto mogło już powstać, spróbuj się zalogować.')
   }
@@ -224,6 +233,7 @@ async function teamRequest<T>(path: string, body?: unknown, signal?: AbortSignal
       404: path.startsWith('/api/invites/') ? 'Nie znaleziono zaproszenia. Sprawdź, czy link jest kompletny.' : 'Nie znaleziono zespołu lub nie masz już do niego dostępu.',
       409: 'Limit użyć tego zaproszenia został wyczerpany.',
       410: 'Zaproszenie wygasło lub zostało anulowane. Poproś właściciela o nowy link.',
+      429: tooManyRequestsMessage(response),
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wykonać operacji. Spróbuj ponownie.')
   }
@@ -252,6 +262,7 @@ async function projectRequest<T>(path: string, method = 'GET', body?: ProjectInp
       409: path.endsWith('/archive')
         ? 'Projekt ma aktywny timer. Zatrzymaj go przed archiwizacją.'
         : 'Projekt jest już zarchiwizowany i nie można go edytować.',
+      429: tooManyRequestsMessage(response),
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wczytać lub zapisać projektu. Spróbuj ponownie.')
   }
@@ -457,7 +468,7 @@ async function reportRequest<T>(teamId: string, endpoint: string, params: URLSea
   const response = await request(`/api/teams/${encodeURIComponent(teamId)}/reports/${endpoint}?${params}`, { signal })
   if (!response.ok) {
     const messages: Record<number, string> = {
-      400: 'Sprawdź zakres dat i filtry raportu.',
+      400: 'Sprawdź zakres dat (najwyżej 366 dni) i filtry raportu.',
       401: 'Sesja wygasła. Zaloguj się ponownie.',
       403: 'Widok zespołu jest dostępny wyłącznie dla jego właściciela.',
       404: 'Zespół lub wybrane dane są niedostępne. Sprawdź swoje uprawnienia i filtry.',

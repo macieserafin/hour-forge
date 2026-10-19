@@ -7,6 +7,13 @@ import { teamsKey, useAuthError } from './teams'
 
 // Shares invalidation and session cleanup with the personal dashboard.
 export const reportsKey = (userId: string, teamId: string) => [...dashboardKey(userId), teamId, 'reports'] as const
+export const MAX_REPORT_DAYS = 366
+
+/** Number of calendar days in an inclusive YYYY-MM-DD range. */
+export function reportRangeDays(from: string, to: string) {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1
+}
+
 const retry = (count: number, error: Error) => count < 1 && error instanceof ApiError && (error.status === 0 || error.status >= 500)
 
 function useReportError(userId: string, error: Error | null) {

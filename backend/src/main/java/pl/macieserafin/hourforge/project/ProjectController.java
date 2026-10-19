@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
+import pl.macieserafin.hourforge.security.RequestRateLimits;
 
 import java.util.List;
 import java.util.UUID;
@@ -21,9 +22,11 @@ import java.util.UUID;
 @RequestMapping("/api/teams/{teamId}/projects")
 public class ProjectController {
     private final ProjectService projects;
+    private final RequestRateLimits rateLimits;
 
-    public ProjectController(ProjectService projects) {
+    public ProjectController(ProjectService projects, RequestRateLimits rateLimits) {
         this.projects = projects;
+        this.rateLimits = rateLimits;
     }
 
     @GetMapping
@@ -43,6 +46,7 @@ public class ProjectController {
     public ResponseEntity<ProjectResponse> create(@AuthenticationPrincipal AppUserPrincipal principal,
                                                   @PathVariable UUID teamId,
                                                   @Valid @RequestBody ProjectRequest request) {
+        rateLimits.projectCreation(principal.getUserId());
         return ResponseEntity.status(HttpStatus.CREATED).body(projects.create(principal.getUserId(), teamId, request));
     }
 

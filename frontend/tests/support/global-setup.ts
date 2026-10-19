@@ -46,7 +46,10 @@ export default async function globalSetup() {
       cwd: backendPath,
       env: { ...process.env, DB_URL: `jdbc:postgresql://127.0.0.1:${databasePort}/hourforge_e2e`,
         DB_USERNAME: 'hourforge_e2e', DB_PASSWORD: 'e2e-only-password',
-        SESSION_COOKIE_SECURE: 'false', FRONTEND_URL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:5186' },
+        SESSION_COOKIE_SECURE: 'false', FRONTEND_URL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:5186',
+        // Every scenario registers its accounts from 127.0.0.1; limits are verified by backend tests.
+        APP_RATELIMIT_REGISTRATION_MAX: '100000', APP_RATELIMIT_TEAMCREATION_MAX: '100000',
+        APP_RATELIMIT_INVITATIONCREATION_MAX: '100000', APP_RATELIMIT_PROJECTCREATION_MAX: '100000' },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     backend.stdout!.pipe(output, { end: false })

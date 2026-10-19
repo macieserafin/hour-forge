@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
+import pl.macieserafin.hourforge.security.RequestRateLimits;
 
 import java.util.List;
 import java.util.UUID;
@@ -22,10 +23,12 @@ import java.util.UUID;
 public class TeamController {
     private final TeamService teams;
     private final TeamMembershipService memberships;
+    private final RequestRateLimits rateLimits;
 
-    public TeamController(TeamService teams, TeamMembershipService memberships) {
+    public TeamController(TeamService teams, TeamMembershipService memberships, RequestRateLimits rateLimits) {
         this.teams = teams;
         this.memberships = memberships;
+        this.rateLimits = rateLimits;
     }
 
     @GetMapping
@@ -56,6 +59,7 @@ public class TeamController {
     @PostMapping
     public ResponseEntity<TeamResponse> create(@AuthenticationPrincipal AppUserPrincipal principal,
                                              @Valid @RequestBody CreateTeamRequest request) {
+        rateLimits.teamCreation(principal.getUserId());
         return ResponseEntity.status(HttpStatus.CREATED).body(teams.createTeam(principal.getUserId(), request));
     }
 }

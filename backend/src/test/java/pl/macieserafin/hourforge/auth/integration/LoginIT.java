@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import pl.macieserafin.hourforge.auth.UserCredential;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.support.ApiIntegrationTestSupport;
@@ -21,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -128,6 +130,32 @@ class LoginIT extends ApiIntegrationTestSupport {
                 session.getAttribute("SPRING_SECURITY_CONTEXT");
         assertThat(securityContext.getAuthentication().getAuthorities())
                 .noneMatch(authority -> authority.getAuthority().startsWith("ROLE_"));
+    }
+
+    @Test
+    void blocksAnAccountFromOneAddressAfterFiveFailuresEvenWithTheCorrectPassword() throws Exception {
+        for (int attempt = 0; attempt < 5; attempt++) {
+            login(PASSWORD + attempt, "10.0.0.1").andExpect(status().isUnauthorized());
+        }
+        login(PASSWORD, "10.0.0.1").andExpect(status().isTooManyRequests()).andExpect(header().string("Retry-After", "900"));
+        login(PASSWORD, "10.0.0.2").andExpect(status().isNoContent());
+    }
+
+    @Test
+    void successfulLoginResetsFailuresOfThatAccountAndAddress() throws Exception {
+        for (int attempt = 0; attempt < 4; attempt++) login("wrong-" + attempt, "10.0.0.3").andExpect(status().isUnauthorized());
+        login(PASSWORD, "10.0.0.3").andExpect(status().isNoContent());
+        for (int attempt = 0; attempt < 4; attempt++) login("wrong-" + attempt, "10.0.0.3").andExpect(status().isUnauthorized());
+        login(PASSWORD, "10.0.0.3").andExpect(status().isNoContent());
+    }
+
+    private ResultActions login(String password, String address) throws Exception {
+        var session = new MockHttpSession();
+        return mvc.perform(post("/api/auth/login").session(session)
+                .with(request -> { request.setRemoteAddr(address); return request; })
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .header("X-CSRF-TOKEN", csrfToken(session))
+                .param("email", EMAIL).param("password", password));
     }
 
     private String csrfToken(MockHttpSession session) throws Exception {

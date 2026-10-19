@@ -1,6 +1,7 @@
 import { it, expect, vi } from 'vitest'
 import { ApiError, getUser, getTeams, getTimeEntryHistory, login, logout, startTimer, stopTimer, changeTimerState,
-  createManualTimeEntry, updateTimeEntry, deleteTimeEntry, createTeam, createProject, updateProject, archiveProject, createInvitation, acceptInvitation } from '../../src/lib/api'
+  createManualTimeEntry, updateTimeEntry, deleteTimeEntry, createTeam, createProject, updateProject, archiveProject, createInvitation, acceptInvitation,
+  register } from '../../src/lib/api'
 import { mockApi, json, team, project, timer, entry, history } from '../support/api'
 
 it('treats an unauthenticated session as signed out', async () => {
@@ -22,6 +23,17 @@ it('sends history filters, pagination and cancellation to the server', async () 
   const url = new URL(String(path), window.location.origin)
   expect(Object.fromEntries(url.searchParams)).toEqual({ teamId: 'team /', projectId: 'p /', from: '2026-01-01', page: '2', size: '20' })
   expect(options).toMatchObject({ signal: controller.signal, credentials: 'include', cache: 'no-store' })
+})
+it('reports rate-limited login, registration and creation with the retry time', async () => {
+  const limited = (seconds: string | null) => () => new Response(null, { status: 429, headers: seconds ? { 'Retry-After': seconds } : {} })
+  mockApi({ 'POST /api/auth/login': limited('900'), 'POST /api/auth/register': limited('3600'),
+    'POST /api/teams': limited('61'), [`POST /api/teams/${team.id}/projects`]: limited(null) })
+  await expect(login({ email: 'actor@example.test', password: 'secret' })).rejects.toMatchObject({ status: 429, message: 'Zbyt wiele prób. Spróbuj ponownie za 15 min.' })
+  await expect(register({ displayName: 'Actor', email: 'actor@example.test', password: 'Long-password-1' }))
+    .rejects.toMatchObject({ status: 429, message: 'Zbyt wiele prób. Spróbuj ponownie za 60 min.' })
+  await expect(createTeam({ name: 'Team', timezone: 'UTC' })).rejects.toMatchObject({ status: 429, message: 'Zbyt wiele prób. Spróbuj ponownie za 2 min.' })
+  await expect(createProject(team.id, { name: 'Project', description: null }))
+    .rejects.toMatchObject({ status: 429, message: 'Zbyt wiele prób. Spróbuj ponownie później.' })
 })
 it('logs in using a fresh CSRF token and trimmed email', async () => {
   const fetcher = mockApi({ 'POST /api/auth/login': () => json(null, 204) })

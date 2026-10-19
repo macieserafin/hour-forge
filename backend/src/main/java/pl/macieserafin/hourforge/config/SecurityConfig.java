@@ -1,24 +1,41 @@
 package pl.macieserafin.hourforge.config;
 
 import jakarta.servlet.DispatcherType;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.filter.OncePerRequestFilter;
+import pl.macieserafin.hourforge.security.LoginAttemptService;
+import pl.macieserafin.hourforge.security.RateLimitProperties;
+import pl.macieserafin.hourforge.security.TooManyRequestsException;
+
+import java.io.IOException;
 
 @Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(RateLimitProperties.class)
 public class SecurityConfig {
+    private static final String LOGIN_URL = "/api/auth/login";
+    private static final String EMAIL_PARAMETER = "email";
+
     @Bean
     PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(12);
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, LoginAttemptService loginAttempts) throws Exception {
         return http
                 .authorizeHttpRequests(authorize -> authorize
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
@@ -29,14 +46,20 @@ public class SecurityConfig {
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, exception) ->
                                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)))
+                // After CSRF validation, before credentials are checked: a blocked login never reaches BCrypt.
+                .addFilterBefore(new LoginRateLimitFilter(loginAttempts), UsernamePasswordAuthenticationFilter.class)
                 .formLogin(form -> form
-                        .loginPage("/api/auth/login")
-                        .loginProcessingUrl("/api/auth/login")
-                        .usernameParameter("email")
-                        .successHandler((request, response, authentication) ->
-                                response.setStatus(HttpServletResponse.SC_NO_CONTENT))
-                        .failureHandler((request, response, exception) ->
-                                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED))
+                        .loginPage(LOGIN_URL)
+                        .loginProcessingUrl(LOGIN_URL)
+                        .usernameParameter(EMAIL_PARAMETER)
+                        .successHandler((request, response, authentication) -> {
+                            loginAttempts.recordSuccess(request.getParameter(EMAIL_PARAMETER), request.getRemoteAddr());
+                            response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+                        })
+                        .failureHandler((request, response, exception) -> {
+                            loginAttempts.recordFailure(request.getParameter(EMAIL_PARAMETER), request.getRemoteAddr());
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        })
                         .permitAll())
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")
@@ -44,5 +67,31 @@ public class SecurityConfig {
                         .logoutSuccessHandler((request, response, authentication) ->
                                 response.setStatus(HttpServletResponse.SC_NO_CONTENT)))
                 .build();
+    }
+
+    // Not a bean: a Filter bean would also be registered in the servlet container outside the security chain.
+    private static final class LoginRateLimitFilter extends OncePerRequestFilter {
+        private final LoginAttemptService loginAttempts;
+
+        private LoginRateLimitFilter(LoginAttemptService loginAttempts) {
+            this.loginAttempts = loginAttempts;
+        }
+
+        @Override
+        protected boolean shouldNotFilter(HttpServletRequest request) {
+            return !(HttpMethod.POST.matches(request.getMethod()) && LOGIN_URL.equals(request.getRequestURI().substring(request.getContextPath().length())));
+        }
+
+        @Override
+        protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+                throws ServletException, IOException {
+            var blocked = loginAttempts.blockedFor(request.getParameter(EMAIL_PARAMETER), request.getRemoteAddr());
+            if (blocked.isPresent()) {
+                response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+                response.setHeader(HttpHeaders.RETRY_AFTER, Long.toString(TooManyRequestsException.retryAfterSeconds(blocked.get())));
+                return;
+            }
+            chain.doFilter(request, response);
+        }
     }
 }

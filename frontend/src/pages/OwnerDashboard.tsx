@@ -1,7 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, LoaderCircle, RefreshCw } from 'lucide-react'
 import { ApiError, type ReportBucket, type ReportFilters, type ReportPage, type ReportSort, type Team } from '../lib/api'
-import { reportWeek, useReportBreakdown, useReportEntries, useReportMembers, useReportProjects, useReportSummary } from '../lib/reports'
+import { MAX_REPORT_DAYS, reportRangeDays, reportWeek, useReportBreakdown, useReportEntries, useReportMembers, useReportProjects, useReportSummary } from '../lib/reports'
 import { formatDuration } from '../lib/time'
 
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
@@ -75,6 +75,10 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
     event.preventDefault()
     if (!draft.from || !draft.to || draft.from > draft.to) {
       setValidation('Podaj obie daty. Data „od” nie może być późniejsza niż data „do”.')
+      return
+    }
+    if (reportRangeDays(draft.from, draft.to) > MAX_REPORT_DAYS) {
+      setValidation(`Raport może obejmować najwyżej ${MAX_REPORT_DAYS} dni.`)
       return
     }
     setValidation('')
