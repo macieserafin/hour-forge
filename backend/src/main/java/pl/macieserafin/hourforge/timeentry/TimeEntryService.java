@@ -15,6 +15,7 @@ import pl.macieserafin.hourforge.team.TeamRepository;
 import pl.macieserafin.hourforge.user.User;
 import pl.macieserafin.hourforge.user.UserRepository;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -26,6 +27,7 @@ import java.util.UUID;
 
 @Service
 public class TimeEntryService {
+    private final Clock clock;
     private final TimeEntryRepository entries;
     private final UserRepository users;
     private final TeamRepository teams;
@@ -33,7 +35,8 @@ public class TimeEntryService {
     private final ProjectRepository projects;
 
     public TimeEntryService(TimeEntryRepository entries, UserRepository users, TeamRepository teams,
-                            TeamMemberRepository members, ProjectRepository projects) {
+                            TeamMemberRepository members, ProjectRepository projects, Clock clock) {
+        this.clock = clock;
         this.entries = entries;
         this.users = users;
         this.teams = teams;
@@ -84,7 +87,7 @@ public class TimeEntryService {
         if (activeEntry(userId).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A timer is already running");
         }
-        var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         var workDate = now.atZone(ZoneId.of(project.getTeam().getTimezone())).toLocalDate();
         var entry = new TimeEntry(user, project.getTeam(), project, EntryType.TIMER, workDate,
                 now, null, null, request.description());
@@ -95,7 +98,7 @@ public class TimeEntryService {
     public TimeEntryResponse stop(UUID userId, StopTimerRequest request) {
         lockUser(userId);
         var entry = unfinishedTimer(userId, request.entryId());
-        var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         var effectiveEnd = entry.getPausedAt() == null ? now : entry.getPausedAt();
         long seconds = Duration.between(entry.getStartedAt(), effectiveEnd)
                 .minus(entry.getPausedDurationMicros(), ChronoUnit.MICROS).getSeconds();
@@ -119,7 +122,7 @@ public class TimeEntryService {
         if (entry.getPausedAt() != null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Timer is already paused");
         }
-        entry.setPausedAt(Instant.now().truncatedTo(ChronoUnit.MICROS));
+        entry.setPausedAt(clock.instant().truncatedTo(ChronoUnit.MICROS));
         updateDescription(entry, request.description());
         return response(entries.saveAndFlush(entry));
     }
@@ -132,7 +135,7 @@ public class TimeEntryService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Timer is not paused");
         }
         writableProject(userId, entry.getTeam().getId(), entry.getProject().getId());
-        completePause(entry, Instant.now().truncatedTo(ChronoUnit.MICROS));
+        completePause(entry, clock.instant().truncatedTo(ChronoUnit.MICROS));
         updateDescription(entry, request.description());
         return response(entries.saveAndFlush(entry));
     }

@@ -20,6 +20,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.time.Clock;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.UUID;
@@ -31,10 +32,12 @@ public class InvitationService {
     private final TeamMemberRepository members;
     private final UserRepository users;
     private final String frontendUrl;
+    private final Clock clock;
     private final SecureRandom random = new SecureRandom();
 
     public InvitationService(TeamInviteRepository invites, TeamRepository teams, TeamMemberRepository members,
-                             UserRepository users, @Value("${app.frontend-url}") String frontendUrl) {
+                             UserRepository users, @Value("${app.frontend-url}") String frontendUrl, Clock clock) {
+        this.clock = clock;
         this.invites = invites;
         this.teams = teams;
         this.members = members;
@@ -59,7 +62,7 @@ public class InvitationService {
         if (membership.getRole() != TeamRole.OWNER) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
-        if (!request.expiresAt().isAfter(Instant.now())) {
+        if (!request.expiresAt().isAfter(clock.instant())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Expiration must be in the future");
         }
 
@@ -86,7 +89,7 @@ public class InvitationService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         var invite = invites.findByTokenHash(tokenHash)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invitation not found"));
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         if (invite.getRevokedAt() != null || !invite.getExpiresAt().isAfter(now)) {
             throw new ResponseStatusException(HttpStatus.GONE, "Invitation is no longer valid");
         }
