@@ -1,0 +1,84 @@
+import { useState } from 'react'
+import { ChevronLeft, ChevronRight, LoaderCircle, LogOut, RefreshCw, UserMinus } from 'lucide-react'
+import { Modal } from '../components/Modal'
+import type { Team, TeamMember } from '../lib/api'
+import { useEndMembership, useTeamMembers } from '../lib/members'
+
+function EndMembershipModal({ userId, team, member, onClose, onComplete }: {
+  userId: string; team: Team; member: TeamMember | null; onClose: () => void; onComplete: () => void
+}) {
+  const end = useEndMembership(userId, team.id)
+  const leaving = member === null
+  async function confirm() {
+    try {
+      await end.mutateAsync(member?.userId ?? null)
+      onComplete()
+    } catch { /* The mutation exposes the error and reconciles the current server state. */ }
+  }
+  return <Modal title={leaving ? 'Opuść zespół' : 'Usuń członka zespołu'} busy={end.isPending} onClose={onClose}>
+    <p className="dialog-description">{leaving ? <>Opuścisz zespół <strong>{team.name}</strong> i utracisz dostęp do jego danych.</>
+      : <>Osoba <strong>{member.displayName}</strong> utraci dostęp do zespołu <strong>{team.name}</strong>.</>}</p>
+    <p className="field-hint">Historia pracy pozostanie w raportach zespołu. Uruchomiony timer będzie można zakończyć, ale nie wznowić. Ponowne dołączenie wymaga ważnego zaproszenia.</p>
+    {end.isError && <p role="alert" className="form-error">{end.error.message}</p>}
+    <footer className="dialog-actions"><button className="button-secondary" disabled={end.isPending} onClick={onClose}>Anuluj</button>
+      <button className="button-primary button-danger" disabled={end.isPending} onClick={() => void confirm()}>
+        {end.isPending && <LoaderCircle size={16} className="spin" />}{end.isPending ? 'Zapisywanie…' : leaving ? 'Potwierdź opuszczenie' : 'Potwierdź usunięcie'}
+      </button>
+    </footer>
+  </Modal>
+}
+
+export function TeamMembersPanel({ userId, team, onLeft }: { userId: string; team: Team; onLeft: () => void }) {
+  const owner = team.role === 'OWNER'
+  const [includeFormer, setIncludeFormer] = useState(false)
+  const [page, setPage] = useState(0)
+  const [notice, setNotice] = useState('')
+  const [action, setAction] = useState<{ member: TeamMember | null } | null>(null)
+  const members = useTeamMembers(userId, team.id, includeFormer, page)
+  const dateLabel = (date: string) => new Date(date).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short', timeZone: team.timezone })
+
+  return <section className="team-members" aria-label="Członkowie zespołu">
+    <header className="teams-toolbar"><div><h2>Członkowie zespołu</h2><p>{owner ? 'Zarządzaj dostępem do wybranego zespołu.' : 'Osoby, z którymi pracujesz w tym zespole.'}</p></div>
+      <div className="team-actions"><button className="button-secondary" disabled={members.isFetching} onClick={() => void members.refetch()}><RefreshCw size={15} className={members.isFetching ? 'spin' : ''} />Odśwież członków</button>
+        {!owner && <button className="button-secondary" onClick={() => { setNotice(''); setAction({ member: null }) }}><LogOut size={15} />Opuść zespół</button>}
+      </div>
+    </header>
+    {owner && <div className="projects-filter"><label><input type="checkbox" checked={includeFormer} onChange={event => { setIncludeFormer(event.target.checked); setPage(0); setNotice('') }} />Pokaż również byłych członków</label></div>}
+    {notice && <p className="project-notice" role="status">{notice}</p>}
+    {members.isPending ? <p className="teams-loading" role="status"><LoaderCircle size={18} className="spin" />Wczytywanie członków…</p>
+      : members.isError ? <div className="dashboard-error" role="alert">{members.error.message}<button onClick={() => void members.refetch()}>Wczytaj członków ponownie</button></div>
+      : <>
+        <p className="history-result-count">Liczba osób: {members.data.totalElements} · Daty w strefie {team.timezone}</p>
+        {members.data.content.length === 0 ? <p className="report-empty">Na tej stronie nie ma członków. Wróć na pierwszą stronę lub odśwież listę.</p>
+          : <div className="team-table-wrap" tabIndex={0} role="region" aria-label="Lista członków zespołu" aria-busy={members.isFetching}>
+            <table className="team-table members-table"><caption className="sr-only">Członkowie zespołu {team.name}</caption>
+              <thead><tr><th scope="col">Osoba</th><th scope="col">Rola</th><th scope="col">Dołączono</th><th scope="col">Status</th>{owner && <th scope="col">Akcje</th>}</tr></thead>
+              <tbody>{members.data.content.map(member => <tr key={member.userId}>
+                <td data-label="Osoba">{member.displayName}{member.userId === userId && <span className="report-meta">To Ty</span>}</td>
+                <td data-label="Rola">{member.role === 'OWNER' ? 'Właściciel' : 'Członek'}</td>
+                <td data-label="Dołączono"><time dateTime={member.joinedAt}>{dateLabel(member.joinedAt)}</time></td>
+                <td data-label="Status">{member.leftAt ? <>Były członek<span className="report-meta">Odejście: <time dateTime={member.leftAt}>{dateLabel(member.leftAt)}</time></span></> : 'Aktywny'}</td>
+                {owner && <td data-label="Akcje">{member.role === 'MEMBER' && member.userId !== userId && !member.leftAt
+                  ? <button className="text-link" aria-label={`Usuń z zespołu: ${member.displayName}`} onClick={() => { setNotice(''); setAction({ member }) }}><UserMinus size={15} />Usuń z zespołu</button>
+                  : <span className="field-hint">{member.role === 'OWNER' ? 'Właściciel zespołu' : 'Dostęp zakończony'}</span>}</td>}
+              </tr>)}</tbody>
+            </table>
+          </div>}
+        {members.data.totalPages > 0 && <nav className="history-pagination" aria-label="Strony członków zespołu">
+          <p>Strona {members.data.page + 1} z {members.data.totalPages}</p><div>
+            <button className="button-secondary" disabled={page === 0 || members.isFetching} onClick={() => setPage(page - 1)}><ChevronLeft size={16} />Poprzednia</button>
+            <button className="button-secondary" disabled={page + 1 >= members.data.totalPages || members.isFetching} onClick={() => setPage(page + 1)}>Następna<ChevronRight size={16} /></button>
+          </div>
+        </nav>}
+        {page > 0 && members.data.content.length === 0 && <button className="button-secondary" onClick={() => setPage(0)}>Wróć na pierwszą stronę</button>}
+      </>}
+    {action && <EndMembershipModal userId={userId} team={team} member={action.member} onClose={() => setAction(null)} onComplete={() => {
+      setAction(null)
+      if (action.member === null) onLeft()
+      else {
+        setNotice(`Zakończono dostęp osoby ${action.member.displayName} do zespołu ${team.name}.`)
+        if (!includeFormer && page > 0 && members.data?.content.length === 1) setPage(page - 1)
+      }
+    }} />}
+  </section>
+}

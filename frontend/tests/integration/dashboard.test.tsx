@@ -34,6 +34,15 @@ it('shows onboarding when the user has no teams', async () => {
   expect(await screen.findByRole('link', { name: 'Przejdź do zespołów' })).toHaveAttribute('href', '/teams')
 })
 
+it('keeps an own timer visible after departure without exposing the cached project name', async () => {
+  mockApi({ 'GET /api/teams': () => json([]), 'GET /api/timer/active': () => json(timer) })
+  const { client } = renderApp(<PersonalDashboard userId="actor" />)
+  client.setQueryData(['projects', 'actor', 'team', 'detail', 'project'], { id: 'project', name: 'Cached private project' })
+  const active = await screen.findByRole('region', { name: 'Aktywny timer na pulpicie' })
+  expect(active).toHaveTextContent('Projekt niedostępny')
+  expect(screen.queryByText('Cached private project')).not.toBeInTheDocument()
+})
+
 it('allows retrying a failed summary', async () => {
   let failed = true
   mockApi({ 'GET /api/dashboard/summary': () => failed ? json({}, 404) : json({ teamId: 'team', timezone: 'UTC',

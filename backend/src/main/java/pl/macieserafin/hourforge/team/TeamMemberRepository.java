@@ -2,6 +2,8 @@ package pl.macieserafin.hourforge.team;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.UUID;
 import java.util.Optional;
@@ -9,6 +11,15 @@ import java.util.List;
 
 public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
     Optional<TeamMember> findByTeamIdAndUserId(UUID teamId, UUID userId);
+
+    @Query("""
+            select new pl.macieserafin.hourforge.team.TeamMemberResponse(
+                member.user.id, member.user.displayName, member.role, member.joinedAt, member.leftAt)
+            from TeamMember member
+            where member.team.id = :teamId and (:includeFormer = true or member.leftAt is null)
+            order by member.role desc, member.user.displayName asc, member.user.id asc
+            """)
+    Page<TeamMemberResponse> findMembers(UUID teamId, boolean includeFormer, Pageable pageable);
 
     @Query("""
             select new pl.macieserafin.hourforge.team.TeamResponse(

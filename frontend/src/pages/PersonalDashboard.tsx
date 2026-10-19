@@ -20,7 +20,7 @@ function TimerOverview({ userId, entry, teams }: { userId: string; entry: TimeEn
   const elapsed = Math.max(0, Math.floor((end - Date.parse(entry.startedAt!)) / 1000 - entry.pausedDurationSeconds))
   return <section className="overview-panel dashboard-timer" aria-label="Aktywny timer na pulpicie">
     <h2>{entry.pausedAt ? 'Timer wstrzymany' : 'Praca w toku'}</h2>
-    <p className="timer-project-name">{project.data?.name ?? (project.isPending && team ? 'Wczytywanie projektu…' : 'Projekt niedostępny')}</p>
+    <p className="timer-project-name">{team && project.data ? project.data.name : project.isPending && team ? 'Wczytywanie projektu…' : 'Projekt niedostępny'}</p>
     <p className="timer-team-name">{team?.name ?? 'Poprzedni zespół'}</p>
     <p className="timer-counter" role="timer" aria-label="Czas aktywnego timera" aria-live="off">{formatDuration(elapsed)}</p>
     {project.isError && <p className="form-error" role="alert">{project.error.message}</p>}

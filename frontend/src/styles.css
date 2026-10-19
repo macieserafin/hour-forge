@@ -364,6 +364,17 @@ fieldset:disabled { opacity: .65; }
 .button-danger { background: #a33e4a; }
 .button-danger:hover:not(:disabled) { background: #87313c; }
 .personal-dashboard { min-width: 0; }
+.team-members { margin-top: 32px; padding-top: 28px; border-top: 1px solid var(--border); min-width: 0; }
+.members-table td { overflow-wrap: anywhere; }
+.members-table td:nth-child(2), .members-table td:last-child { white-space: normal; }
+@media (max-width: 720px) {
+  .members-table, .members-table tbody { display: block; }
+  .members-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .members-table tr { display: block; padding: 16px; border-bottom: 1px solid var(--border); }
+  .members-table tr:last-child { border-bottom: 0; }
+  .members-table td, .members-table td:first-child { display: block; border: 0; padding: 7px 0; min-width: 0; white-space: normal; }
+  .members-table td::before { content: attr(data-label); display: block; margin-bottom: 5px; font-size: 11px; color: var(--muted); }
+}
 .dashboard-overview.team-overview { grid-template-columns: minmax(0, 1fr); }
 .dashboard-view-switch { display: flex; gap: 8px; margin-bottom: 28px; }
 .dashboard-view-switch [aria-pressed="true"] { background: #eeeafa; border-color: var(--accent); color: #6250b9; }

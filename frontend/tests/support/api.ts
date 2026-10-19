@@ -17,6 +17,8 @@ export function mockApi(overrides: Record<string, Handler> = {}) {
     'GET /api/me': () => json(user),
     'GET /api/auth/csrf': () => json({ token: 'csrf', headerName: 'X-CSRF-TOKEN', parameterName: '_csrf' }),
     'GET /api/teams': () => json([team]),
+    [`GET /api/teams/${team.id}/members`]: () => json({ content: [{ userId: user.id, displayName: user.displayName,
+      role: team.role, joinedAt: team.createdAt, leftAt: null }], page: 0, size: 20, totalElements: 1, totalPages: 1 }),
     [`GET /api/teams/${team.id}/projects`]: () => json([project]),
     [`GET /api/teams/${team.id}/projects/${project.id}`]: () => json(project),
     'GET /api/timer/active': () => json(null, 204),

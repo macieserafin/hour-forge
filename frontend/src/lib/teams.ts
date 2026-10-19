@@ -15,6 +15,7 @@ export function useAuthError() {
       client.removeQueries({ queryKey: ['timer'], type: 'inactive' })
       client.removeQueries({ queryKey: ['time-entries'], type: 'inactive' })
       client.removeQueries({ queryKey: ['dashboard'], type: 'inactive' })
+      client.removeQueries({ queryKey: ['team-members'], type: 'inactive' })
     }
   }, [client])
 }
@@ -49,5 +50,7 @@ export function useAcceptInvitation(userId: string) {
     onSuccess: async team => {
       client.setQueryData<Team[]>(teamsKey(userId), previous => [team, ...(previous ?? []).filter(item => item.id !== team.id)])
       await client.invalidateQueries({ queryKey: teamsKey(userId) })
+      await client.invalidateQueries({ queryKey: ['team-members', userId, team.id] })
+      await client.invalidateQueries({ queryKey: ['dashboard', userId, team.id] })
     } })
 }

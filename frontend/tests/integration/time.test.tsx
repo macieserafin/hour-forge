@@ -17,6 +17,22 @@ it('rejects zero manual time without posting and permits cancelling the form', a
   await userEvent.click(modal.getByRole('button', { name: 'Anuluj' }))
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })
+
+it('a former member can finish a paused timer but cannot resume it or see a cached project name', async () => {
+  let active = true
+  mockApi({ 'GET /api/teams': () => json([]),
+    'GET /api/timer/active': () => active ? json({ ...timer, pausedAt: '2026-10-19T10:02:00Z' }) : json(null, 204),
+    'POST /api/timer/stop': () => { active = false; return json({ ...timer, endedAt: '2026-10-19T10:02:00Z', durationSeconds: 120 }) },
+  })
+  const { client } = renderApp(<App />, '/time?team=team')
+  client.setQueryData(['projects', 'actor', 'team', 'detail', 'project'], { id: 'project', name: 'Cached private project' })
+  const panel = within(await screen.findByRole('region', { name: 'Aktywny timer' }))
+  expect(panel.getByRole('button', { name: 'Wznów pracę' })).toBeDisabled()
+  expect(panel.getByRole('button', { name: 'Zakończ pracę' })).toBeEnabled()
+  expect(screen.queryByText('Cached private project')).not.toBeInTheDocument()
+  await userEvent.click(panel.getByRole('button', { name: 'Zakończ pracę' }))
+  expect(await screen.findByText(/Praca zakończona i zapisana/)).toBeVisible()
+})
 it('recovers a running timer after a start conflict', async () => {
   let running = false
   mockApi({ 'GET /api/timer/active': () => running ? json({ ...timer, startedAt: new Date(Date.now() - 120000).toISOString() }) : json(null, 204),

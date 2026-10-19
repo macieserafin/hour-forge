@@ -43,6 +43,7 @@ class TimeEntryConcurrencyIT extends IntegrationTestSupport {
     @Autowired UserRepository users;
     @Autowired TeamRepository teams;
     @Autowired TeamMemberRepository members;
+    @Autowired pl.macieserafin.hourforge.team.TeamMembershipService memberships;
     @Autowired ProjectRepository projects;
     @Autowired TimeEntryRepository entries;
     @Autowired PlatformTransactionManager transactionManager;
@@ -126,6 +127,27 @@ class TimeEntryConcurrencyIT extends IntegrationTestSupport {
         assertThat(projects.findById(project.getId()).orElseThrow().getArchivedAt()).isNotNull();
         assertThat(jdbc.queryForObject("select count(*) from time_entries where project_id = ?", Long.class, project.getId()))
                 .isEqualTo(outcomes.getFirst() == 201 ? 1L : 0L);
+    }
+
+    @Test
+    void removalAndManualWriteAreSerializedAndFurtherWritesAreRefused() throws Exception {
+        var outcomes = concurrently(() -> outcome(() -> { memberships.remove(first.getId(), team.getId(), second.getId()); return null; }, 204),
+                () -> outcome(() -> service.createManual(second.getId(),
+                        new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(), 60, null)), 201));
+        assertThat(List.of(List.of(204, 201), List.of(204, 404))).contains(outcomes);
+        assertThat(members.findByTeamIdAndUserId(team.getId(), second.getId()).orElseThrow().getLeftAt()).isNotNull();
+        assertThat(outcome(() -> service.createManual(second.getId(),
+                new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(), 60, null)), 201)).isEqualTo(404);
+    }
+
+    @Test
+    void leavingAndStartingATimerAreSerializedWithoutLosingAnAlreadyStartedTimer() throws Exception {
+        var outcomes = concurrently(() -> outcome(() -> { memberships.leave(second.getId(), team.getId()); return null; }, 204),
+                () -> start(second, project));
+        assertThat(List.of(List.of(204, 201), List.of(204, 404))).contains(outcomes);
+        assertThat(jdbc.queryForObject("select count(*) from time_entries where user_id = ?", Long.class, second.getId()))
+                .isEqualTo(outcomes.getLast() == 201 ? 1L : 0L);
+        assertThat(outcome(() -> service.start(second.getId(), new StartTimerRequest(team.getId(), project.getId(), null)), 201)).isEqualTo(404);
     }
 
     private int start(User user, Project project) throws Exception {

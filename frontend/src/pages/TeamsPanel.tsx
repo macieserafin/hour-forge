@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Modal } from '../components/Modal'
 import type { Team } from '../lib/api'
 import { useCreateInvitation, useCreateTeam, useTeams } from '../lib/teams'
+import { TeamMembersPanel } from './TeamMembersPanel'
 
 const roleLabel = (role: Team['role']) => role === 'OWNER' ? 'Właściciel' : 'Członek'
 const dateLabel = (date: string) => new Date(date).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })
@@ -92,11 +93,14 @@ export function TeamsPanel({ userId }: { userId: string }) {
   const teams = useTeams(userId)
   const [search, setSearch] = useSearchParams()
   const [modal, setModal] = useState<'create' | 'invite' | null>(null)
-  const selected = teams.data?.find(team => team.id === search.get('team')) ?? teams.data?.[0]
-  function select(team: Team) { setSearch({ team: team.id }, { replace: true }) }
+  const [notice, setNotice] = useState('')
+  const selectedId = search.get('team')
+  const selected = selectedId ? teams.data?.find(team => team.id === selectedId) : teams.data?.[0]
+  function select(team: Team) { setNotice(''); setSearch({ team: team.id }, { replace: true }) }
 
   return <section className="teams-panel" aria-label="Zarządzanie zespołami">
     <header className="teams-toolbar"><div><h2>Twoje zespoły</h2><p>Wybierz zespół, aby zobaczyć swoją rolę i dostępne działania.</p></div><button className="button-primary" onClick={() => setModal('create')}><Plus size={16} />Utwórz zespół</button></header>
+    {notice && <p className="project-notice" role="status">{notice}</p>}
     {teams.isPending ? <p role="status" className="teams-loading"><LoaderCircle size={18} className="spin" />Ładowanie zespołów…</p>
       : teams.isError ? <div className="dashboard-error" role="alert">{teams.error.message}<button onClick={() => void teams.refetch()}>Spróbuj ponownie</button></div>
       : teams.data.length === 0 ? <div className="overview-panel empty-state"><Users size={28} strokeWidth={1.4} /><h3>Nie należysz jeszcze do żadnego zespołu.</h3><p>Utwórz własny zespół lub otwórz link zaproszeniowy otrzymany od właściciela.</p></div>
@@ -105,6 +109,9 @@ export function TeamsPanel({ userId }: { userId: string }) {
           {teams.data.map(team => <tr key={team.id} className={team.id === selected?.id ? 'selected-team-row' : ''}><td><button aria-pressed={team.id === selected?.id} onClick={() => select(team)}>{team.name}{team.id === selected?.id && <Check size={14} aria-label="Wybrany zespół" />}</button></td><td>{team.timezone}</td><td>{roleLabel(team.role)}</td></tr>)}
         </tbody></table></div>
         {selected && <section className="selected-team" aria-label="Wybrany zespół"><div><h3>{selected.name}</h3><p>Twoja rola: {roleLabel(selected.role)}</p></div><div className="team-actions"><Link className="button-secondary" to={`/projects?${new URLSearchParams({ team: selected.id })}`}>Projekty zespołu</Link>{selected.role === 'OWNER' ? <button className="button-secondary" onClick={() => setModal('invite')}><Link2 size={16} />Zaproś do zespołu</button> : <p className="field-hint">Linki zaproszeniowe generuje właściciel zespołu.</p>}</div></section>}
+        {selected ? <TeamMembersPanel key={`${selected.id}:${selected.role}`} userId={userId} team={selected} onLeft={() => {
+          setModal(null); setNotice(`Opuszczono zespół ${selected.name}. Historia Twojej pracy została zachowana.`); setSearch({}, { replace: true })
+        }} /> : <p className="form-error" role="alert">Ten zespół jest niedostępny. Wybierz inny zespół z listy.</p>}
       </>}
     {modal === 'create' && <CreateTeamModal userId={userId} onClose={() => setModal(null)} onCreated={team => { select(team); setModal(null) }} />}
     {modal === 'invite' && selected?.role === 'OWNER' && <InviteModal key={selected.id} team={selected} onClose={() => setModal(null)} />}

@@ -343,12 +343,52 @@ export interface ReportBucket {
   entryCount: number
 }
 
-export interface ReportMember {
+export interface TeamMember {
   userId: string
   displayName: string
   role: 'OWNER' | 'MEMBER'
   joinedAt: string
   leftAt: string | null
+}
+
+export type ReportMember = TeamMember
+
+export interface TeamMembersPage {
+  content: TeamMember[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}
+
+async function membershipRequest(path: string, method: 'GET' | 'DELETE' | 'POST', signal?: AbortSignal) {
+  const csrf = method === 'GET' ? null : await getCsrf()
+  const response = await request(path, { method, signal, headers: csrf ? { [csrf.headerName]: csrf.token } : undefined })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: 'Sprawdź wybraną stronę listy członków.',
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
+      404: 'Zespół lub członek jest niedostępny. Możliwe, że członkostwo już się zakończyło.',
+      409: 'Właściciel nie może opuścić zespołu ani zostać z niego usunięty.',
+    }
+    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wczytać lub zmienić członkostwa. Odśwież listę przed ponowieniem operacji.')
+  }
+  return response
+}
+
+export async function getTeamMembers(teamId: string, includeFormer: boolean, page: number, signal?: AbortSignal): Promise<TeamMembersPage> {
+  const params = new URLSearchParams({ includeFormer: String(includeFormer), page: String(page), size: '20' })
+  const response = await membershipRequest(`/api/teams/${encodeURIComponent(teamId)}/members?${params}`, 'GET', signal)
+  return response.json() as Promise<TeamMembersPage>
+}
+
+export async function removeTeamMember(teamId: string, userId: string): Promise<void> {
+  await membershipRequest(`/api/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(userId)}`, 'DELETE')
+}
+
+export async function leaveTeam(teamId: string): Promise<void> {
+  await membershipRequest(`/api/teams/${encodeURIComponent(teamId)}/leave`, 'POST')
 }
 
 export interface ReportProject {
