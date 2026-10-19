@@ -58,6 +58,52 @@ export interface StartTimerInput {
   description: string | null
 }
 
+export interface TimeEntryHistoryItem {
+  id: string
+  teamId: string
+  projectId: string
+  projectName: string
+  entryType: 'TIMER' | 'MANUAL'
+  workDate: string
+  durationSeconds: number
+  description: string | null
+  startedAt: string | null
+  endedAt: string | null
+}
+
+export interface TimeEntryHistory {
+  content: TimeEntryHistoryItem[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}
+
+export interface TimeEntryHistoryFilters {
+  projectId: string
+  from: string
+  to: string
+}
+
+export async function getTimeEntryHistory(teamId: string, filters: TimeEntryHistoryFilters,
+  page: number, signal?: AbortSignal): Promise<TimeEntryHistory> {
+  const params = new URLSearchParams({ teamId, page: String(page), size: '20' })
+  if (filters.projectId) params.set('projectId', filters.projectId)
+  if (filters.from) params.set('from', filters.from)
+  if (filters.to) params.set('to', filters.to)
+  const response = await request(`/api/time-entries?${params}`, { signal })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: 'Sprawdź zakres dat i wybrany projekt.',
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Nie masz uprawnień do przeglądania tej historii.',
+      404: 'Nie znaleziono projektu lub zespołu albo nie masz już do niego dostępu.',
+    }
+    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wczytać historii czasu. Spróbuj ponownie.')
+  }
+  return response.json() as Promise<TimeEntryHistory>
+}
+
 export interface ManualTimeInput extends StartTimerInput {
   workDate: string
   durationSeconds: number

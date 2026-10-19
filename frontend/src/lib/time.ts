@@ -1,9 +1,18 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, changeTimerState, createManualTimeEntry, getActiveTimer, startTimer, stopTimer } from './api'
+import { ApiError, changeTimerState, createManualTimeEntry, getActiveTimer, getTimeEntryHistory, startTimer, stopTimer, type TimeEntryHistoryFilters } from './api'
 import { teamsKey, useAuthError } from './teams'
 
 export const activeTimerKey = (userId: string) => ['timer', userId, 'active'] as const
+
+export function useTimeEntryHistory(userId: string, teamId: string, filters: TimeEntryHistoryFilters, page: number) {
+  const handleError = useAuthError()
+  const query = useQuery({ queryKey: ['time-entries', userId, teamId, filters, page],
+    queryFn: ({ signal }) => getTimeEntryHistory(teamId, filters, page, signal),
+    retry: (count, error) => count < 1 && error instanceof ApiError && (error.status === 0 || error.status >= 500) })
+  useEffect(() => { if (query.error) handleError(query.error) }, [query.error, handleError])
+  return query
+}
 
 export function useActiveTimer(userId: string) {
   const handleError = useAuthError()

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Clock3, LoaderCircle, Pause, Plus, Play, Square } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Modal } from '../components/Modal'
+import { TimeEntryHistory } from './TimeEntryHistory'
 import type { Project, Team, TimeEntry } from '../lib/api'
 import { useProject, useProjects } from '../lib/projects'
 import { useTeams } from '../lib/teams'
@@ -144,7 +145,8 @@ export function TimePanel({ userId }: { userId: string }) {
       : teams.isError ? <div className="dashboard-error" role="alert">{teams.error.message}<button onClick={() => void teams.refetch()}>Spróbuj ponownie</button></div>
       : teams.data.length === 0 ? <div className="overview-panel empty-state"><Clock3 size={28} strokeWidth={1.4} /><h3>Najpierw dołącz do zespołu.</h3><p>Czas pracy rejestrujesz w projekcie należącym do zespołu.</p><Link className="text-link dashboard-teams-link" to="/teams">Przejdź do zespołów</Link></div>
       : <><div className="project-team-picker"><div className="field-group"><label htmlFor="time-team">Zespół</label><select className="text-input" id="time-team" value={selected?.id ?? ''} disabled={start.isPending || stop.isPending || state.isPending} onChange={event => { setSearch({ team: event.target.value }); start.reset(); stop.reset(); state.reset() }}>{!selected && <option value="" disabled>Wybierz dostępny zespół</option>}{teams.data.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></div></div>
-        {selected ? <TeamTimeEntry key={selected.id} userId={userId} team={selected} start={start} canStart={active.isSuccess && !active.isFetching && !active.data && !stop.isPending && !state.isPending} onSaved={setSaved} onStarted={() => { setSaved(null); stop.reset(); state.reset() }} /> : <p className="form-error" role="alert">Ten zespół nie istnieje lub nie masz do niego dostępu. Wybierz inny zespół.</p>}
+        {selected ? <><TeamTimeEntry key={selected.id} userId={userId} team={selected} start={start} canStart={active.isSuccess && !active.isFetching && !active.data && !stop.isPending && !state.isPending} onSaved={setSaved} onStarted={() => { setSaved(null); stop.reset(); state.reset() }} />
+          <TimeEntryHistory key={`${userId}:${selected.id}`} userId={userId} teamId={selected.id} /></> : <p className="form-error" role="alert">Ten zespół nie istnieje lub nie masz do niego dostępu. Wybierz inny zespół.</p>}
       </>}
   </div>
 }
