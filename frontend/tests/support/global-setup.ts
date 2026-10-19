@@ -45,7 +45,7 @@ export default async function globalSetup() {
     backend = spawn('java', ['-jar', 'target/hour-forge-0.0.1-SNAPSHOT.jar', `--server.port=${backendPort}`], {
       cwd: backendPath,
       env: { ...process.env, DB_URL: `jdbc:postgresql://127.0.0.1:${databasePort}/hourforge_e2e`,
-        DB_USERNAME: 'hourforge_e2e', DB_PASSWORD: 'e2e-only-password', SEED_USERS: 'true',
+        DB_USERNAME: 'hourforge_e2e', DB_PASSWORD: 'e2e-only-password',
         SESSION_COOKIE_SECURE: 'false', FRONTEND_URL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:5186' },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -59,8 +59,8 @@ export default async function globalSetup() {
       if (backend.exitCode !== null) throw new Error(`E2E backend exited: ${backend.exitCode}. See ${directory}/backend.log`)
       try {
         const result = await exec('docker', ['exec', container, 'psql', '-U', 'hourforge_e2e', '-d', 'hourforge_e2e', '-tAc', 'SELECT count(*) FROM user_credentials'])
-        if (result.stdout.trim() === '2' && (await fetch(`http://127.0.0.1:${backendPort}/api/auth/csrf`)).ok) break
-      } catch { /* Wait for migrations and seed completion, not a fixed startup delay. */ }
+        if (result.stdout.trim() === '0' && (await fetch(`http://127.0.0.1:${backendPort}/api/auth/csrf`)).ok) break
+      } catch { /* Wait for migrations and HTTP readiness. */ }
       if (Date.now() > deadline) throw new Error(`E2E environment was not ready within 60 seconds. See ${directory}/backend.log`)
       await new Promise(resolve => setTimeout(resolve, 200))
     }

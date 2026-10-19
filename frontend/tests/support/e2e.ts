@@ -2,19 +2,28 @@ import { test as base, expect, type Page, type APIRequestContext } from '@playwr
 import { execFileSync } from 'node:child_process'
 
 export { expect }
-export const owner = 'user1@hourforge.local'
-export const member = 'user2@hourforge.local'
-export const password = 'Test-user-1-2026!'
-export const memberPassword = 'Test-user-2-2026!'
+export const owner = 'owner@hourforge-e2e.test'
+export const member = 'member@hourforge-e2e.test'
+export const password = 'E2E-owner-password-2026!'
+export const memberPassword = 'E2E-member-password-2026!'
 
 export const test = base.extend<{ isolatedDatabase: void }>({
-  isolatedDatabase: [async ({}, use) => {
+  isolatedDatabase: [async ({ request }, use) => {
     const container = process.env.HOUR_FORGE_E2E_CONTAINER
     if (!container?.startsWith('hour-forge-e2e-')) throw new Error('Managed E2E database was not started. Run tests through playwright.config.ts.')
     const reset = () => execFileSync('docker', ['exec', container, 'psql', '-U', 'hourforge_e2e', '-d', 'hourforge_e2e',
-      '-v', 'ON_ERROR_STOP=1', '-c', "TRUNCATE TABLE teams CASCADE; DELETE FROM user_credentials WHERE user_id IN (SELECT id FROM users WHERE email NOT IN ('user1@hourforge.local', 'user2@hourforge.local')); DELETE FROM users WHERE email NOT IN ('user1@hourforge.local', 'user2@hourforge.local');"], { stdio: 'pipe' })
+      '-v', 'ON_ERROR_STOP=1', '-c', 'TRUNCATE TABLE teams CASCADE; DELETE FROM user_credentials; DELETE FROM users;'], { stdio: 'pipe' })
     reset()
-    try { await use() } finally { reset() }
+    try {
+      for (const account of [
+        { displayName: 'User One', email: owner, password },
+        { displayName: 'User Two', email: member, password: memberPassword },
+      ]) {
+        const response = await post(request, '/api/auth/register', account)
+        expect(response.status()).toBe(201)
+      }
+      await use()
+    } finally { reset() }
   }, { auto: true }],
 })
 
