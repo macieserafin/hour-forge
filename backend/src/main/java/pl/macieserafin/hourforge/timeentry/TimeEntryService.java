@@ -1,5 +1,9 @@
 package pl.macieserafin.hourforge.timeentry;
 
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,8 +17,10 @@ import pl.macieserafin.hourforge.user.UserRepository;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,6 +39,42 @@ public class TimeEntryService {
         this.teams = teams;
         this.members = members;
         this.projects = projects;
+    }
+
+    @Transactional(readOnly = true)
+    public TimeEntryHistoryResponse history(UUID userId, UUID teamId, UUID projectId,
+                                            LocalDate from, LocalDate to, int page, int size) {
+        if (!users.existsById(userId)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+        if (page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE
+                || (from != null && to != null && from.isAfter(to))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date range or pagination");
+        }
+        members.findByTeamIdAndUserId(teamId, userId).filter(member -> member.getLeftAt() == null)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (projectId != null && projects.findByIdAndTeamId(projectId, teamId).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+
+        Specification<TimeEntry> filter = (root, query, cb) -> {
+            var predicates = new ArrayList<Predicate>();
+            predicates.add(cb.equal(root.get("user").get("id"), userId));
+            predicates.add(cb.equal(root.get("team").get("id"), teamId));
+            predicates.add(cb.or(cb.equal(root.get("entryType"), EntryType.MANUAL),
+                    cb.and(cb.equal(root.get("entryType"), EntryType.TIMER), cb.isNotNull(root.get("endedAt")))));
+            if (projectId != null) predicates.add(cb.equal(root.get("project").get("id"), projectId));
+            if (from != null) predicates.add(cb.greaterThanOrEqualTo(root.get("workDate"), from));
+            if (to != null) predicates.add(cb.lessThanOrEqualTo(root.get("workDate"), to));
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+        var result = entries.findAll(filter, PageRequest.of(page, size,
+                Sort.by(Sort.Order.desc("workDate"), Sort.Order.desc("createdAt"), Sort.Order.asc("id"))));
+        var content = result.getContent().stream().map(entry -> new TimeEntryHistoryItem(
+                entry.getId(), entry.getTeam().getId(), entry.getProject().getId(), entry.getProject().getName(),
+                entry.getEntryType(), entry.getWorkDate(), entry.getDurationSeconds(), entry.getDescription(),
+                entry.getStartedAt(), entry.getEndedAt())).toList();
+        return new TimeEntryHistoryResponse(content, page, size, result.getTotalElements(), result.getTotalPages());
     }
 
     @Transactional
