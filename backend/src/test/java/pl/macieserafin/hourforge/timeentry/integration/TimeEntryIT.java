@@ -36,6 +36,81 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class TimeEntryIT extends ApiIntegrationTestSupport {
+    @Test
+    void undatedHistoryHasStablePaginationAndKeepsDatedWorkAfterUndatedWork() throws Exception {
+        var first = entries.saveAndFlush(new TimeEntry(actor, team, project, EntryType.MANUAL, null, null, null, 60, "First"));
+        var second = entries.saveAndFlush(new TimeEntry(actor, team, project, EntryType.MANUAL, null, null, null, 60, "Second"));
+        var dated = entries.saveAndFlush(new TimeEntry(actor, team, project, EntryType.MANUAL, today, null, null, 60, "Dated"));
+        var foreign = entries.saveAndFlush(new TimeEntry(other, team, project, EntryType.MANUAL, null, null, null, 60, "Other user"));
+        var ids = new java.util.ArrayList<String>();
+        for (int page = 0; page < 3; page++) {
+            String body = mvc.perform(get("/api/time-entries").with(user(principal)).param("teamId", team.getId().toString())
+                            .param("page", String.valueOf(page)).param("size", "1"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(3))
+                    .andReturn().getResponse().getContentAsString();
+            ids.add(JsonPath.read(body, "$.content[0].id"));
+        }
+        assertThat(ids).doesNotHaveDuplicates().doesNotContain(foreign.getId().toString());
+        assertThat(ids.subList(0, 2)).containsExactlyInAnyOrder(first.getId().toString(), second.getId().toString());
+        assertThat(ids.get(2)).isEqualTo(dated.getId().toString());
+    }
+
+    @Test
+    void createsUndatedManualEntriesAndEditsDatesInBothDirections() throws Exception {
+        for (String dateField : new String[]{"", ",\"workDate\":null"}) {
+            var body = mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON).content(
+                                    "{\"teamId\":\"%s\",\"projectId\":\"%s\",\"durationSeconds\":60%s}"
+                                            .formatted(team.getId(), project.getId(), dateField)))
+                    .andExpect(status().isCreated()).andExpect(jsonPath("$.workDate").isEmpty())
+                    .andExpect(jsonPath("$.createdAt").isNotEmpty()).andReturn().getResponse().getContentAsString();
+            String id = JsonPath.read(body, "$.id");
+            assertThat(entries.findById(UUID.fromString(id)).orElseThrow().getWorkDate()).isNull();
+            for (String date : new String[]{"\"" + today + "\"", "null", "null"}) {
+                mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/time-entries/" + id)
+                                .with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"projectId\":\"%s\",\"workDate\":%s,\"durationSeconds\":60}".formatted(project.getId(), date)))
+                        .andExpect(status().isOk());
+            }
+            assertThat(entries.findById(UUID.fromString(id)).orElseThrow().getWorkDate()).isNull();
+        }
+        mvc.perform(get("/api/time-entries").with(user(principal)).param("teamId", team.getId().toString())
+                        .param("undated", "true").param("size", "1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.content[0].workDate").isEmpty());
+        mvc.perform(get("/api/time-entries").with(user(principal)).param("teamId", team.getId().toString())
+                        .param("from", today.toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
+        mvc.perform(get("/api/time-entries").with(user(principal)).param("teamId", team.getId().toString())
+                        .param("undated", "true").param("from", today.toString()))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void undatedEntriesPreserveValidationAndAccessChecks() throws Exception {
+        String body = "{\"teamId\":\"%s\",\"projectId\":\"%s\",\"workDate\":null,\"durationSeconds\":%d}";
+        for (int seconds : new int[]{0, -1, 86401}) {
+            mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                    .content(body.formatted(team.getId(), project.getId(), seconds))).andExpect(status().isBadRequest());
+        }
+        mvc.perform(post("/api/time-entries").with(user(principal)).contentType(MediaType.APPLICATION_JSON)
+                .content(body.formatted(team.getId(), project.getId(), 60))).andExpect(status().isForbidden());
+        mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content(body.formatted(foreignTeam.getId(), foreignProject.getId(), 60))).andExpect(status().isNotFound());
+        var timer = entries.saveAndFlush(new TimeEntry(actor, team, project, EntryType.TIMER, today,
+                Instant.now().minusSeconds(120), Instant.now(), 120, null));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/time-entries/" + timer.getId())
+                        .with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"projectId\":\"%s\",\"workDate\":null,\"durationSeconds\":120}".formatted(project.getId())))
+                .andExpect(status().isBadRequest());
+        project.setArchivedAt(Instant.now());
+        mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content(body.formatted(team.getId(), project.getId(), 60))).andExpect(status().isConflict());
+        members.findByTeamIdAndUserId(team.getId(), actor.getId()).orElseThrow().setLeftAt(Instant.now());
+        mvc.perform(get("/api/time-entries").with(user(principal)).param("teamId", team.getId().toString())
+                .param("undated", "true")).andExpect(status().isNotFound());
+    }
+
     @Autowired MockMvc mvc;
     @Autowired UserRepository users;
     @Autowired TeamRepository teams;
@@ -248,8 +323,8 @@ class TimeEntryIT extends ApiIntegrationTestSupport {
     }
 
     @Test
-    void manualWorkDateIsRequiredAndMustBeValid() throws Exception {
-        for (String date : new String[]{"null", "\"invalid\"", "\"2026-02-30\""}) {
+    void suppliedManualWorkDateMustBeValid() throws Exception {
+        for (String date : new String[]{"\"invalid\"", "\"2026-02-30\""}) {
             mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                             .content("{\"teamId\":\"%s\",\"projectId\":\"%s\",\"workDate\":%s,\"durationSeconds\":60}"
                                     .formatted(team.getId(), project.getId(), date)))

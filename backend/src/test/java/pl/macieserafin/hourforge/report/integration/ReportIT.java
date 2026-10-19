@@ -26,6 +26,40 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class ReportIT extends ApiIntegrationTestSupport {
+    @Test
+    void undatedReportsUseTheSameScopeForTotalsGroupsAndPagedEntries() throws Exception {
+        dataset();
+        for (int seconds : new int[]{60, 120}) {
+            entries.saveAndFlush(new TimeEntry(worker, team, archived, EntryType.MANUAL, null, null, null, seconds, "Undated"));
+        }
+        var foreign = fixtures.team("Foreign undated", "UTC");
+        entries.saveAndFlush(new TimeEntry(worker, foreign, fixtures.project(foreign, "Other", null), EntryType.MANUAL,
+                null, null, null, 999, null));
+        mvc.perform(request("summary")).andExpect(status().isOk()).andExpect(jsonPath("$.totals.durationSeconds").value(450));
+        mvc.perform(request("summary").param("undated", "true"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totals.durationSeconds").value(180))
+                .andExpect(jsonPath("$.totals.entryCount").value(2)).andExpect(jsonPath("$.context.filter.from").isEmpty());
+        for (ReportGrouping grouping : ReportGrouping.values()) {
+            mvc.perform(request("breakdown").param("undated", "true").param("groupBy", grouping.name()))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.content", hasSize(1)))
+                    .andExpect(jsonPath("$.data.content[0].durationSeconds").value(180));
+        }
+        for (int page = 0; page < 2; page++) {
+            mvc.perform(request("entries").param("undated", "true").param("sort", "DURATION").param("direction", "ASC")
+                            .param("page", String.valueOf(page)).param("size", "1"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.data.content[0].durationSeconds").value(60 + page * 60))
+                    .andExpect(jsonPath("$.data.hasNext").value(page == 0));
+        }
+        for (String endpoint : List.of("summary", "breakdown", "entries")) {
+            mvc.perform(request(endpoint).param("undated", "true").param("from", "2026-10-19").param("to", "2026-10-25"))
+                    .andExpect(status().isBadRequest());
+            mvc.perform(request(endpoint).param("undated", "true").param("projectIds", project.getId().toString()))
+                    .andExpect(status().isOk());
+            mvc.perform(request(endpoint).param("undated", "true").with(user(principal(worker))))
+                    .andExpect(status().isNotFound());
+        }
+    }
+
     private static final Instant NOW = Instant.parse("2026-10-19T10:00:00Z");
     @Autowired MockMvc mvc;
     @Autowired TimeEntryRepository entries;

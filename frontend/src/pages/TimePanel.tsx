@@ -8,7 +8,7 @@ import { useProject, useProjects } from '../lib/projects'
 import { useTeams } from '../lib/teams'
 import { MAX_MANUAL_DURATION_SECONDS, formatDuration, maxDurationMessage, teamToday, useActiveTimer, useChangeTimerState, useManualTimeEntry, useStartTimer, useStopTimer, workDateRange, workDateRangeMessage } from '../lib/time'
 
-const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
+const dateLabel = (date: string | null) => date === null ? 'Bez daty' : new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
 
 function ManualTimeModal({ userId, team, projects, projectId, onClose, onSaved }: {
   userId: string; team: Team; projects: Project[]; projectId: string; onClose: () => void; onSaved: (entry: TimeEntry) => void
@@ -16,6 +16,7 @@ function ManualTimeModal({ userId, team, projects, projectId, onClose, onSaved }
   const save = useManualTimeEntry(userId)
   const [selected, setSelected] = useState(projectId)
   const [date, setDate] = useState(() => teamToday(team.timezone))
+  const [undated, setUndated] = useState(false)
   const range = workDateRange(team.timezone)
   const [hours, setHours] = useState('0')
   const [minutes, setMinutes] = useState('0')
@@ -27,21 +28,23 @@ function ManualTimeModal({ userId, team, projects, projectId, onClose, onSaved }
     const parts = [hours, minutes, seconds].map(value => value === '' ? 0 : Number(value))
     const duration = parts[0]! * 3600 + parts[1]! * 60 + parts[2]!
     if (!projects.some(project => project.id === selected)) { setValidation('Wybierz projekt.'); return }
-    if (!date) { setValidation('Wybierz datę pracy.'); return }
-    if (date < range.min || date > range.max) { setValidation(workDateRangeMessage); return }
+    if (!undated && !date) { setValidation('Wybierz datę pracy.'); return }
+    if (!undated && (date < range.min || date > range.max)) { setValidation(workDateRangeMessage); return }
     if (parts.some(value => !Number.isInteger(value) || value < 0) || parts[1]! > 59 || parts[2]! > 59 || duration < 1) {
       setValidation('Podaj dodatni czas w pełnych sekundach. Minuty i sekundy muszą mieścić się w zakresie 0–59.'); return
     }
     if (duration > MAX_MANUAL_DURATION_SECONDS) { setValidation(maxDurationMessage); return }
     setValidation('')
-    save.mutate({ teamId: team.id, projectId: selected, workDate: date, durationSeconds: duration, description: description.trim() || null }, { onSuccess: onSaved })
+    save.mutate({ teamId: team.id, projectId: selected, workDate: undated ? null : date, durationSeconds: duration, description: description.trim() || null }, { onSuccess: onSaved })
   }
   return <Modal title="Dodaj wpis ręczny" busy={save.isPending} onClose={onClose}>
     <p className="dialog-description">Zespół: <strong>{team.name}</strong>. Dodaj czas pracy bez uruchamiania timera.</p>
     <form onSubmit={submit} onInput={() => setValidation('')}>
       <fieldset disabled={save.isPending}>
         <div className="field-group"><label htmlFor="manual-project">Projekt</label><select className="text-input" id="manual-project" value={selected} required onChange={event => setSelected(event.target.value)}><option value="" disabled>Wybierz projekt</option>{projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></div>
-        <div className="field-group"><label htmlFor="manual-date">Data pracy</label><input className="text-input" id="manual-date" type="date" required min={range.min} max={range.max} value={date} onChange={event => setDate(event.target.value)} /></div>
+        <label><input type="checkbox" checked={undated} onChange={event => setUndated(event.target.checked)} /> Bez daty</label>
+        <p className="field-hint">Wpis bez daty nie jest wliczany do podsumowań dnia ani tygodnia. Datę możesz uzupełnić później.</p>
+        <div className="field-group"><label htmlFor="manual-date">Data pracy</label><input className="text-input" id="manual-date" type="date" required={!undated} disabled={undated} min={range.min} max={range.max} value={undated ? '' : date} onChange={event => setDate(event.target.value)} /></div>
         <div className="field-group"><p className="duration-label" id="duration-label">Czas trwania</p><div className="duration-fields" role="group" aria-labelledby="duration-label">
           <div><label htmlFor="manual-hours">Godziny</label><input className="text-input" id="manual-hours" type="number" min={0} max={24} step={1} value={hours} onChange={event => setHours(event.target.value)} /></div>
           <div><label htmlFor="manual-minutes">Minuty</label><input className="text-input" id="manual-minutes" type="number" min={0} max={59} step={1} value={minutes} onChange={event => setMinutes(event.target.value)} /></div>

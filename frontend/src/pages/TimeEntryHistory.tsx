@@ -16,7 +16,7 @@ export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false }:
   const [validation, setValidation] = useState('')
   const [action, setAction] = useState<{ type: 'edit' | 'delete'; entry: TimeEntryHistoryItem } | null>(null)
   const history = useTimeEntryHistory(userId, teamId, filters, page)
-  const hasFilters = !!(filters.projectId || filters.from || filters.to)
+  const hasFilters = !!(filters.projectId || filters.from || filters.to || filters.undated)
 
   function apply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -45,6 +45,7 @@ export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false }:
     </header>
 
     <form className="history-filters" aria-label="Filtry historii czasu" onSubmit={apply} onInput={() => setValidation('')}>
+      <label><input type="checkbox" checked={!!draft.undated} onChange={event => setDraft({ ...draft, undated: event.target.checked, from: '', to: '' })} /> Tylko bez daty</label>
       <div className="field-group"><label htmlFor="history-project">Projekt w historii</label>
         <select className="text-input" id="history-project" value={draft.projectId} disabled={projects.isPending || projects.isError}
           onChange={event => setDraft({ ...draft, projectId: event.target.value })}>
@@ -52,9 +53,9 @@ export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false }:
           {projects.data?.map(project => <option key={project.id} value={project.id}>{project.name}{project.archivedAt ? ' (archiwalny)' : ''}</option>)}
         </select>
       </div>
-      <div className="field-group"><label htmlFor="history-from">Data od</label><input className="text-input" id="history-from" type="date" value={draft.from}
+      <div className="field-group"><label htmlFor="history-from">Data od</label><input className="text-input" id="history-from" type="date" disabled={draft.undated} value={draft.from}
         onChange={event => setDraft({ ...draft, from: event.target.value })} /></div>
-      <div className="field-group"><label htmlFor="history-to">Data do</label><input className="text-input" id="history-to" type="date" value={draft.to}
+      <div className="field-group"><label htmlFor="history-to">Data do</label><input className="text-input" id="history-to" type="date" disabled={draft.undated} value={draft.to}
         onChange={event => setDraft({ ...draft, to: event.target.value })} /></div>
       <div className="history-filter-actions"><button type="submit" className="button-primary">Filtruj</button>
         <button type="button" className="button-secondary" onClick={clear}>Wyczyść filtry</button></div>
@@ -75,10 +76,10 @@ export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false }:
           {page > 0 && <button className="button-secondary" onClick={() => setPage(0)}>Wróć na pierwszą stronę</button>}
         </div> : <div className="team-table-wrap history-table-wrap" tabIndex={0} role="region" aria-label="Wpisy historii czasu" aria-busy={history.isFetching}>
           <table className="team-table history-table">
-            <caption className="sr-only">Twoje zakończone wpisy czasu, od najnowszej daty pracy</caption>
+            <caption className="sr-only">Twoje zakończone wpisy czasu. Wpisy bez daty na początku, następnie od najnowszej daty pracy.</caption>
             <thead><tr><th scope="col">Data pracy</th><th scope="col">Projekt i opis pracy</th><th scope="col">Rodzaj</th><th scope="col">Czas</th>{!readOnly && <th scope="col">Akcje</th>}</tr></thead>
             <tbody>{history.data.content.map(entry => <tr key={entry.id}>
-              <td><time dateTime={entry.workDate}>{dateLabel(entry.workDate)}</time></td>
+              <td>{entry.workDate ? <time dateTime={entry.workDate}>{dateLabel(entry.workDate)}</time> : 'Bez daty'}</td>
               <td><strong className="history-project-name">{entry.projectName}</strong><p className="history-description">{entry.description || 'Bez opisu'}</p></td>
               <td><span className="history-entry-type">{entry.entryType === 'TIMER' ? 'Timer' : 'Wpis ręczny'}</span></td>
               <td className="history-duration">{formatDuration(entry.durationSeconds)}</td>

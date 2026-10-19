@@ -50,11 +50,17 @@ public class TimeEntryService {
     @Transactional(readOnly = true)
     public TimeEntryHistoryResponse history(UUID userId, UUID teamId, UUID projectId,
                                             LocalDate from, LocalDate to, int page, int size) {
+        return history(userId, teamId, projectId, from, to, page, size, false);
+    }
+
+    @Transactional(readOnly = true)
+    public TimeEntryHistoryResponse history(UUID userId, UUID teamId, UUID projectId,
+                                            LocalDate from, LocalDate to, int page, int size, boolean undated) {
         if (!users.existsById(userId)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
         if (page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE
-                || (from != null && to != null && from.isAfter(to))) {
+                || (from != null && to != null && from.isAfter(to)) || (undated && (from != null || to != null))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date range or pagination");
         }
         members.findByTeamIdAndUserId(teamId, userId).filter(member -> member.getLeftAt() == null)
@@ -70,6 +76,7 @@ public class TimeEntryService {
             predicates.add(cb.or(cb.equal(root.get("entryType"), EntryType.MANUAL),
                     cb.and(cb.equal(root.get("entryType"), EntryType.TIMER), cb.isNotNull(root.get("endedAt")))));
             if (projectId != null) predicates.add(cb.equal(root.get("project").get("id"), projectId));
+            if (undated) predicates.add(cb.isNull(root.get("workDate")));
             if (from != null) predicates.add(cb.greaterThanOrEqualTo(root.get("workDate"), from));
             if (to != null) predicates.add(cb.lessThanOrEqualTo(root.get("workDate"), to));
             return cb.and(predicates.toArray(Predicate[]::new));
@@ -196,7 +203,10 @@ public class TimeEntryService {
         if (!entry.getDurationSeconds().equals(durationSeconds)) {
             requireManualDuration(durationSeconds);
         }
-        if (!entry.getWorkDate().equals(request.workDate())) {
+        if (entry.getEntryType() == EntryType.TIMER && request.workDate() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Timer entries require a work date");
+        }
+        if (!java.util.Objects.equals(entry.getWorkDate(), request.workDate())) {
             requireWorkDateInWindow(request.workDate(), entry.getTeam().getTimezone());
         }
         entry.setProject(project);
@@ -219,6 +229,7 @@ public class TimeEntryService {
     }
 
     private void requireWorkDateInWindow(LocalDate workDate, String timezone) {
+        if (workDate == null) return;
         var today = clock.instant().atZone(ZoneId.of(timezone)).toLocalDate();
         if (workDate.isAfter(today) || workDate.isBefore(today.minusYears(WORK_DATE_YEARS_BACK))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,

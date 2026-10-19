@@ -98,6 +98,9 @@ public class ReportService {
     private ReportResponse.Context context(Team team, ReportFilter input, boolean defaultWeek) {
         var from = input.from();
         var to = input.to();
+        if (input.undated() && (from != null || to != null)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Undated reports cannot have a date range");
+        }
         if ((from == null) != (to == null) || (from != null && (from.isAfter(to)
                 || from.getYear() < 1 || to.getYear() > 9999))
                 || input.userIds().size() > 100 || input.projectIds().size() > 100) {
@@ -109,13 +112,13 @@ public class ReportService {
         if (!reports.containsMembers(team.getId(), input.userIds()) || !reports.containsProjects(team.getId(), input.projectIds())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
-        if (from == null && defaultWeek) {
+        if (from == null && defaultWeek && !input.undated()) {
             from = clock.instant().atZone(ZoneId.of(team.getTimezone())).toLocalDate()
                     .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
             to = from.plusDays(6);
         }
         var filter = new ReportFilter(from, to, input.userIds().stream().distinct().sorted().toList(),
-                input.projectIds().stream().distinct().sorted().toList(), input.entryType());
+                input.projectIds().stream().distinct().sorted().toList(), input.entryType(), input.undated());
         return new ReportResponse.Context(team.getId(), team.getName(), team.getTimezone(), filter);
     }
 

@@ -5,10 +5,35 @@ import { PersonalDashboard } from '../../src/pages/PersonalDashboard'
 import { OwnerDashboard } from '../../src/pages/OwnerDashboard'
 import { renderApp } from '../support/render'
 import { mockApi, json, team } from '../support/api'
-import { reportBucket, reportEntry, reportHandlers, reportMember, reportPage, reportProject } from '../support/reports'
+import { reportBucket, reportContext, reportEntry, reportHandlers, reportMember, reportPage, reportProject } from '../support/reports'
 
 const base = 'GET /api/teams/team/reports'
 const ownerView = () => renderApp(<OwnerDashboard userId="actor" team={team} />)
+
+it('requests undated totals, breakdowns and entries without a date range', async () => {
+  const fetcher = mockApi({ ...reportHandlers(),
+    [`${base}/summary`]: url => json({ context: { ...reportContext, filter: { ...reportContext.filter,
+      from: url.searchParams.get('from'), to: url.searchParams.get('to'), undated: url.searchParams.get('undated') === 'true' } },
+      totals: { durationSeconds: 900, entryCount: 1 } }),
+    [`${base}/entries`]: url => json(reportPage([{ ...reportEntry, workDate: url.searchParams.has('undated') ? null : reportEntry.workDate }])),
+  })
+  ownerView()
+  await screen.findByRole('region', { name: 'Łączny czas zespołu' })
+  await userEvent.click(screen.getByLabelText('Bez daty', { exact: true }))
+  expect(screen.getByLabelText('Data od')).toBeDisabled()
+  await userEvent.click(screen.getByRole('button', { name: 'Filtruj raport' }))
+  await waitFor(() => {
+    const urls = fetcher.mock.calls.map(([path]) => new URL(String(path), window.location.origin)).filter(url => url.searchParams.get('undated') === 'true')
+    expect(urls).toHaveLength(4)
+    for (const url of urls) {
+      expect(url.searchParams.has('from')).toBe(false)
+      expect(url.searchParams.has('to')).toBe(false)
+    }
+  })
+  expect(await screen.findByText(/Wpisy bez daty · Nie są wliczane/)).toBeVisible()
+  expect(await screen.findByRole('cell', { name: 'Bez daty' })).toBeVisible()
+  expect(screen.queryByText(/Invalid Date/)).not.toBeInTheDocument()
+})
 
 it('opens the owner report from the personal dashboard and shows read-only saved work', async () => {
   mockApi(reportHandlers())

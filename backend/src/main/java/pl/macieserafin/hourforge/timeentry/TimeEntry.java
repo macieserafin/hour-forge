@@ -44,7 +44,7 @@ public class TimeEntry {
     @Column(name = "entry_type", nullable = false, length = 20)
     private EntryType entryType;
 
-    @Column(name = "work_date", nullable = false)
+    @Column(name = "work_date")
     private LocalDate workDate;
 
     @Column(name = "started_at")

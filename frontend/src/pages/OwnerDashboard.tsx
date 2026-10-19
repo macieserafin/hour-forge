@@ -4,7 +4,7 @@ import { ApiError, type ReportBucket, type ReportFilters, type ReportPage, type 
 import { MAX_REPORT_DAYS, reportRangeDays, reportWeek, useReportBreakdown, useReportEntries, useReportMembers, useReportProjects, useReportSummary } from '../lib/reports'
 import { formatDuration } from '../lib/time'
 
-const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
+const dateLabel = (date: string | null) => date === null ? 'Bez daty' : new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
 
 interface QueryState<T> {
   data: T | undefined
@@ -73,11 +73,11 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
   function resetPages() { setMemberPage(0); setProjectPage(0); setEntryPage(0) }
   function apply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!draft.from || !draft.to || draft.from > draft.to) {
+    if (!draft.undated && (!draft.from || !draft.to || draft.from > draft.to)) {
       setValidation('Podaj obie daty. Data „od” nie może być późniejsza niż data „do”.')
       return
     }
-    if (reportRangeDays(draft.from, draft.to) > MAX_REPORT_DAYS) {
+    if (!draft.undated && reportRangeDays(draft.from, draft.to) > MAX_REPORT_DAYS) {
       setValidation(`Raport może obejmować najwyżej ${MAX_REPORT_DAYS} dni.`)
       return
     }
@@ -98,8 +98,9 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
       </button>
     </header>
     <form className="report-filters" aria-label="Filtry raportu zespołu" onSubmit={apply} onInput={() => setValidation('')}>
-      <div className="field-group"><label htmlFor="report-from">Data od</label><input className="text-input" id="report-from" type="date" required min="0001-01-01" max="9999-12-31" value={draft.from} onChange={event => setDraft({ ...draft, from: event.target.value })} /></div>
-      <div className="field-group"><label htmlFor="report-to">Data do</label><input className="text-input" id="report-to" type="date" required min="0001-01-01" max="9999-12-31" value={draft.to} onChange={event => setDraft({ ...draft, to: event.target.value })} /></div>
+      <label><input type="checkbox" checked={!!draft.undated} onChange={event => setDraft({ ...draft, undated: event.target.checked, from: event.target.checked ? '' : reportWeek(team.timezone).from, to: event.target.checked ? '' : reportWeek(team.timezone).to })} /> Bez daty</label>
+      <div className="field-group"><label htmlFor="report-from">Data od</label><input className="text-input" id="report-from" type="date" required={!draft.undated} disabled={draft.undated} min="0001-01-01" max="9999-12-31" value={draft.from} onChange={event => setDraft({ ...draft, from: event.target.value })} /></div>
+      <div className="field-group"><label htmlFor="report-to">Data do</label><input className="text-input" id="report-to" type="date" required={!draft.undated} disabled={draft.undated} min="0001-01-01" max="9999-12-31" value={draft.to} onChange={event => setDraft({ ...draft, to: event.target.value })} /></div>
       <div className="field-group"><label htmlFor="report-person">Osoba</label>
         <select className="text-input" id="report-person" value={draft.userId} disabled={memberOptions.isPending || memberOptions.isError || !!accessError} onChange={event => setDraft({ ...draft, userId: event.target.value })}>
           <option value="">Wszystkie osoby</option>{members.map(member => <option key={member.userId} value={member.userId}>{member.displayName}{member.leftAt ? ' (były członek)' : ''}</option>)}
@@ -126,7 +127,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
           <section className="overview-panel dashboard-stat" aria-label="Łączny czas zespołu"><h3>Łączny czas</h3><p className="dashboard-total">{formatDuration(data.totals.durationSeconds)}</p></section>
           <section className="overview-panel dashboard-stat" aria-label="Liczba wpisów zespołu"><h3>Zapisane wpisy</h3><p className="dashboard-total">{data.totals.entryCount.toLocaleString('pl-PL')}</p></section>
         </div>
-        <p className="field-hint dashboard-summary-note">{dateLabel(data.context.filter!.from)} – {dateLabel(data.context.filter!.to)} · {data.context.timezone}. Według daty pracy, z uwzględnieniem danych historycznych. Czas w toku nie jest wliczany.</p>
+        <p className="field-hint dashboard-summary-note">{data.context.filter!.undated ? 'Wpisy bez daty · Nie są wliczane do podsumowań dnia ani tygodnia.' : `${dateLabel(data.context.filter!.from)} – ${dateLabel(data.context.filter!.to)} · ${data.context.timezone}. Według daty pracy, z uwzględnieniem danych historycznych. Czas w toku nie jest wliczany.`}</p>
       </>}</ReportState>
       <div className="report-breakdowns">
         <section className="report-section" aria-label="Czas według osób"><h3>Czas według osób</h3><ReportState query={people}>{data => <BreakdownTable data={data.data} group="MEMBER" busy={people.isFetching} onPage={setMemberPage} />}</ReportState></section>
@@ -146,7 +147,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
               <table className="team-table report-entry-table"><caption className="sr-only">Zapisane wpisy członków zespołu</caption>
                 <thead><tr><th scope="col">Data pracy</th><th scope="col">Osoba</th><th scope="col">Projekt i opis pracy</th><th scope="col">Rodzaj</th><th scope="col">Czas</th></tr></thead>
                 <tbody>{data.data.content.map(entry => <tr key={entry.id}>
-                  <td data-label="Data pracy"><time dateTime={entry.workDate}>{dateLabel(entry.workDate)}</time></td>
+                  <td data-label="Data pracy">{entry.workDate ? <time dateTime={entry.workDate}>{dateLabel(entry.workDate)}</time> : 'Bez daty'}</td>
                   <td data-label="Osoba">{entry.displayName}</td>
                   <td data-label="Projekt i opis pracy"><strong className="history-project-name">{entry.projectName}</strong>{entry.projectArchivedAt && <span className="report-meta">Projekt archiwalny</span>}<p className="history-description">{entry.description || 'Bez opisu'}</p></td>
                   <td data-label="Rodzaj"><span className="history-entry-type">{entry.entryType === 'TIMER' ? 'Timer' : 'Wpis ręczny'}</span></td>

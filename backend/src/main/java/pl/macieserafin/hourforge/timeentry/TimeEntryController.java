@@ -35,8 +35,9 @@ public class TimeEntryController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return entries.history(principal.getUserId(), teamId, projectId, from, to, page, size);
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "false") boolean undated) {
+        return entries.history(principal.getUserId(), teamId, projectId, from, to, page, size, undated);
     }
 
     @PatchMapping("/{id}")

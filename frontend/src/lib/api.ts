@@ -58,7 +58,7 @@ export interface TimeEntry {
   teamId: string
   projectId: string
   entryType: 'TIMER' | 'MANUAL'
-  workDate: string
+  workDate: string | null
   startedAt: string | null
   endedAt: string | null
   durationSeconds: number | null
@@ -103,7 +103,7 @@ export interface TimeEntryHistoryItem {
   projectId: string
   projectName: string
   entryType: 'TIMER' | 'MANUAL'
-  workDate: string
+  workDate: string | null
   durationSeconds: number
   description: string | null
   startedAt: string | null
@@ -119,6 +119,7 @@ export interface TimeEntryHistory {
 }
 
 export interface TimeEntryHistoryFilters {
+  undated?: boolean
   projectId: string
   from: string
   to: string
@@ -127,6 +128,7 @@ export interface TimeEntryHistoryFilters {
 export async function getTimeEntryHistory(teamId: string, filters: TimeEntryHistoryFilters,
   page: number, signal?: AbortSignal): Promise<TimeEntryHistory> {
   const params = new URLSearchParams({ teamId, page: String(page), size: '20' })
+  if (filters.undated) params.set('undated', 'true')
   if (filters.projectId) params.set('projectId', filters.projectId)
   if (filters.from) params.set('from', filters.from)
   if (filters.to) params.set('to', filters.to)
@@ -144,7 +146,7 @@ export async function getTimeEntryHistory(teamId: string, filters: TimeEntryHist
 }
 
 export interface ManualTimeInput extends StartTimerInput {
-  workDate: string
+  workDate: string | null
   durationSeconds: number
 }
 
@@ -346,7 +348,7 @@ async function timeRequest(path: string, body?: unknown, signal?: AbortSignal): 
   })
   if (!response.ok) {
     const messages: Record<number, string> = {
-      400: 'Sprawdź projekt, datę i czas trwania wpisu. Wpis może mieć najwyżej 24 godziny, data pracy musi mieścić się w ostatnich 2 latach i nie może być z przyszłości, a opis może mieć najwyżej 2000 znaków.',
+      400: 'Sprawdź projekt, datę i czas trwania wpisu. Wpis może mieć najwyżej 24 godziny, podana data pracy musi mieścić się w ostatnich 2 latach i nie może być z przyszłości, a opis może mieć najwyżej 2000 znaków. Wpis ręczny może być bez daty.',
       401: 'Sesja wygasła. Zaloguj się ponownie.',
       403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
       404: 'Nie znaleziono wpisu, projektu lub zespołu albo nie masz już do niego dostępu.',
@@ -377,7 +379,7 @@ async function changeTimeEntry(id: string, method: 'PATCH' | 'DELETE', body?: Up
   })
   if (!response.ok) {
     const messages: Record<number, string> = {
-      400: 'Sprawdź projekt, datę i czas trwania. Wpis może mieć najwyżej 24 godziny, data pracy musi mieścić się w ostatnich 2 latach i nie może być z przyszłości, a opis może mieć najwyżej 2000 znaków.',
+      400: 'Sprawdź projekt, datę i czas trwania. Wpis może mieć najwyżej 24 godziny, podana data pracy musi mieścić się w ostatnich 2 latach i nie może być z przyszłości, a opis może mieć najwyżej 2000 znaków. Wpis z timera wymaga daty.',
       401: 'Sesja wygasła. Zaloguj się ponownie.',
       403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
       404: 'Wpis został usunięty lub nie masz już dostępu do wpisu, projektu lub zespołu.',
@@ -391,6 +393,7 @@ export const updateTimeEntry = ({ id, ...body }: UpdateTimeEntryInput & { id: st
 export const deleteTimeEntry = (id: string) => changeTimeEntry(id, 'DELETE')
 
 export interface ReportFilters {
+  undated?: boolean
   from: string
   to: string
   userId: string
@@ -402,7 +405,7 @@ export interface ReportContext {
   teamId: string
   teamName: string
   timezone: string
-  filter: { from: string; to: string; userIds: string[]; projectIds: string[]; entryType: 'TIMER' | 'MANUAL' | null } | null
+  filter: { from: string | null; to: string | null; undated?: boolean; userIds: string[]; projectIds: string[]; entryType: 'TIMER' | 'MANUAL' | null } | null
 }
 
 export interface ReportPage<T> {
@@ -497,7 +500,7 @@ export interface ReportEntry {
   projectName: string
   projectArchivedAt: string | null
   entryType: 'TIMER' | 'MANUAL'
-  workDate: string
+  workDate: string | null
   startedAt: string | null
   endedAt: string | null
   durationSeconds: number
@@ -512,6 +515,7 @@ export type ReportSort = 'WORK_DATE:DESC' | 'WORK_DATE:ASC' | 'DURATION:DESC' | 
 
 function reportParams(filters: ReportFilters, page?: number) {
   const params = new URLSearchParams()
+  if (filters.undated) params.set('undated', 'true')
   if (filters.from) params.set('from', filters.from)
   if (filters.to) params.set('to', filters.to)
   if (filters.userId) params.set('userIds', filters.userId)

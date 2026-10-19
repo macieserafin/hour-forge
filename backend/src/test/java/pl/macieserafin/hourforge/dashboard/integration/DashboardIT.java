@@ -19,6 +19,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class DashboardIT extends ApiIntegrationTestSupport {
+    @Test
+    void undatedManualWorkDoesNotEnterDailyOrWeeklyTotals() throws Exception {
+        entries.saveAndFlush(new TimeEntry(actor, team, project, EntryType.MANUAL, null, null, null, 3600, "Undated"));
+        mvc.perform(get("/api/dashboard/summary").with(user(principal)).param("teamId", team.getId().toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.todaySeconds").value(0))
+                .andExpect(jsonPath("$.weekSeconds").value(0));
+    }
+
     @Autowired MockMvc mvc;
     @Autowired TimeEntryRepository entries;
     @Autowired TeamMemberRepository members;

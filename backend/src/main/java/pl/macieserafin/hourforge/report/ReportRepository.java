@@ -29,6 +29,7 @@ public class ReportRepository {
             predicates.add(cb.isNotNull(root.get("durationSeconds")));
         }
         if (filter.from() != null) predicates.add(cb.greaterThanOrEqualTo(root.get("workDate"), filter.from()));
+        if (filter.undated()) predicates.add(cb.isNull(root.get("workDate")));
         if (filter.to() != null) predicates.add(cb.lessThanOrEqualTo(root.get("workDate"), filter.to()));
         if (!filter.userIds().isEmpty()) predicates.add(root.get("user").get("id").in(filter.userIds()));
         if (!filter.projectIds().isEmpty()) predicates.add(root.get("project").get("id").in(filter.projectIds()));

@@ -6,6 +6,24 @@ import { renderApp } from '../support/render'
 import { mockApi, json, history, timer, entry, team } from '../support/api'
 import { workDateRange } from '../../src/lib/time'
 
+it('saves an explicitly undated manual entry and displays its success without an invalid date', async () => {
+  let posted: Record<string, unknown> | undefined
+  mockApi({ 'POST /api/time-entries': (_url, options) => {
+    posted = JSON.parse(String(options.body))
+    return json({ ...timer, entryType: 'MANUAL', workDate: null, durationSeconds: 900 }, 201)
+  } })
+  renderApp(<App />, '/time?team=team')
+  await userEvent.click(await screen.findByRole('button', { name: 'Dodaj wpis ręczny' }))
+  const modal = within(screen.getByRole('dialog'))
+  await userEvent.selectOptions(modal.getByLabelText('Projekt'), 'project')
+  await userEvent.click(modal.getByLabelText('Bez daty', { exact: true }))
+  expect(modal.getByLabelText('Data pracy')).toBeDisabled()
+  await userEvent.type(modal.getByLabelText('Minuty'), '15')
+  await userEvent.click(modal.getByRole('button', { name: 'Zapisz wpis' }))
+  expect(await screen.findByText(/Wpis ręczny zapisany/)).toHaveTextContent('Bez daty')
+  expect(posted).toMatchObject({ workDate: null, durationSeconds: 900 })
+})
+
 it('rejects zero manual time without posting and permits cancelling the form', async () => {
   const fetcher = mockApi()
   renderApp(<App />, '/time?team=team')

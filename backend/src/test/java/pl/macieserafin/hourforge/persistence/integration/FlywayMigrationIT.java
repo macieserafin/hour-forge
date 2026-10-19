@@ -29,8 +29,24 @@ class FlywayMigrationIT {
                                 'Migration project', 'Preserved description')
                         """);
                 var upgraded = Flyway.configure().dataSource(database.getJdbcUrl(), database.getUsername(), database.getPassword()).load();
-                assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(4);
+                statement.execute("""
+                        INSERT INTO time_entries (id, user_id, team_id, project_id, entry_type, work_date, duration_seconds)
+                        VALUES ('00000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000001',
+                            '00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003',
+                            'MANUAL', '2026-10-19', 60)
+                        """);
+                assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(5);
                 upgraded.validate();
+                try (var result = statement.executeQuery("SELECT work_date, duration_seconds FROM time_entries")) {
+                    assertThat(result.next()).isTrue();
+                    assertThat(result.getDate(1).toLocalDate()).isEqualTo(java.time.LocalDate.of(2026, 10, 19));
+                    assertThat(result.getInt(2)).isEqualTo(60);
+                }
+                statement.execute("UPDATE time_entries SET work_date = NULL");
+                org.assertj.core.api.Assertions.assertThatThrownBy(() -> statement.execute("""
+                        UPDATE time_entries SET entry_type = 'TIMER', started_at = CURRENT_TIMESTAMP,
+                            ended_at = CURRENT_TIMESTAMP + interval '60 seconds'
+                        """)).isInstanceOf(java.sql.SQLException.class).hasMessageContaining("ck_time_entries_timer_date");
                 assertThat(upgraded.migrate().migrationsExecuted).isZero();
                 try (var result = statement.executeQuery("SELECT display_name FROM users WHERE email = 'migration@example.test'")) {
                     assertThat(result.next()).isTrue();

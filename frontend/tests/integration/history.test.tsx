@@ -5,6 +5,31 @@ import { TimeEntryHistory } from '../../src/pages/TimeEntryHistory'
 import { renderApp } from '../support/render'
 import { mockApi, json, entry, history } from '../support/api'
 
+it('filters undated entries and supports adding and removing the date during editing', async () => {
+  let saved = { ...entry, workDate: null as string | null }
+  const fetcher = mockApi({ 'GET /api/time-entries': () => json(history([saved])),
+    'PATCH /api/time-entries/entry': (_url, options) => { saved = { ...saved, ...JSON.parse(String(options.body)) }; return json(saved) } })
+  renderApp(<TimeEntryHistory userId="actor" teamId="team" timezone="Europe/Warsaw" />)
+  expect(await screen.findByRole('cell', { name: 'Bez daty' })).toBeVisible()
+  await userEvent.click(screen.getByLabelText('Tylko bez daty'))
+  await userEvent.click(screen.getByRole('button', { name: 'Filtruj' }))
+  await waitFor(() => expect(fetcher.mock.calls.some(([url]) => String(url).includes('undated=true'))).toBe(true))
+  expect(screen.getByLabelText('Data od')).toBeDisabled()
+  await userEvent.click(screen.getByRole('button', { name: 'Edytuj' }))
+  let modal = within(screen.getByRole('dialog'))
+  await userEvent.click(modal.getByLabelText('Bez daty', { exact: true }))
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  await userEvent.type(modal.getByLabelText('Data pracy'), today)
+  await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(saved.workDate).toBe(today)
+  await userEvent.click(screen.getByRole('button', { name: 'Edytuj' }))
+  modal = within(screen.getByRole('dialog'))
+  await userEvent.click(modal.getByLabelText('Bez daty', { exact: true }))
+  await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
+  await waitFor(() => expect(saved.workDate).toBeNull())
+})
+
 it('does not issue a request for an inverted date range', async () => {
   const fetcher = mockApi()
   renderApp(<TimeEntryHistory userId="actor" teamId="team" timezone="Europe/Warsaw" />)
