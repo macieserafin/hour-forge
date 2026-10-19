@@ -22,5 +22,22 @@ services:
       retries: 12
       start_period: 10s
 
+  postgres-init:
+    image: postgres:18-alpine
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: ${DB_NAME:-hourforge}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      DB_USERNAME: ${DB_USERNAME:-hourforge}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    volumes:
+      - ./docker/postgres/01-create-app-user.sh:/create-app-user.sh:ro
+    entrypoint: ["/bin/sh", "/create-app-user.sh"]
+
 volumes:
   postgres_data:
