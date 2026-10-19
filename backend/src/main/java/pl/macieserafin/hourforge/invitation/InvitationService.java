@@ -62,6 +62,9 @@ public class InvitationService {
         if (membership.getRole() != TeamRole.OWNER) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
+        if (team.isArchived()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived teams cannot invite new members");
+        }
         if (!request.expiresAt().isAfter(clock.instant())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Expiration must be in the future");
         }
@@ -97,6 +100,9 @@ public class InvitationService {
         if (existing.isPresent() && existing.get().getLeftAt() == null) {
             return response(team, existing.get().getRole());
         }
+        if (team.isArchived()) {
+            throw new ResponseStatusException(HttpStatus.GONE, "Invitation is no longer valid");
+        }
         if ((invite.getMaxUses() != null && invite.getUsedCount() >= invite.getMaxUses())
                 || invite.getUsedCount() == Integer.MAX_VALUE) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Invitation use limit reached");
@@ -112,8 +118,32 @@ public class InvitationService {
         return response(team, TeamRole.MEMBER);
     }
 
+    @Transactional(readOnly = true)
+    public InvitePreviewResponse preview(UUID currentUserId, String token) {
+        if (!users.existsById(currentUserId)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+        if (token == null || !token.matches("[A-Za-z0-9_-]{43}")) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Invitation not found");
+        }
+        var invite = invites.findByTokenHash(hash(token))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invitation not found"));
+        var team = invite.getTeam();
+        boolean member = members.findByTeamIdAndUserId(team.getId(), currentUserId)
+                .filter(membership -> membership.getLeftAt() == null).isPresent();
+        InvitePreviewStatus status;
+        if (member) status = InvitePreviewStatus.ALREADY_MEMBER;
+        else if (invite.getRevokedAt() != null) status = InvitePreviewStatus.REVOKED;
+        else if (!invite.getExpiresAt().isAfter(clock.instant())) status = InvitePreviewStatus.EXPIRED;
+        else if (team.isArchived()) status = InvitePreviewStatus.TEAM_ARCHIVED;
+        else if (invite.getMaxUses() != null && invite.getUsedCount() >= invite.getMaxUses()) status = InvitePreviewStatus.EXHAUSTED;
+        else status = InvitePreviewStatus.ACTIVE;
+        // Only what the invitee needs to decide: no members, projects or owner identity.
+        return new InvitePreviewResponse(team.getId(), team.getName(), status, invite.getExpiresAt());
+    }
+
     private TeamResponse response(Team team, TeamRole role) {
-        return new TeamResponse(team.getId(), team.getName(), team.getTimezone(), team.getCreatedAt(), role);
+        return TeamResponse.of(team, role);
     }
 
     private String hash(String token) {

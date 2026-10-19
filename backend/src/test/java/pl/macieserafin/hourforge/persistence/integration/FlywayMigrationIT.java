@@ -29,7 +29,7 @@ class FlywayMigrationIT {
                                 'Migration project', 'Preserved description')
                         """);
                 var upgraded = Flyway.configure().dataSource(database.getJdbcUrl(), database.getUsername(), database.getPassword()).load();
-                assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(3);
+                assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(4);
                 upgraded.validate();
                 assertThat(upgraded.migrate().migrationsExecuted).isZero();
                 try (var result = statement.executeQuery("SELECT display_name FROM users WHERE email = 'migration@example.test'")) {
@@ -49,6 +49,10 @@ class FlywayMigrationIT {
                         """)) {
                     assertThat(result.next()).isTrue();
                     assertThat(result.getInt(1)).isEqualTo(2);
+                }
+                try (var result = statement.executeQuery("SELECT archived_at FROM teams WHERE name = 'Migration team'")) {
+                    assertThat(result.next()).isTrue();
+                    assertThat(result.getObject(1)).isNull();
                 }
                 try (var result = statement.executeQuery("SELECT description FROM projects WHERE name = 'Migration project'")) {
                     assertThat(result.next()).isTrue();

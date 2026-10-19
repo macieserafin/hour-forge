@@ -50,6 +50,15 @@ it('explains a rejected long description of a manual entry', async () => {
   expect(await modal.findByRole('alert')).toHaveTextContent('opis może mieć najwyżej 2000 znaków')
 })
 
+it('keeps the history of an archived team read-only and offers no new time entry', async () => {
+  mockApi({ 'GET /api/teams': () => json([{ ...team, archivedAt: '2026-10-19T12:00:00Z' }]) })
+  renderApp(<App />, '/time?team=team')
+  expect(await screen.findByText(/jest zarchiwizowany/)).toBeVisible()
+  expect(await screen.findByText(entry.description!)).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Uruchom timer' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Edytuj' })).not.toBeInTheDocument()
+})
+
 it('a former member can finish a paused timer but cannot resume it or see a cached project name', async () => {
   let active = true
   mockApi({ 'GET /api/teams': () => json([]),

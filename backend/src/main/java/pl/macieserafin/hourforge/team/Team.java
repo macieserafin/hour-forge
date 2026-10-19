@@ -28,6 +28,9 @@ public class Team {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "archived_at")
+    private Instant archivedAt;
+
     protected Team() {
     }
 
@@ -50,6 +53,18 @@ public class Team {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Instant getArchivedAt() {
+        return archivedAt;
+    }
+
+    public boolean isArchived() {
+        return archivedAt != null;
+    }
+
+    public void setArchivedAt(Instant archivedAt) {
+        this.archivedAt = archivedAt;
     }
 
     public void setName(String name) {

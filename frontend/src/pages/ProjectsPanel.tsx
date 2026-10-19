@@ -47,7 +47,7 @@ function ProjectDetailsModal({ userId, team, projectId, onClose, onEdit }: {
         <p className="project-full-description">{project.data.description || 'Brak opisu projektu.'}</p>
         <dl className="invite-summary project-summary"><dt>Zespół</dt><dd>{team.name}</dd><dt>Utworzono</dt><dd>{dateLabel(project.data.createdAt)}</dd><dt>Status</dt><dd>{project.data.archivedAt ? 'Archiwalny' : 'Aktywny'}</dd>{project.data.archivedAt && <><dt>Archiwizacja</dt><dd>{dateLabel(project.data.archivedAt)}</dd></>}</dl>
       </>}
-    <footer className="dialog-actions"><button className="button-secondary" onClick={onClose}>Zamknij</button>{team.role === 'OWNER' && project.data && !project.isError && !project.data.archivedAt && <button className="button-primary" onClick={() => onEdit(project.data)}><Pencil size={16} />Edytuj projekt</button>}</footer>
+    <footer className="dialog-actions"><button className="button-secondary" onClick={onClose}>Zamknij</button>{team.role === 'OWNER' && !team.archivedAt && project.data && !project.isError && !project.data.archivedAt && <button className="button-primary" onClick={() => onEdit(project.data)}><Pencil size={16} />Edytuj projekt</button>}</footer>
   </Modal>
 }
 
@@ -69,12 +69,14 @@ function TeamProjects({ userId, team }: { userId: string; team: Team }) {
   const [modal, setModal] = useState<ProjectModal | null>(null)
   const [notice, setNotice] = useState('')
   const projects = useProjects(userId, team.id, includeArchived)
-  const owner = team.role === 'OWNER'
+  // Projects of an archived team are read-only, also for its owner.
+  const owner = team.role === 'OWNER' && !team.archivedAt
   const close = () => setModal(null)
   const saved = (message: string) => { close(); setNotice(message) }
 
   return <section aria-label="Projekty wybranego zespołu">
     <header className="teams-toolbar projects-toolbar"><div><h2>{team.name}</h2><p>{owner ? 'Zarządzaj projektami swojego zespołu.' : 'Przeglądaj projekty i ich szczegóły. Projektami zarządza właściciel zespołu.'}</p></div>{owner && <button className="button-primary" disabled={projects.isError} onClick={() => { setNotice(''); setModal({ type: 'create' }) }}><Plus size={16} />Utwórz projekt</button>}</header>
+    {team.archivedAt && <p className="project-notice" role="status">Zespół jest zarchiwizowany. Projekty można przeglądać, ale nie można ich zmieniać.</p>}
     <div className="projects-filter"><label><input type="checkbox" checked={includeArchived} onChange={event => setIncludeArchived(event.target.checked)} />Pokaż również archiwalne</label>{projects.isFetching && !projects.isPending && <span role="status"><LoaderCircle size={14} className="spin" />Odświeżanie…</span>}</div>
     {notice && <p className="project-notice" role="status">{notice}</p>}
     {projects.isPending ? <p role="status" className="teams-loading"><LoaderCircle size={18} className="spin" />Ładowanie projektów…</p>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, acceptInvitation, createInvitation, createTeam, getTeams, type Team } from './api'
+import { ApiError, acceptInvitation, archiveTeam, createInvitation, createTeam, deleteTeam, getInvitationPreview, getTeamSummary, getTeams,
+  transferOwnership, updateTeam, type Team } from './api'
 import { sessionOptions } from './auth'
 
 export const teamsKey = (userId: string) => ['teams', userId] as const
@@ -36,6 +37,79 @@ export function useCreateTeam(userId: string) {
       client.setQueryData<Team[]>(teamsKey(userId), previous => [team, ...(previous ?? []).filter(item => item.id !== team.id)])
       await client.invalidateQueries({ queryKey: teamsKey(userId) })
     } })
+}
+
+function useReplaceTeam(userId: string) {
+  const client = useQueryClient()
+  return async (team: Team) => {
+    client.setQueryData<Team[]>(teamsKey(userId), previous => previous?.map(item => item.id === team.id ? team : item))
+    await Promise.all([
+      client.invalidateQueries({ queryKey: teamsKey(userId) }),
+      client.invalidateQueries({ queryKey: ['projects', userId, team.id] }),
+      client.invalidateQueries({ queryKey: ['dashboard', userId, team.id] }),
+      client.invalidateQueries({ queryKey: ['time-entries', userId] }),
+    ])
+  }
+}
+
+export function useUpdateTeam(userId: string) {
+  const onError = useAuthError()
+  const replace = useReplaceTeam(userId)
+  return useMutation({ mutationFn: updateTeam, onError, onSuccess: replace })
+}
+
+export function useArchiveTeam(userId: string) {
+  const onError = useAuthError()
+  const replace = useReplaceTeam(userId)
+  return useMutation({ mutationFn: archiveTeam, onError, onSuccess: replace })
+}
+
+export function useDeleteTeam(userId: string) {
+  const client = useQueryClient()
+  const onError = useAuthError()
+  return useMutation({ mutationFn: deleteTeam, onError,
+    onSuccess: async (_result, teamId) => {
+      client.setQueryData<Team[]>(teamsKey(userId), previous => previous?.filter(team => team.id !== teamId))
+      for (const key of [['projects', userId, teamId], ['team-members', userId, teamId], ['dashboard', userId, teamId], ['team-summary', userId, teamId]]) {
+        client.removeQueries({ queryKey: key })
+      }
+      await Promise.all([
+        client.invalidateQueries({ queryKey: teamsKey(userId) }),
+        client.invalidateQueries({ queryKey: ['time-entries', userId] }),
+        client.invalidateQueries({ queryKey: ['timer', userId] }),
+      ])
+    } })
+}
+
+export function useTransferOwnership(userId: string, teamId: string) {
+  const client = useQueryClient()
+  const onError = useAuthError()
+  return useMutation({ mutationFn: (targetUserId: string) => transferOwnership(teamId, targetUserId), onError, retry: false,
+    // A lost response may follow a committed change: reconcile instead of repeating the write.
+    onSettled: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: teamsKey(userId) }),
+        client.invalidateQueries({ queryKey: ['team-members', userId, teamId] }),
+        client.invalidateQueries({ queryKey: ['dashboard', userId, teamId] }),
+        client.invalidateQueries({ queryKey: ['projects', userId, teamId] }),
+      ])
+    } })
+}
+
+export function useTeamSummary(userId: string, teamId: string, enabled: boolean) {
+  const handleError = useAuthError()
+  const query = useQuery({ queryKey: ['team-summary', userId, teamId], queryFn: ({ signal }) => getTeamSummary(teamId, signal),
+    enabled, staleTime: 0, retry: false })
+  useEffect(() => { if (query.error) handleError(query.error) }, [query.error, handleError])
+  return query
+}
+
+export function useInvitationPreview(userId: string, token: string) {
+  const handleError = useAuthError()
+  const query = useQuery({ queryKey: ['invitation-preview', userId, token], queryFn: ({ signal }) => getInvitationPreview(token, signal),
+    retry: false, staleTime: 0 })
+  useEffect(() => { if (query.error) handleError(query.error) }, [query.error, handleError])
+  return query
 }
 
 export function useCreateInvitation() {

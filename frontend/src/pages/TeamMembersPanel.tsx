@@ -1,8 +1,25 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, LoaderCircle, LogOut, RefreshCw, UserMinus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Crown, LoaderCircle, LogOut, RefreshCw, UserMinus } from 'lucide-react'
 import { Modal } from '../components/Modal'
 import type { Team, TeamMember } from '../lib/api'
 import { useEndMembership, useTeamMembers } from '../lib/members'
+import { useTransferOwnership } from '../lib/teams'
+
+function TransferOwnershipModal({ userId, team, member, onClose, onComplete }: {
+  userId: string; team: Team; member: TeamMember; onClose: () => void; onComplete: () => void
+}) {
+  const transfer = useTransferOwnership(userId, team.id)
+  return <Modal title="Przekaż własność zespołu" busy={transfer.isPending} onClose={onClose}>
+    <p className="dialog-description">Osoba <strong>{member.displayName}</strong> zostanie właścicielem zespołu <strong>{team.name}</strong>.</p>
+    <p className="field-hint">Zostaniesz zwykłym członkiem: stracisz możliwość zarządzania członkami, projektami, zaproszeniami i raportami zespołu. Później możesz opuścić zespół.</p>
+    {transfer.isError && <p role="alert" className="form-error">{transfer.error.message}</p>}
+    <footer className="dialog-actions"><button className="button-secondary" disabled={transfer.isPending} onClick={onClose}>Anuluj</button>
+      <button className="button-primary button-danger" disabled={transfer.isPending} onClick={() => transfer.mutate(member.userId, { onSuccess: onComplete })}>
+        {transfer.isPending && <LoaderCircle size={16} className="spin" />}{transfer.isPending ? 'Zapisywanie…' : 'Przekaż własność'}
+      </button>
+    </footer>
+  </Modal>
+}
 
 function EndMembershipModal({ userId, team, member, onClose, onComplete }: {
   userId: string; team: Team; member: TeamMember | null; onClose: () => void; onComplete: () => void
@@ -34,6 +51,7 @@ export function TeamMembersPanel({ userId, team, onLeft }: { userId: string; tea
   const [page, setPage] = useState(0)
   const [notice, setNotice] = useState('')
   const [action, setAction] = useState<{ member: TeamMember | null } | null>(null)
+  const [transferTarget, setTransferTarget] = useState<TeamMember | null>(null)
   const members = useTeamMembers(userId, team.id, includeFormer, page)
   const dateLabel = (date: string) => new Date(date).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short', timeZone: team.timezone })
 
@@ -59,7 +77,8 @@ export function TeamMembersPanel({ userId, team, onLeft }: { userId: string; tea
                 <td data-label="Dołączono"><time dateTime={member.joinedAt}>{dateLabel(member.joinedAt)}</time></td>
                 <td data-label="Status">{member.leftAt ? <>Były członek<span className="report-meta">Odejście: <time dateTime={member.leftAt}>{dateLabel(member.leftAt)}</time></span></> : 'Aktywny'}</td>
                 {owner && <td data-label="Akcje">{member.role === 'MEMBER' && member.userId !== userId && !member.leftAt
-                  ? <button className="text-link" aria-label={`Usuń z zespołu: ${member.displayName}`} onClick={() => { setNotice(''); setAction({ member }) }}><UserMinus size={15} />Usuń z zespołu</button>
+                  ? <div className="history-actions"><button className="text-link" aria-label={`Usuń z zespołu: ${member.displayName}`} onClick={() => { setNotice(''); setAction({ member }) }}><UserMinus size={15} />Usuń z zespołu</button>
+                    <button className="text-link" aria-label={`Przekaż własność: ${member.displayName}`} onClick={() => { setNotice(''); setTransferTarget(member) }}><Crown size={15} />Przekaż własność</button></div>
                   : <span className="field-hint">{member.role === 'OWNER' ? 'Właściciel zespołu' : 'Dostęp zakończony'}</span>}</td>}
               </tr>)}</tbody>
             </table>
@@ -72,6 +91,7 @@ export function TeamMembersPanel({ userId, team, onLeft }: { userId: string; tea
         </nav>}
         {page > 0 && members.data.content.length === 0 && <button className="button-secondary" onClick={() => setPage(0)}>Wróć na pierwszą stronę</button>}
       </>}
+    {transferTarget && <TransferOwnershipModal userId={userId} team={team} member={transferTarget} onClose={() => setTransferTarget(null)} onComplete={() => setTransferTarget(null)} />}
     {action && <EndMembershipModal userId={userId} team={team} member={action.member} onClose={() => setAction(null)} onComplete={() => {
       setAction(null)
       if (action.member === null) onLeft()

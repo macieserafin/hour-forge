@@ -1,6 +1,7 @@
 package pl.macieserafin.hourforge.team;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -11,6 +12,12 @@ import java.util.List;
 
 public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
     Optional<TeamMember> findByTeamIdAndUserId(UUID teamId, UUID userId);
+
+    long countByTeamIdAndLeftAtIsNull(UUID teamId);
+
+    @Modifying
+    @Query("delete from TeamMember member where member.team.id = :teamId")
+    int deleteAllByTeamId(UUID teamId);
 
     @Query("""
             select new pl.macieserafin.hourforge.team.TeamMemberResponse(
@@ -23,7 +30,7 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
 
     @Query("""
             select new pl.macieserafin.hourforge.team.TeamResponse(
-                team.id, team.name, team.timezone, team.createdAt, member.role)
+                team.id, team.name, team.timezone, team.createdAt, member.role, team.archivedAt)
             from TeamMember member join member.team team
             where member.user.id = :userId and member.leftAt is null
             order by team.createdAt desc, team.id asc

@@ -36,6 +36,6 @@ public class TeamService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         var team = teams.saveAndFlush(new Team(request.name(), request.timezone()));
         members.save(new TeamMember(team, user, TeamRole.OWNER, Instant.now()));
-        return new TeamResponse(team.getId(), team.getName(), team.getTimezone(), team.getCreatedAt(), TeamRole.OWNER);
+        return TeamResponse.of(team, TeamRole.OWNER);
     }
 }

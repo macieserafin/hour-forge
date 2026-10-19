@@ -27,6 +27,10 @@ a { color: inherit; text-decoration: none; }
 button { transition: background-color .15s, color .15s; }
 button:focus-visible, a:focus-visible { outline: 3px solid #b9a9f1; outline-offset: 3px; }
 ::selection { background: #e2dcfc; color: #33275d; }
+.danger-zone { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border); }
+.danger-zone h3 { margin-bottom: 12px; font-size: 14px; font-weight: 600; }
+.dialog-list { margin: 0 0 18px; padding-left: 20px; list-style: disc; color: var(--muted); font-size: 14px; line-height: 1.7; }
+.button-danger-outline { color: #b42318; }
 
 .brand { display: inline-flex; align-items: center; gap: 11px; font-size: 24px; font-weight: 650; letter-spacing: -.8px; }
 .brand-icon { width: 35px; height: 35px; display: grid; place-items: center; color: white; background: var(--accent); border-radius: 7px; }

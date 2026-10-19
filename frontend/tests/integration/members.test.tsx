@@ -49,6 +49,23 @@ it('requires confirmation for the selected person and preserves cancellation', a
   expect(fetcher.mock.calls.filter(([, options]) => options?.method === 'DELETE')).toHaveLength(1)
 })
 
+it('transfers ownership to an active member after confirmation', async () => {
+  let transferred = false
+  let sent: unknown = null
+  const fetcher = mockApi({ 'GET /api/teams': () => json([{ ...team, role: transferred ? 'MEMBER' : 'OWNER' }]),
+    [listPath]: () => json(membersPage(transferred ? [{ ...worker, role: 'OWNER' }, { ...owner, role: 'MEMBER' }] : [owner, worker])),
+    'POST /api/teams/team/transfer-ownership': (_url, options) => { sent = JSON.parse(String(options.body)); transferred = true; return json(null, 204) } })
+  panel()
+  await userEvent.click(await screen.findByRole('button', { name: `Przekaż własność: ${worker.displayName}` }))
+  const modal = within(screen.getByRole('dialog'))
+  expect(modal.getByText(worker.displayName)).toBeVisible()
+  await userEvent.click(modal.getByRole('button', { name: 'Przekaż własność' }))
+  expect(await screen.findByText('Twoja rola: Członek')).toBeVisible()
+  expect(sent).toEqual({ userId: worker.userId })
+  expect(screen.queryByRole('button', { name: /Przekaż własność/ })).not.toBeInTheDocument()
+  expect(fetcher.mock.calls.filter(([path]) => String(path).endsWith('/transfer-ownership'))).toHaveLength(1)
+})
+
 it('a member can leave after confirmation and loses the team view without losing other teams', async () => {
   const another = { ...team, id: 'other', name: 'Other team', role: 'MEMBER' as const }
   let left = false

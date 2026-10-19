@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -30,6 +31,11 @@ public class InvitationController {
                                                 @Valid @RequestBody CreateInviteRequest request) {
         rateLimits.invitationCreation(principal.getUserId());
         return ResponseEntity.status(HttpStatus.CREATED).body(invitations.create(principal.getUserId(), teamId, request));
+    }
+
+    @GetMapping("/api/invites/{token}")
+    public InvitePreviewResponse preview(@AuthenticationPrincipal AppUserPrincipal principal, @PathVariable String token) {
+        return invitations.preview(principal.getUserId(), token);
     }
 
     @PostMapping("/api/invites/{token}/accept")

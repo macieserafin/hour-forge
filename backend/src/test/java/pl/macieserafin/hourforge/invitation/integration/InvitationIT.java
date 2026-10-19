@@ -28,6 +28,7 @@ import pl.macieserafin.hourforge.user.UserRepository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -206,6 +207,44 @@ class InvitationIT extends ApiIntegrationTestSupport {
         mvc.perform(post("/api/invites/{token}/accept", invite.token()).with(csrf())).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/invites/{token}/accept", invite.token()).with(user(principal(guest))))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void previewNamesTheTeamAndReportsWhetherTheInvitationCanBeUsed() throws Exception {
+        var active = create(1);
+        preview(guest, active.token()).andExpect(status().isOk()).andExpect(jsonPath("$.teamName").value("Invited Team"))
+                .andExpect(jsonPath("$.teamId").value(team.getId().toString())).andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.expiresAt").value(active.expiresAt().toString()))
+                .andExpect(jsonPath("$.members").doesNotExist()).andExpect(jsonPath("$.ownerEmail").doesNotExist());
+        preview(member, active.token()).andExpect(jsonPath("$.status").value("ALREADY_MEMBER"));
+
+        var stored = invites.findById(active.id()).orElseThrow();
+        stored.setUsedCount(1);
+        preview(guest, active.token()).andExpect(jsonPath("$.status").value("EXHAUSTED"));
+        stored.setExpiresAt(Instant.now().minusSeconds(1));
+        preview(guest, active.token()).andExpect(jsonPath("$.status").value("EXPIRED"));
+        stored.setRevokedAt(Instant.now());
+        preview(guest, active.token()).andExpect(jsonPath("$.status").value("REVOKED"));
+        invites.flush();
+
+        preview(guest, "a".repeat(43)).andExpect(status().isNotFound());
+        preview(guest, "short").andExpect(status().isNotFound());
+        mvc.perform(get("/api/invites/{token}", active.token())).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void anArchivedTeamCannotBeJoinedThroughAnExistingInvitation() throws Exception {
+        var invite = create(null);
+        teams.findById(team.getId()).orElseThrow().setArchivedAt(Instant.now());
+        teams.flush();
+        preview(guest, invite.token()).andExpect(jsonPath("$.status").value("TEAM_ARCHIVED"));
+        mvc.perform(post("/api/invites/{token}/accept", invite.token()).with(user(principal(guest))).with(csrf()))
+                .andExpect(status().isGone());
+        assertThat(members.findByTeamIdAndUserId(team.getId(), guest.getId())).isEmpty();
+    }
+
+    private org.springframework.test.web.servlet.ResultActions preview(User account, String token) throws Exception {
+        return mvc.perform(get("/api/invites/{token}", token).with(user(principal(account))));
     }
 
     private InviteResponse create(Integer limit) {

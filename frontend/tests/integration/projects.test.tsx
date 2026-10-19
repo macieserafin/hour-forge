@@ -12,6 +12,14 @@ it('hides project management from a member', async () => {
   expect(screen.queryByRole('button', { name: 'Utwórz projekt' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /Archiwizuj projekt/ })).not.toBeInTheDocument()
 })
+it('shows projects of an archived team without management actions', async () => {
+  mockApi({ 'GET /api/teams': () => json([{ ...team, archivedAt: '2026-10-19T12:00:00Z' }]) })
+  renderApp(<App />, '/projects?team=team')
+  expect(await screen.findByRole('button', { name: project.name })).toBeVisible()
+  expect(screen.getByText(/Zespół jest zarchiwizowany/)).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Utwórz projekt' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Archiwizuj projekt/ })).not.toBeInTheDocument()
+})
 it('keeps unsaved edits in the dialog after a rejected save', async () => {
   mockApi({ 'POST /api/teams/team/projects': () => json({}, 403) })
   renderApp(<App />, '/projects?team=team')

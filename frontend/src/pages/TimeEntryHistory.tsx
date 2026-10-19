@@ -8,7 +8,7 @@ import { formatDuration, useTimeEntryHistory } from '../lib/time'
 const emptyFilters: TimeEntryHistoryFilters = { projectId: '', from: '', to: '' }
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
 
-export function TimeEntryHistory({ userId, teamId, timezone }: { userId: string; teamId: string; timezone: string }) {
+export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false }: { userId: string; teamId: string; timezone: string; readOnly?: boolean }) {
   const projects = useProjects(userId, teamId, true)
   const [draft, setDraft] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
@@ -76,14 +76,14 @@ export function TimeEntryHistory({ userId, teamId, timezone }: { userId: string;
         </div> : <div className="team-table-wrap history-table-wrap" tabIndex={0} role="region" aria-label="Wpisy historii czasu" aria-busy={history.isFetching}>
           <table className="team-table history-table">
             <caption className="sr-only">Twoje zakończone wpisy czasu, od najnowszej daty pracy</caption>
-            <thead><tr><th scope="col">Data pracy</th><th scope="col">Projekt i opis pracy</th><th scope="col">Rodzaj</th><th scope="col">Czas</th><th scope="col">Akcje</th></tr></thead>
+            <thead><tr><th scope="col">Data pracy</th><th scope="col">Projekt i opis pracy</th><th scope="col">Rodzaj</th><th scope="col">Czas</th>{!readOnly && <th scope="col">Akcje</th>}</tr></thead>
             <tbody>{history.data.content.map(entry => <tr key={entry.id}>
               <td><time dateTime={entry.workDate}>{dateLabel(entry.workDate)}</time></td>
               <td><strong className="history-project-name">{entry.projectName}</strong><p className="history-description">{entry.description || 'Bez opisu'}</p></td>
               <td><span className="history-entry-type">{entry.entryType === 'TIMER' ? 'Timer' : 'Wpis ręczny'}</span></td>
               <td className="history-duration">{formatDuration(entry.durationSeconds)}</td>
-              <td><div className="history-actions"><button className="text-link" disabled={!projects.data || projects.isError} onClick={() => setAction({ type: 'edit', entry })}>Edytuj</button>
-                <button className="text-link" onClick={() => setAction({ type: 'delete', entry })}>Usuń</button></div></td>
+              {!readOnly && <td><div className="history-actions"><button className="text-link" disabled={!projects.data || projects.isError} onClick={() => setAction({ type: 'edit', entry })}>Edytuj</button>
+                <button className="text-link" onClick={() => setAction({ type: 'delete', entry })}>Usuń</button></div></td>}
             </tr>)}</tbody>
           </table>
         </div>}

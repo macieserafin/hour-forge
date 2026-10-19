@@ -230,11 +230,14 @@ public class TimeEntryService {
         lockUser(userId);
         var entry = entries.findByIdAndUserId(entryId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        teams.findLockedById(entry.getTeam().getId())
+        var team = teams.findLockedById(entry.getTeam().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         members.findByTeamIdAndUserId(entry.getTeam().getId(), userId)
                 .filter(member -> member.getLeftAt() == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (team.isArchived()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Entries of an archived team cannot be changed");
+        }
         if (entry.getEntryType() == EntryType.TIMER && entry.getEndedAt() == null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only completed entries can be changed");
         }
@@ -251,11 +254,14 @@ public class TimeEntryService {
     }
 
     private Project writableProject(UUID userId, UUID teamId, UUID projectId) {
-        // Same team lock as project archiving: checking archivedAt and inserting are atomic with it.
-        teams.findLockedById(teamId)
+        // Same team lock as project and team archiving: checking archivedAt and inserting are atomic with it.
+        var team = teams.findLockedById(teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         members.findByTeamIdAndUserId(teamId, userId).filter(member -> member.getLeftAt() == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (team.isArchived()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived teams cannot receive new time entries");
+        }
         var project = projects.findByIdAndTeamId(projectId, teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (project.getArchivedAt() != null) {

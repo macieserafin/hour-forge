@@ -85,15 +85,16 @@ public class ProjectService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
         // Use the same team lock as membership changes to serialize project writes and authorization.
-        if (ownerRequired) {
-            teams.findLockedById(teamId)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        }
+        var team = ownerRequired ? teams.findLockedById(teamId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND)) : null;
         var membership = members.findByTeamIdAndUserId(teamId, userId)
                 .filter(member -> member.getLeftAt() == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (ownerRequired && membership.getRole() != TeamRole.OWNER) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+        if (team != null && team.isArchived()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Projects of an archived team cannot be changed");
         }
         return membership;
     }

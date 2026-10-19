@@ -10,6 +10,23 @@ export interface Team {
   timezone: string
   createdAt: string
   role: 'OWNER' | 'MEMBER'
+  archivedAt: string | null
+}
+
+export interface TeamSummary {
+  activeMembers: number
+  projects: number
+  timeEntries: number
+  activeTimers: boolean
+}
+
+export type InvitationStatus = 'ACTIVE' | 'ALREADY_MEMBER' | 'EXPIRED' | 'REVOKED' | 'EXHAUSTED' | 'TEAM_ARCHIVED'
+
+export interface InvitationPreview {
+  teamId: string
+  teamName: string
+  status: InvitationStatus
+  expiresAt: string
 }
 
 export interface Invitation {
@@ -245,6 +262,46 @@ export const createTeam = (body: { name: string; timezone: string }) => teamRequ
 export const createInvitation = ({ teamId, ...body }: { teamId: string; expiresAt: string; maxUses: number | null }) =>
   teamRequest<Invitation>(`/api/teams/${encodeURIComponent(teamId)}/invites`, body)
 export const acceptInvitation = (token: string) => teamRequest<Team>(`/api/invites/${encodeURIComponent(token)}/accept`, {})
+
+export async function getInvitationPreview(token: string, signal?: AbortSignal): Promise<InvitationPreview> {
+  const response = await request(`/api/invites/${encodeURIComponent(token)}`, { signal })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      404: 'Nie znaleziono zaproszenia. Sprawdź, czy link jest kompletny.',
+    }
+    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się sprawdzić zaproszenia. Spróbuj ponownie.')
+  }
+  return response.json() as Promise<InvitationPreview>
+}
+
+async function teamManagementRequest<T>(path: string, method: 'GET' | 'PATCH' | 'POST' | 'DELETE', body?: unknown, signal?: AbortSignal): Promise<T> {
+  const csrf = method === 'GET' ? null : await getCsrf()
+  const response = await request(path, {
+    method, signal,
+    headers: csrf ? { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token } : undefined,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: 'Sprawdź nazwę zespołu, strefę czasową i wybraną osobę.',
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Tę operację może wykonać tylko właściciel zespołu lub sesja formularza wygasła.',
+      404: 'Zespół lub wybrana osoba są niedostępne. Odśwież listę.',
+      409: method === 'PATCH' ? 'Zarchiwizowanego zespołu nie można zmieniać.'
+        : 'W zespole działają timery. Poproś członków o ich zatrzymanie i spróbuj ponownie.',
+    }
+    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wykonać operacji na zespole. Odśwież dane i spróbuj ponownie.')
+  }
+  return (response.status === 204 ? null : await response.json()) as T
+}
+
+const teamPath = (teamId: string) => `/api/teams/${encodeURIComponent(teamId)}`
+export const updateTeam = ({ teamId, ...body }: { teamId: string; name: string; timezone: string }) => teamManagementRequest<Team>(teamPath(teamId), 'PATCH', body)
+export const transferOwnership = (teamId: string, userId: string) => teamManagementRequest<null>(`${teamPath(teamId)}/transfer-ownership`, 'POST', { userId })
+export const archiveTeam = (teamId: string) => teamManagementRequest<Team>(`${teamPath(teamId)}/archive`, 'POST')
+export const getTeamSummary = (teamId: string, signal?: AbortSignal) => teamManagementRequest<TeamSummary>(`${teamPath(teamId)}/summary`, 'GET', undefined, signal)
+export const deleteTeam = (teamId: string) => teamManagementRequest<null>(teamPath(teamId), 'DELETE')
 
 async function projectRequest<T>(path: string, method = 'GET', body?: ProjectInput, signal?: AbortSignal): Promise<T> {
   const csrf = method === 'GET' ? null : await getCsrf()
