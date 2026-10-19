@@ -175,6 +175,42 @@ public class TimeEntryService {
         return response(entries.saveAndFlush(entry));
     }
 
+    @Transactional
+    public TimeEntryResponse update(UUID userId, UUID entryId, UpdateTimeEntryRequest request) {
+        var entry = editableEntry(userId, entryId);
+        var project = projects.findByIdAndTeamId(request.projectId(), entry.getTeam().getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (!project.getId().equals(entry.getProject().getId()) && project.getArchivedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Cannot move an entry to an archived project");
+        }
+        entry.setProject(project);
+        entry.setWorkDate(request.workDate());
+        entry.setDurationSeconds(request.durationSeconds().intValueExact());
+        entry.setDescription(request.description());
+        return response(entries.saveAndFlush(entry));
+    }
+
+    @Transactional
+    public void delete(UUID userId, UUID entryId) {
+        entries.delete(editableEntry(userId, entryId));
+        entries.flush();
+    }
+
+    private TimeEntry editableEntry(UUID userId, UUID entryId) {
+        lockUser(userId);
+        var entry = entries.findByIdAndUserId(entryId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        teams.findLockedById(entry.getTeam().getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        members.findByTeamIdAndUserId(entry.getTeam().getId(), userId)
+                .filter(member -> member.getLeftAt() == null)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (entry.getEntryType() == EntryType.TIMER && entry.getEndedAt() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only completed entries can be changed");
+        }
+        return entry;
+    }
+
     private Optional<TimeEntry> activeEntry(UUID userId) {
         return entries.findByUserIdAndEntryTypeAndEndedAtIsNull(userId, EntryType.TIMER);
     }

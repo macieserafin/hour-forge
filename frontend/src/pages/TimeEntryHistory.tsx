@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { ChevronLeft, ChevronRight, History, LoaderCircle, RefreshCw } from 'lucide-react'
-import type { TimeEntryHistoryFilters } from '../lib/api'
+import type { TimeEntryHistoryFilters, TimeEntryHistoryItem } from '../lib/api'
+import { DeleteTimeEntry, EditTimeEntry } from './TimeEntryActions'
 import { useProjects } from '../lib/projects'
 import { formatDuration, useTimeEntryHistory } from '../lib/time'
 
@@ -13,6 +14,7 @@ export function TimeEntryHistory({ userId, teamId }: { userId: string; teamId: s
   const [filters, setFilters] = useState(emptyFilters)
   const [page, setPage] = useState(0)
   const [validation, setValidation] = useState('')
+  const [action, setAction] = useState<{ type: 'edit' | 'delete'; entry: TimeEntryHistoryItem } | null>(null)
   const history = useTimeEntryHistory(userId, teamId, filters, page)
   const hasFilters = !!(filters.projectId || filters.from || filters.to)
 
@@ -74,12 +76,14 @@ export function TimeEntryHistory({ userId, teamId }: { userId: string; teamId: s
         </div> : <div className="team-table-wrap history-table-wrap" tabIndex={0} role="region" aria-label="Wpisy historii czasu" aria-busy={history.isFetching}>
           <table className="team-table history-table">
             <caption className="sr-only">Twoje zakończone wpisy czasu, od najnowszej daty pracy</caption>
-            <thead><tr><th scope="col">Data pracy</th><th scope="col">Projekt i opis pracy</th><th scope="col">Rodzaj</th><th scope="col">Czas</th></tr></thead>
+            <thead><tr><th scope="col">Data pracy</th><th scope="col">Projekt i opis pracy</th><th scope="col">Rodzaj</th><th scope="col">Czas</th><th scope="col">Akcje</th></tr></thead>
             <tbody>{history.data.content.map(entry => <tr key={entry.id}>
               <td><time dateTime={entry.workDate}>{dateLabel(entry.workDate)}</time></td>
               <td><strong className="history-project-name">{entry.projectName}</strong><p className="history-description">{entry.description || 'Bez opisu'}</p></td>
               <td><span className="history-entry-type">{entry.entryType === 'TIMER' ? 'Timer' : 'Wpis ręczny'}</span></td>
               <td className="history-duration">{formatDuration(entry.durationSeconds)}</td>
+              <td><div className="history-actions"><button className="text-link" disabled={!projects.data || projects.isError} onClick={() => setAction({ type: 'edit', entry })}>Edytuj</button>
+                <button className="text-link" onClick={() => setAction({ type: 'delete', entry })}>Usuń</button></div></td>
             </tr>)}</tbody>
           </table>
         </div>}
@@ -89,5 +93,10 @@ export function TimeEntryHistory({ userId, teamId }: { userId: string; teamId: s
             <button className="button-secondary" disabled={page + 1 >= history.data.totalPages || history.isFetching} onClick={() => setPage(page + 1)}>Następna<ChevronRight size={16} /></button></div>
         </nav>}
       </>}
+    {action?.type === 'edit' && projects.data && <EditTimeEntry userId={userId} entry={action.entry} projects={projects.data} onClose={() => setAction(null)} />}
+    {action?.type === 'delete' && <DeleteTimeEntry userId={userId} entry={action.entry} onClose={() => setAction(null)} onDeleted={() => {
+      setAction(null)
+      if (page > 0 && history.data?.content.length === 1) setPage(page - 1)
+    }} />}
   </section>
 }

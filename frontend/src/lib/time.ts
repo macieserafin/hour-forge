@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, changeTimerState, createManualTimeEntry, getActiveTimer, getTimeEntryHistory, startTimer, stopTimer, type TimeEntryHistoryFilters } from './api'
+import { ApiError, changeTimerState, createManualTimeEntry, deleteTimeEntry, getActiveTimer, getTimeEntryHistory, startTimer, stopTimer, updateTimeEntry, type TimeEntryHistoryFilters } from './api'
 import { teamsKey, useAuthError } from './teams'
 
 export const activeTimerKey = (userId: string) => ['timer', userId, 'active'] as const
@@ -71,6 +71,16 @@ export function useChangeTimerState(userId: string) {
 export function useManualTimeEntry(userId: string) {
   const callbacks = useTimeCallbacks(userId, true)
   return useMutation({ mutationFn: createManualTimeEntry, retry: false, ...callbacks })
+}
+
+export function useUpdateTimeEntry(userId: string) {
+  const callbacks = useTimeCallbacks(userId, true)
+  return useMutation({ mutationFn: updateTimeEntry, retry: false, ...callbacks })
+}
+
+export function useDeleteTimeEntry(userId: string) {
+  const callbacks = useTimeCallbacks(userId, true)
+  return useMutation({ mutationFn: deleteTimeEntry, retry: false, ...callbacks })
 }
 
 export function formatDuration(seconds: number) {

@@ -254,3 +254,26 @@ export const stopTimer = (body: { entryId: string; description: string | null })
 export const changeTimerState = ({ action, ...body }: { action: 'pause' | 'resume'; entryId: string; description: string | null }) =>
   timeRequest(`/api/timer/${action}`, body) as Promise<TimeEntry>
 export const createManualTimeEntry = (body: ManualTimeInput) => timeRequest('/api/time-entries', body) as Promise<TimeEntry>
+
+export type UpdateTimeEntryInput = Omit<ManualTimeInput, 'teamId'>
+
+async function changeTimeEntry(id: string, method: 'PATCH' | 'DELETE', body?: UpdateTimeEntryInput): Promise<void> {
+  const csrf = await getCsrf()
+  const response = await request(`/api/time-entries/${encodeURIComponent(id)}`, {
+    method, headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: 'Sprawdź projekt, datę i dodatni czas trwania w pełnych sekundach.',
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
+      404: 'Wpis został usunięty lub nie masz już dostępu do wpisu, projektu lub zespołu.',
+      409: 'Wpis jest aktywnym timerem lub wybrany projekt jest archiwalny. Odśwież historię.',
+    }
+    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się zmienić wpisu. Odśwież historię przed ponowieniem operacji.')
+  }
+}
+
+export const updateTimeEntry = ({ id, ...body }: UpdateTimeEntryInput & { id: string }) => changeTimeEntry(id, 'PATCH', body)
+export const deleteTimeEntry = (id: string) => changeTimeEntry(id, 'DELETE')
