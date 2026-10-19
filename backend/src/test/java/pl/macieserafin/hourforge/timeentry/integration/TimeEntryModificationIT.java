@@ -157,6 +157,20 @@ class TimeEntryModificationIT extends ApiIntegrationTestSupport {
     }
 
     @Test
+    void descriptionLengthIsValidatedAfterTrimming() throws Exception {
+        String request = "{\"projectId\":\"%s\",\"workDate\":\"2026-02-02\",\"durationSeconds\":120,\"description\":\"%s\"}";
+        mvc.perform(patch("/api/time-entries/" + entry.getId()).with(user(principal)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(request.formatted(project.getId(), "d".repeat(2001))))
+                .andExpect(status().isBadRequest());
+        assertThat(entry.getDescription()).isEqualTo("Original");
+        assertThat(entry.getDurationSeconds()).isEqualTo(60);
+        String maximal = "d".repeat(2000);
+        mvc.perform(patch("/api/time-entries/" + entry.getId()).with(user(principal)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(request.formatted(project.getId(), "  " + maximal + "  ")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.description").value(maximal));
+    }
+
+    @Test
     void requiresAuthenticationCsrfAndCompleteInput() throws Exception {
         mvc.perform(delete("/api/time-entries/" + entry.getId()).with(csrf())).andExpect(status().isUnauthorized());
         mvc.perform(delete("/api/time-entries/" + entry.getId()).with(user(principal))).andExpect(status().isForbidden());

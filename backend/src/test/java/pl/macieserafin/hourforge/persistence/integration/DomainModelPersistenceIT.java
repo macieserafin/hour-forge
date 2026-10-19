@@ -182,6 +182,27 @@ class DomainModelPersistenceIT extends IntegrationTestSupport {
     }
 
     @Test
+    void acceptsDescriptionsOfTwoThousandCharacters() {
+        var maximal = fixtures.project(team, "Maximal", "d".repeat(2000));
+        var entry = entries.saveAndFlush(new TimeEntry(user, team, project, EntryType.MANUAL, date, null, null, 60,
+                "d".repeat(2000)));
+        assertThat(maximal.getDescription()).hasSize(2000);
+        assertThat(entry.getDescription()).hasSize(2000);
+    }
+
+    @Test
+    void rejectsProjectDescriptionLongerThanTwoThousandCharacters() {
+        assertThatThrownBy(() -> fixtures.project(team, "Too long", "d".repeat(2001)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void rejectsEntryDescriptionLongerThanTwoThousandCharacters() {
+        assertThatThrownBy(() -> entries.saveAndFlush(new TimeEntry(user, team, project, EntryType.MANUAL, date,
+                null, null, 60, "d".repeat(2001)))).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
     void preventsDeletingProjectWithHistoricalEntries() {
         entries.saveAndFlush(entry(EntryType.MANUAL, null, null, 60));
         entityManager.clear();

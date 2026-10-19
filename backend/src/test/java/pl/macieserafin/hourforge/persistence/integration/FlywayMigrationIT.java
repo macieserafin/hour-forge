@@ -21,8 +21,15 @@ class FlywayMigrationIT {
                         INSERT INTO users (id, email, display_name)
                         VALUES ('00000000-0000-0000-0000-000000000001', 'migration@example.test', 'Preserved user')
                         """);
+                statement.execute("""
+                        INSERT INTO teams (id, name, timezone)
+                        VALUES ('00000000-0000-0000-0000-000000000002', 'Migration team', 'UTC');
+                        INSERT INTO projects (id, team_id, name, description)
+                        VALUES ('00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000002',
+                                'Migration project', 'Preserved description')
+                        """);
                 var upgraded = Flyway.configure().dataSource(database.getJdbcUrl(), database.getUsername(), database.getPassword()).load();
-                assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(2);
+                assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(3);
                 upgraded.validate();
                 assertThat(upgraded.migrate().migrationsExecuted).isZero();
                 try (var result = statement.executeQuery("SELECT display_name FROM users WHERE email = 'migration@example.test'")) {
@@ -35,6 +42,17 @@ class FlywayMigrationIT {
                         """)) {
                     assertThat(result.next()).isTrue();
                     assertThat(result.getInt(1)).isEqualTo(2);
+                }
+                try (var result = statement.executeQuery("""
+                        SELECT count(*) FROM information_schema.check_constraints
+                        WHERE constraint_name IN ('ck_projects_description_length', 'ck_time_entries_description_length')
+                        """)) {
+                    assertThat(result.next()).isTrue();
+                    assertThat(result.getInt(1)).isEqualTo(2);
+                }
+                try (var result = statement.executeQuery("SELECT description FROM projects WHERE name = 'Migration project'")) {
+                    assertThat(result.next()).isTrue();
+                    assertThat(result.getString(1)).isEqualTo("Preserved description");
                 }
             }
         }

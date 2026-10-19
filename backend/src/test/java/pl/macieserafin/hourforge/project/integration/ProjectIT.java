@@ -235,6 +235,27 @@ class ProjectIT extends ApiIntegrationTestSupport {
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.description").isEmpty());
     }
 
+    @Test
+    void descriptionLengthIsValidatedAfterTrimming() throws Exception {
+        long count = projects.count();
+        for (var request : new MockHttpServletRequestBuilder[]{post(base), put(base + "/" + project.getId())}) {
+            mvc.perform(request.with(user(principal(owner))).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"Long\",\"description\":\"" + "d".repeat(2001) + "\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+        assertThat(projects.count()).isEqualTo(count);
+        assertThat(projects.findById(project.getId()).orElseThrow().getDescription()).isEqualTo("Original description");
+
+        String maximal = "d".repeat(2000);
+        mvc.perform(post(base).with(user(principal(owner))).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Long\",\"description\":\"  " + maximal + "  \"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.description").value(maximal));
+        mvc.perform(put(base + "/" + project.getId()).with(user(principal(owner))).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Existing\",\"description\":\"" + maximal + "\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.description").value(maximal));
+    }
+
     private AppUserPrincipal principal(User actor) {
         return new AppUserPrincipal(actor.getId(), actor.getEmail(), "unused-in-request-test");
     }

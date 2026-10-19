@@ -150,6 +150,18 @@ class TimerPauseIT extends ApiIntegrationTestSupport {
         action(action, "{\"entryId\":\"" + manual.getId() + "\"}", 409);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"pause", "resume"})
+    void descriptionLengthIsValidatedOnPauseAndResume(String action) throws Exception {
+        if (action.equals("resume")) action("pause", body(), 200);
+        var pausedAt = timer.getPausedAt();
+        action(action, "{\"entryId\":\"%s\",\"description\":\"%s\"}".formatted(timer.getId(), "d".repeat(2001)), 400);
+        assertThat(timer.getDescription()).isEqualTo("Original");
+        assertThat(timer.getPausedAt()).isEqualTo(pausedAt);
+        action(action, "{\"entryId\":\"%s\",\"description\":\"%s\"}".formatted(timer.getId(), "d".repeat(2000)), 200);
+        assertThat(timer.getDescription()).isEqualTo("d".repeat(2000));
+    }
+
     private String body() { return "{\"entryId\":\"" + timer.getId() + "\"}"; }
 
     private void action(String action, String body, int status) throws Exception {

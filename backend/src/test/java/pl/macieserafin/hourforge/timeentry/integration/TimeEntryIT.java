@@ -256,6 +256,35 @@ class TimeEntryIT extends ApiIntegrationTestSupport {
     }
 
     @Test
+    void descriptionLengthIsValidatedForNewEntriesAndStop() throws Exception {
+        String tooLong = "d".repeat(2001);
+        String maximal = "d".repeat(2000);
+        long count = entries.count();
+        mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(manualBody(tooLong)))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/timer/start").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"teamId\":\"%s\",\"projectId\":\"%s\",\"description\":\"%s\"}"
+                                .formatted(team.getId(), project.getId(), tooLong)))
+                .andExpect(status().isBadRequest());
+        assertThat(entries.count()).isEqualTo(count);
+
+        var timer = running(actor, project);
+        mvc.perform(post("/api/timer/stop").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"entryId\":\"%s\",\"description\":\"%s\"}".formatted(timer.getId(), tooLong)))
+                .andExpect(status().isBadRequest());
+        assertThat(timer.getEndedAt()).isNull();
+        assertThat(timer.getDescription()).isEqualTo("Running");
+
+        mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(manualBody("  " + maximal + "  ")))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.description").value(maximal));
+        mvc.perform(post("/api/timer/stop").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"entryId\":\"%s\",\"description\":\"%s\"}".formatted(timer.getId(), maximal)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.description").value(maximal));
+    }
+
+    @Test
     void invalidStopDurationDoesNotMutateTimer() throws Exception {
         var timer = running(actor, project);
         for (Instant start : new Instant[]{Instant.now().plusSeconds(60), Instant.now().minusSeconds((long) Integer.MAX_VALUE + 60)}) {
@@ -272,6 +301,11 @@ class TimeEntryIT extends ApiIntegrationTestSupport {
     private TimeEntry running(User user, Project project) {
         return entries.saveAndFlush(new TimeEntry(user, project.getTeam(), project, EntryType.TIMER,
                 LocalDate.of(2026, 1, 1), Instant.now().minusSeconds(10).truncatedTo(ChronoUnit.MICROS), null, null, "Running"));
+    }
+
+    private String manualBody(String description) {
+        return "{\"teamId\":\"%s\",\"projectId\":\"%s\",\"workDate\":\"2026-01-01\",\"durationSeconds\":60,\"description\":\"%s\"}"
+                .formatted(team.getId(), project.getId(), description);
     }
 
     private String startBody(UUID teamId, UUID projectId) {

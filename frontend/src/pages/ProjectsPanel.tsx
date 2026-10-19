@@ -28,7 +28,7 @@ function ProjectFormModal({ userId, team, project, onClose, onSaved }: {
     <form onSubmit={submit}>
       <fieldset disabled={save.isPending}>
         <div className="field-group"><label htmlFor="project-name">Nazwa projektu</label><input className="text-input" id="project-name" required maxLength={255} value={name} onChange={event => { setName(event.target.value); setValidation('') }} /></div>
-        <div className="field-group"><label htmlFor="project-description">Opis <span className="optional-label">(opcjonalnie)</span></label><textarea className="text-input project-description-input" id="project-description" rows={5} value={description} onChange={event => setDescription(event.target.value)} /></div>
+        <div className="field-group"><label htmlFor="project-description">Opis <span className="optional-label">(opcjonalnie)</span></label><textarea className="text-input project-description-input" id="project-description" rows={5} maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></div>
       </fieldset>
       {(validation || save.isError) && <p className="form-error" role="alert">{validation || save.error?.message}</p>}
       <footer className="dialog-actions"><button type="button" className="button-secondary" disabled={save.isPending} onClick={onClose}>Anuluj</button><button className="button-primary" type="submit" disabled={save.isPending}>{save.isPending && <LoaderCircle size={16} className="spin" />}{save.isPending ? 'Zapisywanie…' : project ? 'Zapisz zmiany' : 'Utwórz projekt'}</button></footer>

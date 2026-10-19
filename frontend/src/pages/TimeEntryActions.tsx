@@ -40,7 +40,7 @@ export function EditTimeEntry({ userId, entry, projects, onClose }: {
           <div><label htmlFor="edit-minutes">Minuty</label><input id="edit-minutes" className="text-input" type="number" min={0} max={59} step={1} value={minutes} onChange={event => setMinutes(event.target.value)} /></div>
           <div><label htmlFor="edit-seconds">Sekundy</label><input id="edit-seconds" className="text-input" type="number" min={0} max={59} step={1} value={seconds} onChange={event => setSeconds(event.target.value)} /></div>
         </div></div>
-        <div className="field-group"><label htmlFor="edit-description">Opis pracy <span className="optional-label">(opcjonalnie)</span></label><textarea id="edit-description" className="text-input project-description-input" rows={3} value={description} onChange={event => setDescription(event.target.value)} /></div>
+        <div className="field-group"><label htmlFor="edit-description">Opis pracy <span className="optional-label">(opcjonalnie)</span></label><textarea id="edit-description" className="text-input project-description-input" rows={3} maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></div>
       </fieldset>
       {(validation || save.isError) && <p className="form-error" role="alert">{validation || save.error?.message}</p>}
       <footer className="dialog-actions"><button type="button" className="button-secondary" disabled={save.isPending} onClick={onClose}>Anuluj</button><button className="button-primary" disabled={save.isPending}>{save.isPending && <LoaderCircle className="spin" size={16} />}{save.isPending ? 'Zapisywanie…' : 'Zapisz zmiany'}</button></footer>

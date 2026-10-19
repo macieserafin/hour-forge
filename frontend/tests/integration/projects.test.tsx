@@ -22,6 +22,16 @@ it('keeps unsaved edits in the dialog after a rejected save', async () => {
   expect(await modal.findByRole('alert')).toHaveTextContent('Nie masz uprawnień')
   expect(modal.getByLabelText('Nazwa projektu')).toHaveValue('New project')
 })
+it('limits the project description and explains a rejected long description', async () => {
+  mockApi({ 'POST /api/teams/team/projects': () => json({}, 400) })
+  renderApp(<App />, '/projects?team=team')
+  await userEvent.click(await screen.findByRole('button', { name: 'Utwórz projekt' }))
+  const modal = within(screen.getByRole('dialog'))
+  expect(modal.getByLabelText('Opis', { exact: false })).toHaveAttribute('maxlength', '2000')
+  await userEvent.type(modal.getByLabelText('Nazwa projektu'), 'New project')
+  await userEvent.click(modal.getByRole('button', { name: 'Utwórz projekt' }))
+  expect(await modal.findByRole('alert')).toHaveTextContent('Opis może mieć najwyżej 2000 znaków.')
+})
 
 it('updates a project and refreshes its archived state', async () => {
   let current = { ...project }
