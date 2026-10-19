@@ -363,6 +363,19 @@ fieldset:disabled { opacity: .65; }
 .history-table .history-actions button { font-size: 12px; font-weight: 400; }
 .button-danger { background: #a33e4a; }
 .button-danger:hover:not(:disabled) { background: #87313c; }
+.personal-dashboard { min-width: 0; }
+.dashboard-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.dashboard-stat, .dashboard-timer { padding: 24px; }
+.dashboard-stat h2, .dashboard-timer h2 { font-size: 14px; font-weight: 550; }
+.dashboard-total { margin-top: 18px; font-size: clamp(23px, 3vw, 36px); font-variant-numeric: tabular-nums; letter-spacing: -.8px; overflow-wrap: anywhere; }
+.dashboard-summary-note { margin: 14px 0 10px; overflow-wrap: anywhere; }
+.dashboard-timer { margin-top: 28px; border-top: 2px solid var(--accent); }
+.dashboard-timer .timer-project-name { margin-top: 18px; }
+.dashboard-timer .button-secondary { margin-top: 18px; }
+.dashboard-idle { margin-top: 28px; }
+@media (max-width: 420px) {
+  .dashboard-stats { grid-template-columns: 1fr; }
+}
 @media (max-width: 420px) {
   .timer-controls { width: 100%; }
   .timer-controls > button { width: 100%; }

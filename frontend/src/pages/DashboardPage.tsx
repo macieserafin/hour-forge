@@ -3,10 +3,11 @@ import { Clock3, Folder, LayoutDashboard, LoaderCircle, LogOut, Menu, Users, X }
 import { Brand } from '../components/Brand'
 import type { User } from '../lib/api'
 import { useLogout } from '../lib/auth'
-import { Link, NavLink, useSearchParams } from 'react-router-dom'
+import { NavLink, useSearchParams } from 'react-router-dom'
 import { TeamsPanel } from './TeamsPanel'
 import { ProjectsPanel } from './ProjectsPanel'
 import { TimePanel } from './TimePanel'
+import { PersonalDashboard } from './PersonalDashboard'
 
 function initials(name: string) {
   return name.trim().split(/\s+/).slice(0, 2).map(part => part.charAt(0)).join('').toLocaleUpperCase('pl-PL') || 'U'
@@ -66,15 +67,7 @@ export function DashboardPage({ user, section = 'dashboard' }: { user: User; sec
         {logout.isError && <div className="dashboard-error" role="alert">{logout.error.message}<button onClick={() => logout.mutate()}>Spróbuj ponownie</button></div>}
 
         {section === 'teams' ? <TeamsPanel userId={user.id} /> : section === 'projects' ? <ProjectsPanel userId={user.id} /> : section === 'time' ? <TimePanel userId={user.id} /> : <div className="dashboard-overview">
-          <section className="overview-panel" aria-labelledby="overview-title">
-            <header className="section-heading"><h2 id="overview-title">Przegląd pracy</h2></header>
-            <div className="empty-state">
-              <Clock3 size={28} strokeWidth={1.4} aria-hidden="true" />
-              <h3>Zacznij od swojego zespołu.</h3>
-              <p>Utwórz zespół, wybierz jeden z istniejących lub przekaż współpracownikom link zaproszeniowy.</p>
-              <Link className="text-link dashboard-teams-link" to="/teams">Przejdź do zespołów</Link>
-            </div>
-          </section>
+          <PersonalDashboard userId={user.id} />
           <section className="account-details" aria-labelledby="account-title">
             <h2 id="account-title">Twoje konto</h2>
             <dl>

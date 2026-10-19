@@ -14,6 +14,7 @@ export function useAuthError() {
       client.removeQueries({ queryKey: ['projects'], type: 'inactive' })
       client.removeQueries({ queryKey: ['timer'], type: 'inactive' })
       client.removeQueries({ queryKey: ['time-entries'], type: 'inactive' })
+      client.removeQueries({ queryKey: ['dashboard'], type: 'inactive' })
     }
   }, [client])
 }

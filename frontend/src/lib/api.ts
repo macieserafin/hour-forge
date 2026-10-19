@@ -58,6 +58,28 @@ export interface StartTimerInput {
   description: string | null
 }
 
+export interface DashboardSummary {
+  teamId: string
+  timezone: string
+  today: string
+  weekStart: string
+  weekEnd: string
+  todaySeconds: number
+  weekSeconds: number
+}
+
+export async function getDashboardSummary(teamId: string, signal?: AbortSignal): Promise<DashboardSummary> {
+  const response = await request(`/api/dashboard/summary?${new URLSearchParams({ teamId })}`, { signal })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      404: 'Nie znaleziono zespołu lub nie masz już do niego dostępu.',
+    }
+    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wczytać podsumowania czasu. Spróbuj ponownie.')
+  }
+  return response.json() as Promise<DashboardSummary>
+}
+
 export interface TimeEntryHistoryItem {
   id: string
   teamId: string

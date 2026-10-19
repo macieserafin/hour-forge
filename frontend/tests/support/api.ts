@@ -21,6 +21,8 @@ export function mockApi(overrides: Record<string, Handler> = {}) {
     [`GET /api/teams/${team.id}/projects/${project.id}`]: () => json(project),
     'GET /api/timer/active': () => json(null, 204),
     'GET /api/time-entries': () => json(history()),
+    'GET /api/dashboard/summary': url => json({ teamId: url.searchParams.get('teamId'), timezone: 'Europe/Warsaw',
+      today: '2026-10-19', weekStart: '2026-10-19', weekEnd: '2026-10-25', todaySeconds: 900, weekSeconds: 3600 }),
     ...overrides,
   }
   const fetcher = vi.fn(async (input: string | URL | Request, options: RequestInit = {}) => {

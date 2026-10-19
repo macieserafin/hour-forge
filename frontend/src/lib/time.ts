@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, changeTimerState, createManualTimeEntry, deleteTimeEntry, getActiveTimer, getTimeEntryHistory, startTimer, stopTimer, updateTimeEntry, type TimeEntryHistoryFilters } from './api'
 import { teamsKey, useAuthError } from './teams'
+import { dashboardKey } from './dashboard'
 
 export const activeTimerKey = (userId: string) => ['timer', userId, 'active'] as const
 const historyKey = (userId: string) => ['time-entries', userId] as const
@@ -31,7 +32,8 @@ function useTimeCallbacks(userId: string, refreshHistory = false) {
     // Reconcile with the server even when a response was lost after a successful write.
     onSettled: () => Promise.all([
       client.invalidateQueries({ queryKey: activeTimerKey(userId) }),
-      ...(refreshHistory ? [client.invalidateQueries({ queryKey: historyKey(userId) })] : []),
+      ...(refreshHistory ? [client.invalidateQueries({ queryKey: historyKey(userId) }),
+        client.invalidateQueries({ queryKey: dashboardKey(userId) })] : []),
     ]),
     onError: (error: Error) => {
       handleError(error)
@@ -42,7 +44,8 @@ function useTimeCallbacks(userId: string, refreshHistory = false) {
     },
     onMutate: () => Promise.all([
       client.cancelQueries({ queryKey: activeTimerKey(userId) }),
-      ...(refreshHistory ? [client.cancelQueries({ queryKey: historyKey(userId) })] : []),
+      ...(refreshHistory ? [client.cancelQueries({ queryKey: historyKey(userId) }),
+        client.cancelQueries({ queryKey: dashboardKey(userId) })] : []),
     ]),
   }
 }
