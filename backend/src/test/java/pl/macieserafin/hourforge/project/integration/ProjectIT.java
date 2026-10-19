@@ -162,7 +162,7 @@ class ProjectIT extends ApiIntegrationTestSupport {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"list", "get", "create", "update", "archive"})
+    @ValueSource(strings = {"list", "get", "create", "update", "archive", "restore", "delete"})
     void outsidersFormerOwnersAndUnknownTeamsAreHidden(String operation) throws Exception {
         for (var actor : new User[]{outsider, former}) {
             mvc.perform(request(operation, base, project.getId()).with(user(principal(actor))).with(csrf()))
@@ -174,7 +174,7 @@ class ProjectIT extends ApiIntegrationTestSupport {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"create", "update", "archive"})
+    @ValueSource(strings = {"create", "update", "archive", "restore", "delete"})
     void membersCannotWrite(String operation) throws Exception {
         long count = projects.count();
         mvc.perform(request(operation, base, project.getId()).with(user(principal(member))).with(csrf()))
@@ -185,7 +185,7 @@ class ProjectIT extends ApiIntegrationTestSupport {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"get", "update", "archive"})
+    @ValueSource(strings = {"get", "update", "archive", "restore", "delete"})
     void projectMustBelongToPathTeamAndMustExist(String operation) throws Exception {
         for (UUID id : new UUID[]{otherProject.getId(), UUID.randomUUID()}) {
             mvc.perform(request(operation, base, id).with(user(principal(owner))).with(csrf()))
@@ -196,7 +196,7 @@ class ProjectIT extends ApiIntegrationTestSupport {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"list", "get", "create", "update", "archive"})
+    @ValueSource(strings = {"list", "get", "create", "update", "archive", "restore", "delete"})
     void authenticationIsRequiredAndDeletedUsersCannotAccess(String operation) throws Exception {
         mvc.perform(request(operation, base, project.getId()).with(csrf())).andExpect(status().isUnauthorized());
         var deleted = new AppUserPrincipal(UUID.randomUUID(), "deleted@example.com", "unused");
@@ -205,7 +205,7 @@ class ProjectIT extends ApiIntegrationTestSupport {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"create", "update", "archive"})
+    @ValueSource(strings = {"create", "update", "archive", "restore", "delete"})
     void csrfIsRequiredForWrites(String operation) throws Exception {
         mvc.perform(request(operation, base, project.getId()).with(user(principal(owner))))
                 .andExpect(status().isForbidden());
@@ -256,6 +256,102 @@ class ProjectIT extends ApiIntegrationTestSupport {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.description").value(maximal));
     }
 
+    @Test
+    void repositoryLinkCanBeCreatedUpdatedAndCleared() throws Exception {
+        String response = mvc.perform(post(base).with(user(principal(owner))).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"name":"Linked","repositoryUrl":" https://github.com/owner/repo.git "}
+                                """))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.repositoryUrl").value("https://github.com/owner/repo.git"))
+                .andReturn().getResponse().getContentAsString();
+        UUID id = UUID.fromString(JsonPath.read(response, "$.id"));
+        assertThat(projects.findById(id).orElseThrow().getRepositoryUrl()).isEqualTo("https://github.com/owner/repo.git");
+        mvc.perform(put(base + "/" + id).with(user(principal(owner))).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Linked\",\"repositoryUrl\":\"https://github.com/other/repo\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get(base + "/" + id).with(user(principal(member))))
+                .andExpect(jsonPath("$.repositoryUrl").value("https://github.com/other/repo"));
+        mvc.perform(put(base + "/" + id).with(user(principal(owner))).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Linked\",\"repositoryUrl\":\"  \"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.repositoryUrl").isEmpty());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"http://github.com/owner/repo", "javascript:alert(1)", "https://evil.test/owner/repo",
+            "https://github.com.evil.test/owner/repo", "https://token@github.com/owner/repo",
+            "https://github.com/owner/repo?token=secret", "https://github.com/owner/repo#secret",
+            "https://github.com/owner", "https://github.com/owner/..", "https://github.com:443/owner/repo"})
+    void invalidRepositoryLinksCannotBeSaved(String url) throws Exception {
+        for (var request : new MockHttpServletRequestBuilder[]{post(base), put(base + "/" + project.getId())}) {
+            mvc.perform(request.with(user(principal(owner))).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"Linked\",\"repositoryUrl\":\"" + url + "\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+        assertThat(project.getRepositoryUrl()).isNull();
+    }
+
+    @Test
+    void repositoryLinkLengthIsLimited() throws Exception {
+        mvc.perform(post(base).with(user(principal(owner))).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Linked\",\"repositoryUrl\":\"https://github.com/owner/" + "r".repeat(2048) + "\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void restoreIsIdempotentAndPreservesHistoryAndLink() throws Exception {
+        project.setRepositoryUrl("https://github.com/owner/repo");
+        project.setArchivedAt(Instant.now());
+        var entry = entries.saveAndFlush(new TimeEntry(member, team, project, EntryType.MANUAL,
+                LocalDate.now(), null, null, 3600, "Preserved"));
+        for (int i = 0; i < 2; i++) {
+            mvc.perform(post(base + "/" + project.getId() + "/restore").with(user(principal(owner))).with(csrf()))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.archivedAt").isEmpty())
+                    .andExpect(jsonPath("$.repositoryUrl").value("https://github.com/owner/repo"));
+        }
+        assertThat(entries.findById(entry.getId())).isPresent();
+        mvc.perform(put(base + "/" + project.getId()).with(user(principal(owner))).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Restored\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/timer/start").with(user(principal(member))).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"teamId\":\"%s\",\"projectId\":\"%s\"}".formatted(team.getId(), project.getId())))
+                .andExpect(status().isCreated());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void ownerCanDeleteEmptyActiveOrArchivedProject(boolean archived) throws Exception {
+        if (archived) project.setArchivedAt(Instant.now());
+        mvc.perform(delete(base + "/" + project.getId()).with(user(principal(owner))).with(csrf()))
+                .andExpect(status().isNoContent());
+        assertThat(projects.findById(project.getId())).isEmpty();
+        assertThat(projects.findById(otherProject.getId())).isPresent();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"manual", "running", "paused", "completed"})
+    void anyEntryPreventsDeletingTheProject(String kind) throws Exception {
+        boolean manual = kind.equals("manual");
+        var entry = new TimeEntry(member, team, project, manual ? EntryType.MANUAL : EntryType.TIMER,
+                LocalDate.now(), manual ? null : Instant.now().minusSeconds(60),
+                kind.equals("completed") ? Instant.now() : null, manual || kind.equals("completed") ? 60 : null, "Preserved");
+        if (kind.equals("paused")) entry.setPausedAt(Instant.now());
+        entries.saveAndFlush(entry);
+        mvc.perform(delete(base + "/" + project.getId()).with(user(principal(owner))).with(csrf()))
+                .andExpect(status().isConflict());
+        assertThat(projects.findById(project.getId())).isPresent();
+        assertThat(entries.findById(entry.getId())).isPresent();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"restore", "delete"})
+    void archivedTeamBlocksProjectRestoreAndDelete(String operation) throws Exception {
+        team.setArchivedAt(Instant.now());
+        teams.flush();
+        mvc.perform(request(operation, base, project.getId()).with(user(principal(owner))).with(csrf()))
+                .andExpect(status().isConflict());
+        assertThat(projects.findById(project.getId())).isPresent();
+    }
+
     private AppUserPrincipal principal(User actor) {
         return new AppUserPrincipal(actor.getId(), actor.getEmail(), "unused-in-request-test");
     }
@@ -267,6 +363,8 @@ class ProjectIT extends ApiIntegrationTestSupport {
             case "create" -> post(path).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"New\"}");
             case "update" -> put(path + "/" + id).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Updated\"}");
             case "archive" -> post(path + "/" + id + "/archive");
+            case "restore" -> post(path + "/" + id + "/restore");
+            case "delete" -> delete(path + "/" + id);
             default -> throw new IllegalArgumentException(operation);
         };
     }

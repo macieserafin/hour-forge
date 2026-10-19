@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -55,6 +56,19 @@ public class ProjectController {
                                   @PathVariable UUID teamId, @PathVariable UUID projectId,
                                   @Valid @RequestBody ProjectRequest request) {
         return projects.update(principal.getUserId(), teamId, projectId, request);
+    }
+
+    @PostMapping("/{projectId}/restore")
+    public ProjectResponse restore(@AuthenticationPrincipal AppUserPrincipal principal,
+                                   @PathVariable UUID teamId, @PathVariable UUID projectId) {
+        return projects.restore(principal.getUserId(), teamId, projectId);
+    }
+
+    @DeleteMapping("/{projectId}")
+    public ResponseEntity<Void> delete(@AuthenticationPrincipal AppUserPrincipal principal,
+                                       @PathVariable UUID teamId, @PathVariable UUID projectId) {
+        projects.delete(principal.getUserId(), teamId, projectId);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{projectId}/archive")

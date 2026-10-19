@@ -276,7 +276,7 @@ fieldset:disabled { opacity: .65; }
 .projects-toolbar h2 { overflow-wrap: anywhere; }
 .projects-filter { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; font-size: 12px; color: var(--muted); }
 .projects-filter label { display: inline-flex; align-items: center; gap: 9px; min-height: 32px; cursor: pointer; }
-.projects-filter input { accent-color: var(--accent); width: 15px; height: 15px; }
+.projects-filter .field-group { flex: 1 1 180px; margin: 0; }
 .projects-filter > span { display: inline-flex; align-items: center; gap: 7px; }
 .project-notice { margin-bottom: 20px; padding: 12px 15px; border-left: 3px solid #55846b; background: #eef5f0; color: #356349; font-size: 13px; line-height: 1.6; }
 .project-table td:first-child { width: 100%; min-width: 180px; max-width: 520px; }

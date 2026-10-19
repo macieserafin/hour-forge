@@ -119,14 +119,26 @@ class TimeEntryConcurrencyIT extends IntegrationTestSupport {
     }
 
     @Test
-    void manualWriteAndArchivePreserveHistoryWithoutWritingAfterArchive() throws Exception {
+    void manualWriteAndArchiveBothSucceedAndPreserveHistory() throws Exception {
         var outcomes = concurrently(() -> outcome(() -> service.createManual(first.getId(),
                         new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(), 60, null)), 201),
                 () -> outcome(() -> projectService.archive(first.getId(), team.getId(), project.getId()), 200));
-        assertThat(List.of(List.of(201, 200), List.of(409, 200))).contains(outcomes);
+        assertThat(outcomes).containsExactly(201, 200);
         assertThat(projects.findById(project.getId()).orElseThrow().getArchivedAt()).isNotNull();
         assertThat(jdbc.queryForObject("select count(*) from time_entries where project_id = ?", Long.class, project.getId()))
-                .isEqualTo(outcomes.getFirst() == 201 ? 1L : 0L);
+                .isEqualTo(1L);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void deleteAndNewEntryCannotLoseWorkOrLeaveAnOrphan(boolean manual) throws Exception {
+        var outcomes = concurrently(() -> outcome(() -> { projectService.delete(first.getId(), team.getId(), project.getId()); return null; }, 204),
+                () -> manual ? outcome(() -> service.createManual(second.getId(),
+                        new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(), 60, null)), 201)
+                        : start(second, project));
+        assertThat(List.of(List.of(204, 404), List.of(409, 201))).contains(outcomes);
+        assertThat(projects.existsById(project.getId())).isEqualTo(outcomes.getLast() == 201);
+        assertThat(entries.existsByProjectId(project.getId())).isEqualTo(outcomes.getLast() == 201);
     }
 
     @Test

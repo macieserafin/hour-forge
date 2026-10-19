@@ -105,8 +105,16 @@ class TimeEntryIT extends ApiIntegrationTestSupport {
                 .andExpect(status().isBadRequest());
         project.setArchivedAt(Instant.now());
         mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content(body.formatted(team.getId(), project.getId(), 60))).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.workDate").isEmpty());
+        mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content(body.formatted(team.getId(), project.getId(), 86401))).andExpect(status().isBadRequest());
+        team.setArchivedAt(Instant.now());
+        mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                 .content(body.formatted(team.getId(), project.getId(), 60))).andExpect(status().isConflict());
         members.findByTeamIdAndUserId(team.getId(), actor.getId()).orElseThrow().setLeftAt(Instant.now());
+        mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content(body.formatted(team.getId(), project.getId(), 60))).andExpect(status().isNotFound());
         mvc.perform(get("/api/time-entries").with(user(principal)).param("teamId", team.getId().toString())
                 .param("undated", "true")).andExpect(status().isNotFound());
     }
@@ -277,14 +285,31 @@ class TimeEntryIT extends ApiIntegrationTestSupport {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void archivedProjectAcceptsBackfillBeforeProjectAndMembershipCreation() throws Exception {
+        project.setArchivedAt(Instant.now());
+        projects.flush();
+        LocalDate workDate = today.minusYears(1);
+        mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"teamId\":\"%s\",\"projectId\":\"%s\",\"workDate\":\"%s\",\"durationSeconds\":7200}"
+                                .formatted(team.getId(), project.getId(), workDate)))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.workDate").value(workDate.toString()))
+                .andExpect(jsonPath("$.durationSeconds").value(7200)).andExpect(jsonPath("$.createdAt").isNotEmpty());
+        members.findByTeamIdAndUserId(team.getId(), actor.getId()).orElseThrow().setLeftAt(Instant.now());
+        members.flush();
+        mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(body("/api/time-entries", team.getId(), project.getId())))
+                .andExpect(status().isNotFound());
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"/api/timer/start", "/api/time-entries"})
-    void archivedProjectsCannotReceiveNewEntries(String path) throws Exception {
+    void archivedProjectsAllowManualBackfillButBlockTimers(String path) throws Exception {
         project.setArchivedAt(Instant.now());
         projects.flush();
         mvc.perform(post(path).with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content(body(path, team.getId(), project.getId())))
-                .andExpect(status().isConflict());
+                .andExpect(path.endsWith("start") ? status().isConflict() : status().isCreated());
     }
 
     @ParameterizedTest

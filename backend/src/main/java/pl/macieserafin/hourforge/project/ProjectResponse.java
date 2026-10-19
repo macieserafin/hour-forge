@@ -4,5 +4,5 @@ import java.time.Instant;
 import java.util.UUID;
 
 public record ProjectResponse(UUID id, UUID teamId, String name, String description,
-                              Instant createdAt, Instant archivedAt) {
+                              Instant createdAt, Instant archivedAt, String repositoryUrl) {
 }

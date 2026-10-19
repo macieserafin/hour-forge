@@ -13,6 +13,7 @@ import java.util.UUID;
 import java.util.Optional;
 
 public interface TimeEntryRepository extends JpaRepository<TimeEntry, UUID>, JpaSpecificationExecutor<TimeEntry> {
+    boolean existsByProjectId(UUID projectId);
     @Override
     @EntityGraph(attributePaths = "project")
     Page<TimeEntry> findAll(Specification<TimeEntry> specification, Pageable pageable);

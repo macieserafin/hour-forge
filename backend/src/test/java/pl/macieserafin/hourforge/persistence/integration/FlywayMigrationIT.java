@@ -45,7 +45,7 @@ class FlywayMigrationIT {
                             ('00000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000002',
                             '00000000-0000-0000-0000-000000000001', 'legacy-expired', '2000-01-01')
                         """);
-                assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(6);
+                assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(7);
                 try (var result = statement.executeQuery("SELECT removed_at = left_at FROM team_members")) {
                     assertThat(result.next()).isTrue();
                     assertThat(result.getBoolean(1)).isTrue();
@@ -92,9 +92,10 @@ class FlywayMigrationIT {
                     assertThat(result.next()).isTrue();
                     assertThat(result.getObject(1)).isNull();
                 }
-                try (var result = statement.executeQuery("SELECT description FROM projects WHERE name = 'Migration project'")) {
+                try (var result = statement.executeQuery("SELECT description, repository_url FROM projects WHERE name = 'Migration project'")) {
                     assertThat(result.next()).isTrue();
                     assertThat(result.getString(1)).isEqualTo("Preserved description");
+                    assertThat(result.getString(2)).isNull();
                 }
             }
         }

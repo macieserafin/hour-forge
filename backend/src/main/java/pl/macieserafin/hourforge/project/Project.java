@@ -32,6 +32,12 @@ public class Project {
     @Column(name = "description", columnDefinition = "text")
     private String description;
 
+    @Column(name = "repository_url", length = 2048)
+    private String repositoryUrl;
+
+    public String getRepositoryUrl() { return repositoryUrl; }
+    public void setRepositoryUrl(String repositoryUrl) { this.repositoryUrl = repositoryUrl; }
+
     @Column(name = "archived_at")
     private Instant archivedAt;
 

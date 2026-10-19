@@ -63,11 +63,13 @@ export interface Project {
   description: string | null
   createdAt: string
   archivedAt: string | null
+  repositoryUrl?: string | null
 }
 
 export interface ProjectInput {
   name: string
   description: string | null
+  repositoryUrl?: string | null
 }
 
 export interface TimeEntry {
@@ -355,19 +357,25 @@ async function projectRequest<T>(path: string, method = 'GET', body?: ProjectInp
   })
   if (!response.ok) {
     const messages: Record<number, string> = {
-      400: 'Wpisz nazwę projektu (maksymalnie 255 znaków). Opis może mieć najwyżej 2000 znaków.',
+      400: 'Wpisz nazwę projektu (maksymalnie 255 znaków). Opis może mieć najwyżej 2000 znaków. Link musi wskazywać repozytorium https://github.com/właściciel/repozytorium, bez danych logowania i parametrów (maksymalnie 2048 znaków).',
       401: 'Sesja wygasła. Zaloguj się ponownie.',
       403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
       404: 'Nie znaleziono projektu lub zespołu albo nie masz już do niego dostępu.',
       409: path.endsWith('/archive')
         ? 'Projekt ma aktywny timer. Zatrzymaj go przed archiwizacją.'
-        : 'Projekt jest już zarchiwizowany i nie można go edytować.',
+        : method === 'DELETE' ? 'Można usunąć tylko pusty projekt w aktywnym zespole. Projekt z wpisami lub timerem musi zostać zachowany.'
+        : 'Nie można zmienić archiwalnego projektu lub projektu w archiwalnym zespole. Najpierw przywróć projekt, jeśli zespół jest aktywny.',
       429: tooManyRequestsMessage(response),
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wczytać lub zapisać projektu. Spróbuj ponownie.')
   }
-  return response.json() as Promise<T>
+  return response.status === 204 ? null as T : response.json() as Promise<T>
 }
+
+export const restoreProject = (teamId: string, projectId: string) =>
+  projectRequest<Project>(`${projectsPath(teamId)}/${encodeURIComponent(projectId)}/restore`, 'POST')
+export const deleteProject = (teamId: string, projectId: string) =>
+  projectRequest<null>(`${projectsPath(teamId)}/${encodeURIComponent(projectId)}`, 'DELETE')
 
 const projectsPath = (teamId: string) => `/api/teams/${encodeURIComponent(teamId)}/projects`
 export const getProjects = (teamId: string, includeArchived: boolean, signal?: AbortSignal) =>
@@ -396,7 +404,7 @@ async function timeRequest(path: string, body?: unknown, signal?: AbortSignal): 
       409: path.endsWith('/pause') || path.endsWith('/resume') ? 'Stan timera uległ zmianie. Sprawdź aktualny stan i spróbuj ponownie.'
         : path.endsWith('/start') ? 'Nie można uruchomić timera. Sprawdź aktywny timer i status projektu.'
         : path.endsWith('/stop') ? 'Nie można zatrzymać tego timera. Mógł już zostać zatrzymany lub nie upłynęła jeszcze pełna sekunda.'
-        : 'Projekt jest zarchiwizowany i nie można dodać do niego czasu.',
+        : 'Zespół jest zarchiwizowany i nie można dodać do niego czasu.',
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się odczytać lub zapisać czasu. Odśwież stan przed ponowieniem operacji.')
   }

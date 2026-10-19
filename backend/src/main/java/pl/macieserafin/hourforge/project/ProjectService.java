@@ -50,7 +50,9 @@ public class ProjectService {
     @Transactional
     public ProjectResponse create(UUID userId, UUID teamId, ProjectRequest request) {
         var membership = requireMember(userId, teamId, true);
-        var project = projects.saveAndFlush(new Project(membership.getTeam(), request.name(), request.description()));
+        var project = new Project(membership.getTeam(), request.name(), request.description());
+        project.setRepositoryUrl(request.repositoryUrl());
+        project = projects.saveAndFlush(project);
         return response(project);
     }
 
@@ -63,6 +65,7 @@ public class ProjectService {
         }
         project.setName(request.name());
         project.setDescription(request.description());
+        project.setRepositoryUrl(request.repositoryUrl());
         return response(projects.saveAndFlush(project));
     }
 
@@ -78,6 +81,25 @@ public class ProjectService {
             projects.saveAndFlush(project);
         }
         return response(project);
+    }
+
+    @Transactional
+    public ProjectResponse restore(UUID userId, UUID teamId, UUID projectId) {
+        requireMember(userId, teamId, true);
+        var project = findProject(teamId, projectId);
+        project.setArchivedAt(null);
+        return response(projects.saveAndFlush(project));
+    }
+
+    @Transactional
+    public void delete(UUID userId, UUID teamId, UUID projectId) {
+        requireMember(userId, teamId, true);
+        var project = findProject(teamId, projectId);
+        if (entries.existsByProjectId(projectId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only empty projects can be deleted");
+        }
+        projects.delete(project);
+        projects.flush();
     }
 
     private TeamMember requireMember(UUID userId, UUID teamId, boolean ownerRequired) {
@@ -106,6 +128,6 @@ public class ProjectService {
 
     private ProjectResponse response(Project project) {
         return new ProjectResponse(project.getId(), project.getTeam().getId(), project.getName(),
-                project.getDescription(), project.getCreatedAt(), project.getArchivedAt());
+                project.getDescription(), project.getCreatedAt(), project.getArchivedAt(), project.getRepositoryUrl());
     }
 }

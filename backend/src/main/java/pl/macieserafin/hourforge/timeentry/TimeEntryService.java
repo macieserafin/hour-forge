@@ -93,7 +93,7 @@ public class TimeEntryService {
     @Transactional
     public TimeEntryResponse start(UUID userId, StartTimerRequest request) {
         var user = lockUser(userId);
-        var project = writableProject(userId, request.teamId(), request.projectId());
+        var project = projectForTimer(userId, request.teamId(), request.projectId());
         if (activeEntry(userId).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A timer is already running");
         }
@@ -144,7 +144,7 @@ public class TimeEntryService {
         if (entry.getPausedAt() == null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Timer is not paused");
         }
-        writableProject(userId, entry.getTeam().getId(), entry.getProject().getId());
+        projectForTimer(userId, entry.getTeam().getId(), entry.getProject().getId());
         completePause(entry, clock.instant().truncatedTo(ChronoUnit.MICROS));
         updateDescription(entry, request.description());
         return response(entries.saveAndFlush(entry));
@@ -182,7 +182,7 @@ public class TimeEntryService {
     @Transactional
     public TimeEntryResponse createManual(UUID userId, ManualTimeEntryRequest request) {
         var user = lockUser(userId);
-        var project = writableProject(userId, request.teamId(), request.projectId());
+        var project = projectForManualEntry(userId, request.teamId(), request.projectId());
         requireManualDuration(request.durationSeconds());
         requireWorkDateInWindow(request.workDate(), project.getTeam().getTimezone());
         var entry = new TimeEntry(user, project.getTeam(), project, EntryType.MANUAL, request.workDate(),
@@ -264,7 +264,15 @@ public class TimeEntryService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
     }
 
-    private Project writableProject(UUID userId, UUID teamId, UUID projectId) {
+    private Project projectForTimer(UUID userId, UUID teamId, UUID projectId) {
+        var project = projectForManualEntry(userId, teamId, projectId);
+        if (project.getArchivedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived projects cannot start timers");
+        }
+        return project;
+    }
+
+    private Project projectForManualEntry(UUID userId, UUID teamId, UUID projectId) {
         // Same team lock as project and team archiving: checking archivedAt and inserting are atomic with it.
         var team = teams.findLockedById(teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
@@ -275,9 +283,6 @@ public class TimeEntryService {
         }
         var project = projects.findByIdAndTeamId(projectId, teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (project.getArchivedAt() != null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived projects cannot receive new time entries");
-        }
         return project;
     }
 

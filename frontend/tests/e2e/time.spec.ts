@@ -68,7 +68,7 @@ test('timer survives refresh and team changes while manual entries can be saved'
   await expect(input.getByRole('button', { name: 'Uruchom timer' })).toBeEnabled()
 })
 
-test('a timer started outside the page is recovered on conflict and archived project is rejected', async ({ page }, testInfo) => {
+test('a timer started outside the page is recovered on conflict and manual backfill survives project archiving', async ({ page }, testInfo) => {
   await login(page)
   const { team, project } = await setup(page, `Conflict ${testInfo.project.name} ${Date.now()}`)
   await page.goto(`/time?team=${team.id}`)
@@ -89,9 +89,12 @@ test('a timer started outside the page is recovered on conflict and archived pro
   const manual = page.getByRole('dialog', { name: 'Dodaj wpis ręczny' })
   await manual.getByLabel('Minuty').fill('15')
   await create(page.request, `/api/teams/${team.id}/projects/${project.id}/archive`, {})
+  const savedResponse = page.waitForResponse(response => response.url().endsWith('/api/time-entries') && response.request().method() === 'POST')
   await manual.getByRole('button', { name: 'Zapisz wpis' }).click()
-  await expect(manual.getByRole('alert')).toHaveText('Projekt jest zarchiwizowany i nie można dodać do niego czasu.')
-  await manual.getByRole('button', { name: 'Anuluj' }).click()
+  expect((await savedResponse).status()).toBe(201)
+  await expect(manual).not.toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'Wpis ręczny zapisany' })).toContainText('00:15:00')
+  await page.reload()
   await expect(page.getByText('Brak aktywnych projektów.', { exact: true })).toBeVisible()
 })
 

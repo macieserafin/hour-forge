@@ -41,7 +41,7 @@ function ManualTimeModal({ userId, team, projects, projectId, onClose, onSaved }
     <p className="dialog-description">Zespół: <strong>{team.name}</strong>. Dodaj czas pracy bez uruchamiania timera.</p>
     <form onSubmit={submit} onInput={() => setValidation('')}>
       <fieldset disabled={save.isPending}>
-        <div className="field-group"><label htmlFor="manual-project">Projekt</label><select className="text-input" id="manual-project" value={selected} required onChange={event => setSelected(event.target.value)}><option value="" disabled>Wybierz projekt</option>{projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></div>
+        <div className="field-group"><label htmlFor="manual-project">Projekt</label><select className="text-input" id="manual-project" value={selected} required onChange={event => setSelected(event.target.value)}><option value="" disabled>Wybierz projekt</option>{projects.map(project => <option key={project.id} value={project.id}>{project.name}{project.archivedAt ? ' (archiwalny)' : ''}</option>)}</select></div>
         <label><input type="checkbox" checked={undated} onChange={event => setUndated(event.target.checked)} /> Bez daty</label>
         <p className="field-hint">Wpis bez daty nie jest wliczany do podsumowań dnia ani tygodnia. Datę możesz uzupełnić później.</p>
         <div className="field-group"><label htmlFor="manual-date">Data pracy</label><input className="text-input" id="manual-date" type="date" required={!undated} disabled={undated} min={range.min} max={range.max} value={undated ? '' : date} onChange={event => setDate(event.target.value)} /></div>
@@ -93,6 +93,7 @@ function TeamTimeEntry({ userId, team, start, canStart, onSaved, onStarted }: {
   const [projectId, setProjectId] = useState('')
   const [description, setDescription] = useState('')
   const [manual, setManual] = useState(false)
+  const manualProjects = useProjects(userId, team.id, true, manual)
   const [validation, setValidation] = useState('')
   const selected = projects.data?.find(project => project.id === projectId)
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -114,10 +115,12 @@ function TeamTimeEntry({ userId, team, start, canStart, onSaved, onStarted }: {
           <div className="field-group"><label htmlFor="time-description">Opis pracy <span className="optional-label">(opcjonalnie)</span></label><textarea className="text-input timer-description" id="time-description" rows={3} maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></div>
         </fieldset>
         {validation && <p className="form-error" role="alert">{validation}</p>}
-        <div className="time-entry-actions"><button type="submit" className="button-primary" disabled={!canStart || start.isPending || projects.isFetching}>{start.isPending ? <LoaderCircle size={16} className="spin" /> : <Play size={16} />}{start.isPending ? 'Uruchamianie…' : 'Uruchom timer'}</button><button type="button" className="button-secondary" disabled={start.isPending || projects.isFetching} onClick={() => setManual(true)}><Plus size={16} />Dodaj wpis ręczny</button></div>
+        <div className="time-entry-actions"><button type="submit" className="button-primary" disabled={!canStart || start.isPending || projects.isFetching}>{start.isPending ? <LoaderCircle size={16} className="spin" /> : <Play size={16} />}{start.isPending ? 'Uruchamianie…' : 'Uruchom timer'}</button></div>
         <p className="field-hint">Możesz mieć jeden aktywny timer. Wpis ręczny dodasz także podczas jego działania.</p>
       </form></div>}
-    {manual && projects.data && !projects.isError && <ManualTimeModal userId={userId} team={team} projects={projects.data} projectId={selected?.id ?? ''} onClose={() => setManual(false)} onSaved={entry => { setManual(false); onSaved(entry) }} />}
+    {!projects.isError && !projects.isPending && <button type="button" className="button-secondary" disabled={start.isPending} onClick={() => setManual(true)}><Plus size={16} />Dodaj wpis ręczny</button>}
+    {manual && (manualProjects.isPending || manualProjects.isError) && <Modal title="Dodaj wpis ręczny" busy={false} onClose={() => setManual(false)}>{manualProjects.isError ? <div role="alert">{manualProjects.error.message}<button onClick={() => void manualProjects.refetch()}>Spróbuj ponownie</button></div> : <p role="status">Ładowanie projektów…</p>}</Modal>}
+    {manual && manualProjects.data && !manualProjects.isError && <ManualTimeModal userId={userId} team={team} projects={manualProjects.data} projectId={selected?.id ?? ''} onClose={() => setManual(false)} onSaved={entry => { setManual(false); onSaved(entry) }} />}
   </section>
 }
 

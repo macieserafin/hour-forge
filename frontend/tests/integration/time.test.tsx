@@ -3,8 +3,29 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../../src/App'
 import { renderApp } from '../support/render'
-import { mockApi, json, history, timer, entry, team } from '../support/api'
+import { mockApi, json, history, timer, entry, team, project } from '../support/api'
 import { workDateRange } from '../../src/lib/time'
+
+it('allows manual work when only archived projects remain while the timer stays unavailable', async () => {
+  let posted: Record<string, unknown> | undefined
+  const archived = { ...project, archivedAt: team.createdAt }
+  mockApi({
+    'GET /api/teams/team/projects': url => json(url.searchParams.get('includeArchived') === 'true' ? [archived] : []),
+    'POST /api/time-entries': (_url, options) => { posted = JSON.parse(String(options.body)); return json({ ...timer, entryType: 'MANUAL', durationSeconds: 7200, workDate: String(posted!.workDate) }, 201) },
+  })
+  renderApp(<App />, '/time?team=team')
+  expect(await screen.findByText('Brak aktywnych projektów.')).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Uruchom timer' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Dodaj wpis ręczny' }))
+  const modal = within(screen.getByRole('dialog'))
+  await userEvent.selectOptions(await modal.findByLabelText('Projekt'), project.id)
+  expect(modal.getByRole('option', { name: `${project.name} (archiwalny)` })).toBeVisible()
+  await userEvent.clear(modal.getByLabelText('Godziny'))
+  await userEvent.type(modal.getByLabelText('Godziny'), '2')
+  await userEvent.click(modal.getByRole('button', { name: 'Zapisz wpis' }))
+  expect(await screen.findByText(/Wpis ręczny zapisany/)).toBeVisible()
+  expect(posted).toMatchObject({ projectId: project.id, durationSeconds: 7200 })
+})
 
 it('saves an explicitly undated manual entry and displays its success without an invalid date', async () => {
   let posted: Record<string, unknown> | undefined
