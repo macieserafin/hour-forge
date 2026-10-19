@@ -86,6 +86,24 @@ export function useDeleteTimeEntry(userId: string) {
   return useMutation({ mutationFn: deleteTimeEntry, retry: false, ...callbacks })
 }
 
+export const MAX_MANUAL_DURATION_SECONDS = 24 * 60 * 60
+export const workDateRangeMessage = 'Data pracy musi mieścić się w ostatnich 2 latach i nie może być późniejsza niż dziś.'
+export const maxDurationMessage = 'Jeden wpis może mieć najwyżej 24 godziny.'
+
+/** Today's date (YYYY-MM-DD) in the team's time zone, matching the backend's work date rules. */
+export function teamToday(timezone: string, now = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+}
+
+/** Allowed work dates: from two years ago (Feb 29 becomes Feb 28, like Java minusYears) up to today. */
+export function workDateRange(timezone: string, now = new Date()) {
+  const max = teamToday(timezone, now)
+  const [year, month, day] = max.split('-').map(Number) as [number, number, number]
+  const lastDay = new Date(Date.UTC(year - 2, month, 0)).getUTCDate()
+  const min = `${year - 2}-${String(month).padStart(2, '0')}-${String(Math.min(day, lastDay)).padStart(2, '0')}`
+  return { min, max }
+}
+
 export function formatDuration(seconds: number) {
   const safe = Math.max(0, Math.floor(seconds))
   return [Math.floor(safe / 3600), Math.floor(safe / 60) % 60, safe % 60]

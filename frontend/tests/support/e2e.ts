@@ -67,6 +67,12 @@ export async function create(request: APIRequestContext, path: string, data: unk
 }
 export const write = create
 
+/** Work date (YYYY-MM-DD) a number of days before today in the team time zone; stays inside the 2-year work date window. */
+export function teamDate(daysAgo = 0, timezone = 'Europe/Warsaw') {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(new Date(Date.now() - daysAgo * 86_400_000))
+}
+
 export async function setupTeam(page: Page, suffix: string) {
   await login(page)
   return createTeamProject(page, suffix)

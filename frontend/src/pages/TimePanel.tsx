@@ -6,12 +6,8 @@ import { TimeEntryHistory } from './TimeEntryHistory'
 import type { Project, Team, TimeEntry } from '../lib/api'
 import { useProject, useProjects } from '../lib/projects'
 import { useTeams } from '../lib/teams'
-import { formatDuration, useActiveTimer, useChangeTimerState, useManualTimeEntry, useStartTimer, useStopTimer } from '../lib/time'
+import { MAX_MANUAL_DURATION_SECONDS, formatDuration, maxDurationMessage, teamToday, useActiveTimer, useChangeTimerState, useManualTimeEntry, useStartTimer, useStopTimer, workDateRange, workDateRangeMessage } from '../lib/time'
 
-const localDate = () => {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-}
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
 
 function ManualTimeModal({ userId, team, projects, projectId, onClose, onSaved }: {
@@ -19,7 +15,8 @@ function ManualTimeModal({ userId, team, projects, projectId, onClose, onSaved }
 }) {
   const save = useManualTimeEntry(userId)
   const [selected, setSelected] = useState(projectId)
-  const [date, setDate] = useState(localDate)
+  const [date, setDate] = useState(() => teamToday(team.timezone))
+  const range = workDateRange(team.timezone)
   const [hours, setHours] = useState('0')
   const [minutes, setMinutes] = useState('0')
   const [seconds, setSeconds] = useState('0')
@@ -31,9 +28,11 @@ function ManualTimeModal({ userId, team, projects, projectId, onClose, onSaved }
     const duration = parts[0]! * 3600 + parts[1]! * 60 + parts[2]!
     if (!projects.some(project => project.id === selected)) { setValidation('Wybierz projekt.'); return }
     if (!date) { setValidation('Wybierz datę pracy.'); return }
-    if (parts.some(value => !Number.isInteger(value) || value < 0) || parts[1]! > 59 || parts[2]! > 59 || duration < 1 || duration > 2147483647) {
+    if (date < range.min || date > range.max) { setValidation(workDateRangeMessage); return }
+    if (parts.some(value => !Number.isInteger(value) || value < 0) || parts[1]! > 59 || parts[2]! > 59 || duration < 1) {
       setValidation('Podaj dodatni czas w pełnych sekundach. Minuty i sekundy muszą mieścić się w zakresie 0–59.'); return
     }
+    if (duration > MAX_MANUAL_DURATION_SECONDS) { setValidation(maxDurationMessage); return }
     setValidation('')
     save.mutate({ teamId: team.id, projectId: selected, workDate: date, durationSeconds: duration, description: description.trim() || null }, { onSuccess: onSaved })
   }
@@ -42,9 +41,9 @@ function ManualTimeModal({ userId, team, projects, projectId, onClose, onSaved }
     <form onSubmit={submit} onInput={() => setValidation('')}>
       <fieldset disabled={save.isPending}>
         <div className="field-group"><label htmlFor="manual-project">Projekt</label><select className="text-input" id="manual-project" value={selected} required onChange={event => setSelected(event.target.value)}><option value="" disabled>Wybierz projekt</option>{projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></div>
-        <div className="field-group"><label htmlFor="manual-date">Data pracy</label><input className="text-input" id="manual-date" type="date" required value={date} onChange={event => setDate(event.target.value)} /></div>
+        <div className="field-group"><label htmlFor="manual-date">Data pracy</label><input className="text-input" id="manual-date" type="date" required min={range.min} max={range.max} value={date} onChange={event => setDate(event.target.value)} /></div>
         <div className="field-group"><p className="duration-label" id="duration-label">Czas trwania</p><div className="duration-fields" role="group" aria-labelledby="duration-label">
-          <div><label htmlFor="manual-hours">Godziny</label><input className="text-input" id="manual-hours" type="number" min={0} step={1} value={hours} onChange={event => setHours(event.target.value)} /></div>
+          <div><label htmlFor="manual-hours">Godziny</label><input className="text-input" id="manual-hours" type="number" min={0} max={24} step={1} value={hours} onChange={event => setHours(event.target.value)} /></div>
           <div><label htmlFor="manual-minutes">Minuty</label><input className="text-input" id="manual-minutes" type="number" min={0} max={59} step={1} value={minutes} onChange={event => setMinutes(event.target.value)} /></div>
           <div><label htmlFor="manual-seconds">Sekundy</label><input className="text-input" id="manual-seconds" type="number" min={0} max={59} step={1} value={seconds} onChange={event => setSeconds(event.target.value)} /></div>
         </div></div>
@@ -146,7 +145,7 @@ export function TimePanel({ userId }: { userId: string }) {
       : teams.data.length === 0 ? <div className="overview-panel empty-state"><Clock3 size={28} strokeWidth={1.4} /><h3>Najpierw dołącz do zespołu.</h3><p>Czas pracy rejestrujesz w projekcie należącym do zespołu.</p><Link className="text-link dashboard-teams-link" to="/teams">Przejdź do zespołów</Link></div>
       : <><div className="project-team-picker"><div className="field-group"><label htmlFor="time-team">Zespół</label><select className="text-input" id="time-team" value={selected?.id ?? ''} disabled={start.isPending || stop.isPending || state.isPending} onChange={event => { setSearch({ team: event.target.value }); start.reset(); stop.reset(); state.reset() }}>{!selected && <option value="" disabled>Wybierz dostępny zespół</option>}{teams.data.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></div></div>
         {selected ? <><TeamTimeEntry key={selected.id} userId={userId} team={selected} start={start} canStart={active.isSuccess && !active.isFetching && !active.data && !stop.isPending && !state.isPending} onSaved={setSaved} onStarted={() => { setSaved(null); stop.reset(); state.reset() }} />
-          <TimeEntryHistory key={`${userId}:${selected.id}`} userId={userId} teamId={selected.id} /></> : <p className="form-error" role="alert">Ten zespół nie istnieje lub nie masz do niego dostępu. Wybierz inny zespół.</p>}
+          <TimeEntryHistory key={`${userId}:${selected.id}`} userId={userId} teamId={selected.id} timezone={selected.timezone} /></> : <p className="form-error" role="alert">Ten zespół nie istnieje lub nie masz do niego dostępu. Wybierz inny zespół.</p>}
       </>}
   </div>
 }

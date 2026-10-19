@@ -3,7 +3,8 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../../src/App'
 import { renderApp } from '../support/render'
-import { mockApi, json, history, timer, entry } from '../support/api'
+import { mockApi, json, history, timer, entry, team } from '../support/api'
+import { workDateRange } from '../../src/lib/time'
 
 it('rejects zero manual time without posting and permits cancelling the form', async () => {
   const fetcher = mockApi()
@@ -17,6 +18,25 @@ it('rejects zero manual time without posting and permits cancelling the form', a
   expect(fetcher.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false)
   await userEvent.click(modal.getByRole('button', { name: 'Anuluj' }))
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+})
+
+it('limits a manual entry to the team work date range and 24 hours without posting', async () => {
+  const fetcher = mockApi()
+  renderApp(<App />, '/time?team=team')
+  await userEvent.click(await screen.findByRole('button', { name: 'Dodaj wpis ręczny' }))
+  const modal = within(screen.getByRole('dialog'))
+  const range = workDateRange(team.timezone)
+  expect(modal.getByLabelText('Data pracy')).toHaveAttribute('min', range.min)
+  expect(modal.getByLabelText('Data pracy')).toHaveAttribute('max', range.max)
+  expect(modal.getByLabelText('Data pracy')).toHaveValue(range.max)
+  await userEvent.selectOptions(modal.getByLabelText('Projekt'), 'project')
+  await userEvent.clear(modal.getByLabelText('Godziny'))
+  await userEvent.type(modal.getByLabelText('Godziny'), '24')
+  await userEvent.clear(modal.getByLabelText('Minuty'))
+  await userEvent.type(modal.getByLabelText('Minuty'), '1')
+  await userEvent.click(modal.getByRole('button', { name: 'Zapisz wpis' }))
+  expect(modal.getByRole('alert')).toHaveTextContent('najwyżej 24 godziny')
+  expect(fetcher.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false)
 })
 
 it('explains a rejected long description of a manual entry', async () => {

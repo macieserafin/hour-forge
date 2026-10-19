@@ -27,6 +27,9 @@ import java.util.UUID;
 
 @Service
 public class TimeEntryService {
+    private static final int MAX_MANUAL_DURATION_SECONDS = 24 * 60 * 60;
+    private static final int WORK_DATE_YEARS_BACK = 2;
+
     private final Clock clock;
     private final TimeEntryRepository entries;
     private final UserRepository users;
@@ -173,6 +176,8 @@ public class TimeEntryService {
     public TimeEntryResponse createManual(UUID userId, ManualTimeEntryRequest request) {
         var user = lockUser(userId);
         var project = writableProject(userId, request.teamId(), request.projectId());
+        requireManualDuration(request.durationSeconds());
+        requireWorkDateInWindow(request.workDate(), project.getTeam().getTimezone());
         var entry = new TimeEntry(user, project.getTeam(), project, EntryType.MANUAL, request.workDate(),
                 null, null, request.durationSeconds(), request.description());
         return response(entries.saveAndFlush(entry));
@@ -186,9 +191,17 @@ public class TimeEntryService {
         if (!project.getId().equals(entry.getProject().getId()) && project.getArchivedAt() != null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Cannot move an entry to an archived project");
         }
+        int durationSeconds = request.durationSeconds().intValueExact();
+        // Unchanged values may predate the limits, e.g. a long forgotten timer or an old entry.
+        if (!entry.getDurationSeconds().equals(durationSeconds)) {
+            requireManualDuration(durationSeconds);
+        }
+        if (!entry.getWorkDate().equals(request.workDate())) {
+            requireWorkDateInWindow(request.workDate(), entry.getTeam().getTimezone());
+        }
         entry.setProject(project);
         entry.setWorkDate(request.workDate());
-        entry.setDurationSeconds(request.durationSeconds().intValueExact());
+        entry.setDurationSeconds(durationSeconds);
         entry.setDescription(request.description());
         return response(entries.saveAndFlush(entry));
     }
@@ -197,6 +210,20 @@ public class TimeEntryService {
     public void delete(UUID userId, UUID entryId) {
         entries.delete(editableEntry(userId, entryId));
         entries.flush();
+    }
+
+    private void requireManualDuration(int durationSeconds) {
+        if (durationSeconds > MAX_MANUAL_DURATION_SECONDS) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A time entry cannot exceed 24 hours");
+        }
+    }
+
+    private void requireWorkDateInWindow(LocalDate workDate, String timezone) {
+        var today = clock.instant().atZone(ZoneId.of(timezone)).toLocalDate();
+        if (workDate.isAfter(today) || workDate.isBefore(today.minusYears(WORK_DATE_YEARS_BACK))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Work date must be within the last " + WORK_DATE_YEARS_BACK + " years and not in the future");
+        }
     }
 
     private TimeEntry editableEntry(UUID userId, UUID entryId) {

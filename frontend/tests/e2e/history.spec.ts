@@ -1,4 +1,4 @@
-import { test, expect, setupTeam as setup, create } from '../support/e2e'
+import { test, expect, setupTeam as setup, create, teamDate } from '../support/e2e'
 import type { Page } from '@playwright/test'
 
 const historyPanel = (page: Page) => page.getByRole('region', { name: 'Historia czasu', exact: true })
@@ -7,7 +7,7 @@ const timeInput = (page: Page) => page.getByRole('region', { name: 'Rejestrowani
 async function addManual(page: Page, description: string) {
   await timeInput(page).getByRole('button', { name: 'Dodaj wpis ręczny' }).click()
   const modal = page.getByRole('dialog', { name: 'Dodaj wpis ręczny' })
-  await modal.getByLabel('Data pracy').fill('2026-01-05')
+  await modal.getByLabel('Data pracy').fill(teamDate(10))
   await modal.getByLabel('Minuty').fill('15')
   await modal.getByLabel('Opis pracy', { exact: false }).fill(description)
   return modal
@@ -49,11 +49,11 @@ test('history paginates, filters archived projects and dates, and resets on team
   const { team, project } = await setup(page, `Filters ${info.project.name} ${Date.now()}`)
   for (let i = 0; i < 21; i++) {
     await create(page.request, '/api/time-entries', { teamId: team.id, projectId: project.id,
-      workDate: '2026-01-05', durationSeconds: 60, description: `Entry ${i}` })
+      workDate: teamDate(10), durationSeconds: 60, description: `Entry ${i}` })
   }
   const archived = await create(page.request, `/api/teams/${team.id}/projects`, { name: 'Archived history', description: null })
   await create(page.request, '/api/time-entries', { teamId: team.id, projectId: archived.id,
-    workDate: '2026-01-06', durationSeconds: 120, description: 'History from archived project' })
+    workDate: teamDate(9), durationSeconds: 120, description: 'History from archived project' })
   await create(page.request, `/api/teams/${team.id}/projects/${archived.id}/archive`, {})
   const emptyTeam = await create(page.request, '/api/teams', { name: 'Empty history', timezone: 'UTC' })
   await page.goto(`/time?team=${team.id}`)
@@ -70,16 +70,16 @@ test('history paginates, filters archived projects and dates, and resets on team
   await expect(history.getByText('Strona 2 z 2')).toBeVisible()
   await expect(history.getByRole('row')).toHaveCount(4)
   await history.getByLabel('Projekt w historii').selectOption(archived.id)
-  await history.getByLabel('Data od').fill('2026-01-06')
-  await history.getByLabel('Data do').fill('2026-01-06')
+  await history.getByLabel('Data od').fill(teamDate(9))
+  await history.getByLabel('Data do').fill(teamDate(9))
   await history.getByRole('button', { name: 'Filtruj', exact: true }).click()
   await expect(history.getByText('Strona 1 z 1')).toBeVisible()
   await expect(history.getByText('History from archived project', { exact: true })).toBeVisible()
   await expect(history.getByRole('row')).toHaveCount(2)
-  await history.getByLabel('Data od').fill('2026-01-07')
+  await history.getByLabel('Data od').fill(teamDate(8))
   await history.getByRole('button', { name: 'Filtruj', exact: true }).click()
   await expect(history.getByRole('alert')).toContainText('nie może być późniejsza')
-  await history.getByLabel('Data do').fill('2026-01-08')
+  await history.getByLabel('Data do').fill(teamDate(7))
   await history.getByRole('button', { name: 'Filtruj', exact: true }).click()
   await expect(history.getByText('Brak wpisów dla wybranych filtrów.')).toBeVisible()
   await page.getByLabel('Zespół', { exact: true }).selectOption(emptyTeam.id)
@@ -93,7 +93,7 @@ test('history paginates, filters archived projects and dates, and resets on team
 test('edits an archived entry, preserves cancel, and confirms permanent deletion', async ({ page }, info) => {
   const { team, project } = await setup(page, `Edit ${info.project.name} ${Date.now()}`)
   const entry = await create(page.request, '/api/time-entries', { teamId: team.id, projectId: project.id,
-    workDate: '2026-01-05', durationSeconds: 900, description: 'Original entry' })
+    workDate: teamDate(10), durationSeconds: 900, description: 'Original entry' })
   await create(page.request, `/api/teams/${team.id}/projects/${project.id}/archive`, {})
   const target = await create(page.request, `/api/teams/${team.id}/projects`, { name: 'Correction target', description: null })
   await page.goto(`/time?team=${team.id}`)
@@ -120,11 +120,11 @@ test('edits an archived entry, preserves cancel, and confirms permanent deletion
   await row.getByRole('button', { name: 'Edytuj', exact: true }).click()
   edit = page.getByRole('dialog', { name: 'Edytuj wpis czasu' })
   await edit.getByLabel('Projekt', { exact: true }).selectOption(target.id)
-  await edit.getByLabel('Data pracy').fill('2026-02-02')
+  await edit.getByLabel('Data pracy').fill(teamDate(3))
   await edit.getByRole('button', { name: 'Zapisz zmiany' }).click()
   await expect(edit).not.toBeVisible()
   await expect(row).toContainText('Correction target')
-  await expect(row.locator('time')).toHaveAttribute('datetime', '2026-02-02')
+  await expect(row.locator('time')).toHaveAttribute('datetime', teamDate(3))
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await row.getByRole('button', { name: 'Usuń', exact: true }).click()
   const remove = page.getByRole('dialog', { name: 'Usuń wpis czasu' })
@@ -143,7 +143,7 @@ test('deleting the last entry on a page returns to the previous page', async ({ 
   const { team, project } = await setup(page, `Delete page ${info.project.name} ${Date.now()}`)
   for (let i = 0; i < 21; i++) {
     await create(page.request, '/api/time-entries', { teamId: team.id, projectId: project.id,
-      workDate: '2026-01-05', durationSeconds: 60, description: `Delete page entry ${i}` })
+      workDate: teamDate(10), durationSeconds: 60, description: `Delete page entry ${i}` })
   }
   await page.goto(`/time?team=${team.id}`)
   const history = historyPanel(page)

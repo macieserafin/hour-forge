@@ -5,6 +5,9 @@ import java.time.*;
 import java.util.*;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.http.HttpStatus;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
@@ -16,6 +19,7 @@ import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
 import pl.macieserafin.hourforge.team.TeamRole;
 import pl.macieserafin.hourforge.timeentry.EntryType;
+import pl.macieserafin.hourforge.timeentry.ManualTimeEntryRequest;
 import pl.macieserafin.hourforge.timeentry.StartTimerRequest;
 import pl.macieserafin.hourforge.timeentry.StopTimerRequest;
 import pl.macieserafin.hourforge.timeentry.TimeEntry;
@@ -107,6 +111,52 @@ class TimeEntryServiceTest {
         assertThat(response.durationSeconds()).isEqualTo(60);
         assertThat(response.startedAt()).isEqualTo(NOW.minusSeconds(120));
         assertThat(response.endedAt()).isEqualTo(NOW);
+    }
+    @ParameterizedTest
+    @CsvSource({"2026-10-19, 86400", "2024-10-19, 60"})
+    void acceptsManualEntriesAtTheDurationAndWorkDateLimits(LocalDate workDate, int seconds) {
+        writeAccess();
+        when(entries.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
+        var response = service.createManual(actor.getId(), new ManualTimeEntryRequest(team.getId(), project.getId(), workDate, seconds, null));
+        assertThat(response.workDate()).isEqualTo(workDate);
+        assertThat(response.durationSeconds()).isEqualTo(seconds);
+    }
+    @ParameterizedTest
+    @CsvSource({"2026-10-20, 60", "2024-10-18, 60", "2026-10-19, 86401"})
+    void rejectsManualEntriesOutsideTheDurationAndWorkDateLimits(LocalDate workDate, int seconds) {
+        writeAccess();
+        assertThatThrownBy(() -> service.createManual(actor.getId(), new ManualTimeEntryRequest(team.getId(), project.getId(), workDate, seconds, null)))
+                .isInstanceOfSatisfying(ResponseStatusException.class, error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+        verify(entries, never()).saveAndFlush(any());
+    }
+    @Test void todayFollowsTheTeamTimeZone() {
+        var ahead = identified(new Team("Ahead", "Pacific/Kiritimati"));
+        var aheadProject = project(ahead);
+        when(users.findLockedForTimeEntryById(actor.getId())).thenReturn(Optional.of(actor));
+        when(teams.findLockedById(ahead.getId())).thenReturn(Optional.of(ahead));
+        when(members.findByTeamIdAndUserId(ahead.getId(), actor.getId())).thenReturn(Optional.of(new TeamMember(ahead, actor, TeamRole.MEMBER, NOW)));
+        when(projects.findByIdAndTeamId(aheadProject.getId(), ahead.getId())).thenReturn(Optional.of(aheadProject));
+        when(entries.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
+        // 10:00 UTC on 2026-10-19 is already 2026-10-20 in UTC+14.
+        var tomorrowInUtc = LocalDate.of(2026, 10, 20);
+        assertThat(service.createManual(actor.getId(), new ManualTimeEntryRequest(ahead.getId(), aheadProject.getId(), tomorrowInUtc, 60, null))
+                .workDate()).isEqualTo(tomorrowInUtc);
+    }
+    @Test void correctionMayKeepOldValuesOutsideTheLimitsButCannotIntroduceThem() {
+        var timer = timer();
+        timer.setWorkDate(LocalDate.of(2023, 1, 1));
+        timer.setEndedAt(NOW);
+        timer.setDurationSeconds(108_000);
+        writeAccess();
+        when(entries.saveAndFlush(timer)).thenReturn(timer);
+        var kept = service.update(actor.getId(), timer.getId(), new UpdateTimeEntryRequest(project.getId(), LocalDate.of(2023, 1, 1), BigDecimal.valueOf(108_000), "Only text"));
+        assertThat(kept.description()).isEqualTo("Only text");
+        assertThatThrownBy(() -> service.update(actor.getId(), timer.getId(), new UpdateTimeEntryRequest(project.getId(), LocalDate.of(2023, 1, 1), BigDecimal.valueOf(90_000), null)))
+                .isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.update(actor.getId(), timer.getId(), new UpdateTimeEntryRequest(project.getId(), LocalDate.of(2023, 1, 2), BigDecimal.valueOf(108_000), null)))
+                .isInstanceOf(ResponseStatusException.class);
+        assertThat(timer.getDurationSeconds()).isEqualTo(108_000);
+        assertThat(timer.getWorkDate()).isEqualTo(LocalDate.of(2023, 1, 1));
     }
     @Test void activeEntryCannotBeDeleted() {
         var timer = timer();

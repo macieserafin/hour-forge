@@ -49,6 +49,7 @@ class TimeEntryIT extends ApiIntegrationTestSupport {
     private Project project;
     private Project foreignProject;
     private AppUserPrincipal principal;
+    private LocalDate today;
 
     @BeforeEach
     void setup() {
@@ -61,6 +62,7 @@ class TimeEntryIT extends ApiIntegrationTestSupport {
         fixtures.member(team, other, TeamRole.OWNER, Instant.now());
         project = fixtures.project(team, "Work", null);
         foreignProject = fixtures.project(foreignTeam, "Private", null);
+        today = LocalDate.now(ZoneId.of(team.getTimezone()));
     }
 
     @Test
@@ -171,13 +173,13 @@ class TimeEntryIT extends ApiIntegrationTestSupport {
         running(actor, project);
         mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"teamId":"%s","projectId":"%s","workDate":"2026-01-05","durationSeconds":3600,
+                                {"teamId":"%s","projectId":"%s","workDate":"%4$s","durationSeconds":3600,
                                  "description":"  Manual work  ","userId":"%s","entryType":"TIMER",
                                  "startedAt":"2026-01-05T00:00:00Z","endedAt":"2026-01-05T01:00:00Z"}
-                                """.formatted(team.getId(), project.getId(), other.getId())))
+                                """.formatted(team.getId(), project.getId(), other.getId(), today.minusDays(3))))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.userId").value(actor.getId().toString()))
                 .andExpect(jsonPath("$.entryType").value("MANUAL"))
-                .andExpect(jsonPath("$.workDate").value("2026-01-05"))
+                .andExpect(jsonPath("$.workDate").value(today.minusDays(3).toString()))
                 .andExpect(jsonPath("$.durationSeconds").value(3600))
                 .andExpect(jsonPath("$.startedAt").isEmpty()).andExpect(jsonPath("$.endedAt").isEmpty())
                 .andExpect(jsonPath("$.description").value("Manual work"));
@@ -240,8 +242,8 @@ class TimeEntryIT extends ApiIntegrationTestSupport {
     @ValueSource(strings = {"null", "0", "-1", "2147483648"})
     void manualDurationMustBePositiveAndFitDatabaseColumn(String duration) throws Exception {
         mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"teamId\":\"%s\",\"projectId\":\"%s\",\"workDate\":\"2026-01-01\",\"durationSeconds\":%s}"
-                                .formatted(team.getId(), project.getId(), duration)))
+                        .content("{\"teamId\":\"%s\",\"projectId\":\"%s\",\"workDate\":\"%s\",\"durationSeconds\":%s}"
+                                .formatted(team.getId(), project.getId(), today, duration)))
                 .andExpect(status().isBadRequest());
     }
 
@@ -285,6 +287,34 @@ class TimeEntryIT extends ApiIntegrationTestSupport {
     }
 
     @Test
+    void manualEntriesMustFitDurationAndWorkDateLimitsInTeamTimeZone() throws Exception {
+        long count = entries.count();
+        for (String body : new String[]{manualBody(today.plusDays(1), 60), manualBody(today.minusYears(2).minusDays(1), 60),
+                manualBody(today, 86_401)}) {
+            mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                    .content(body)).andExpect(status().isBadRequest());
+        }
+        assertThat(entries.count()).isEqualTo(count);
+        mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(manualBody(today, 86_400)))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.workDate").value(today.toString()));
+        mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(manualBody(today.minusYears(2), 60)))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void timerLongerThanADayCanStillBeStopped() throws Exception {
+        var timer = running(actor, project);
+        timer.setStartedAt(Instant.now().minus(Duration.ofHours(30)).truncatedTo(ChronoUnit.MICROS));
+        entries.flush();
+        mvc.perform(post("/api/timer/stop").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"entryId\":\"" + timer.getId() + "\"}"))
+                .andExpect(status().isOk());
+        assertThat(timer.getDurationSeconds()).isGreaterThan(86_400);
+    }
+
+    @Test
     void invalidStopDurationDoesNotMutateTimer() throws Exception {
         var timer = running(actor, project);
         for (Instant start : new Instant[]{Instant.now().plusSeconds(60), Instant.now().minusSeconds((long) Integer.MAX_VALUE + 60)}) {
@@ -304,8 +334,13 @@ class TimeEntryIT extends ApiIntegrationTestSupport {
     }
 
     private String manualBody(String description) {
-        return "{\"teamId\":\"%s\",\"projectId\":\"%s\",\"workDate\":\"2026-01-01\",\"durationSeconds\":60,\"description\":\"%s\"}"
-                .formatted(team.getId(), project.getId(), description);
+        return "{\"teamId\":\"%s\",\"projectId\":\"%s\",\"workDate\":\"%s\",\"durationSeconds\":60,\"description\":\"%s\"}"
+                .formatted(team.getId(), project.getId(), today.minusDays(1), description);
+    }
+
+    private String manualBody(LocalDate workDate, int durationSeconds) {
+        return "{\"teamId\":\"%s\",\"projectId\":\"%s\",\"workDate\":\"%s\",\"durationSeconds\":%d}"
+                .formatted(team.getId(), project.getId(), workDate, durationSeconds);
     }
 
     private String startBody(UUID teamId, UUID projectId) {
@@ -314,7 +349,7 @@ class TimeEntryIT extends ApiIntegrationTestSupport {
 
     private String body(String path, UUID teamId, UUID projectId) {
         return path.endsWith("start") ? startBody(teamId, projectId)
-                : "{\"teamId\":\"%s\",\"projectId\":\"%s\",\"workDate\":\"2026-01-01\",\"durationSeconds\":60}"
-                .formatted(teamId, projectId);
+                : "{\"teamId\":\"%s\",\"projectId\":\"%s\",\"workDate\":\"%s\",\"durationSeconds\":60}"
+                .formatted(teamId, projectId, today.minusDays(1));
     }
 }

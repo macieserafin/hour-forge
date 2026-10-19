@@ -278,7 +278,7 @@ async function timeRequest(path: string, body?: unknown, signal?: AbortSignal): 
   })
   if (!response.ok) {
     const messages: Record<number, string> = {
-      400: 'Sprawdź projekt, datę i czas trwania wpisu. Czas musi być dodatnią liczbą pełnych sekund, a opis może mieć najwyżej 2000 znaków.',
+      400: 'Sprawdź projekt, datę i czas trwania wpisu. Wpis może mieć najwyżej 24 godziny, data pracy musi mieścić się w ostatnich 2 latach i nie może być z przyszłości, a opis może mieć najwyżej 2000 znaków.',
       401: 'Sesja wygasła. Zaloguj się ponownie.',
       403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
       404: 'Nie znaleziono wpisu, projektu lub zespołu albo nie masz już do niego dostępu.',
@@ -309,7 +309,7 @@ async function changeTimeEntry(id: string, method: 'PATCH' | 'DELETE', body?: Up
   })
   if (!response.ok) {
     const messages: Record<number, string> = {
-      400: 'Sprawdź projekt, datę i dodatni czas trwania w pełnych sekundach. Opis może mieć najwyżej 2000 znaków.',
+      400: 'Sprawdź projekt, datę i czas trwania. Wpis może mieć najwyżej 24 godziny, data pracy musi mieścić się w ostatnich 2 latach i nie może być z przyszłości, a opis może mieć najwyżej 2000 znaków.',
       401: 'Sesja wygasła. Zaloguj się ponownie.',
       403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
       404: 'Wpis został usunięty lub nie masz już dostępu do wpisu, projektu lub zespołu.',

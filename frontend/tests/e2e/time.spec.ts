@@ -1,4 +1,4 @@
-import { test, expect, member as memberEmail, memberPassword, login, post, create, createTeamProject as setup } from '../support/e2e'
+import { test, expect, member as memberEmail, memberPassword, login, post, create, createTeamProject as setup, teamDate } from '../support/e2e'
 
 test('timer survives refresh and team changes while manual entries can be saved', { tag: '@responsive' }, async ({ page }, testInfo) => {
   await login(page)
@@ -34,7 +34,7 @@ test('timer survives refresh and team changes while manual entries can be saved'
   const manual = page.getByRole('dialog', { name: 'Dodaj wpis ręczny' })
   await expect(manual).toContainText(second.team.name)
   await expect(manual.getByLabel('Projekt', { exact: true })).toHaveValue(second.project.id)
-  await manual.getByLabel('Data pracy').fill('2026-01-05')
+  await manual.getByLabel('Data pracy').fill(teamDate(10))
   await manual.getByRole('button', { name: 'Zapisz wpis' }).click()
   await expect(manual.getByRole('alert')).toContainText('Podaj dodatni czas')
   await manual.getByLabel('Godziny').fill('1')
@@ -46,7 +46,7 @@ test('timer survives refresh and team changes while manual entries can be saved'
   const manualResponse = page.waitForResponse(response => response.url().endsWith('/api/time-entries') && response.request().method() === 'POST')
   await manual.getByRole('button', { name: 'Zapisz wpis' }).click()
   const entry = await (await manualResponse).json()
-  expect(entry).toMatchObject({ teamId: second.team.id, projectId: second.project.id, entryType: 'MANUAL', workDate: '2026-01-05', durationSeconds: 3723, startedAt: null, endedAt: null })
+  expect(entry).toMatchObject({ teamId: second.team.id, projectId: second.project.id, entryType: 'MANUAL', workDate: teamDate(10), durationSeconds: 3723, startedAt: null, endedAt: null })
   await expect(manual).not.toBeVisible()
   await expect(page.getByRole('status').filter({ hasText: 'Wpis ręczny zapisany' })).toContainText('01:02:03')
   expect((await (await page.request.get('/api/timer/active')).json()).id).toBe(started.id)

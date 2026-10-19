@@ -8,7 +8,7 @@ import { formatDuration, useTimeEntryHistory } from '../lib/time'
 const emptyFilters: TimeEntryHistoryFilters = { projectId: '', from: '', to: '' }
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
 
-export function TimeEntryHistory({ userId, teamId }: { userId: string; teamId: string }) {
+export function TimeEntryHistory({ userId, teamId, timezone }: { userId: string; teamId: string; timezone: string }) {
   const projects = useProjects(userId, teamId, true)
   const [draft, setDraft] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
@@ -93,7 +93,7 @@ export function TimeEntryHistory({ userId, teamId }: { userId: string; teamId: s
             <button className="button-secondary" disabled={page + 1 >= history.data.totalPages || history.isFetching} onClick={() => setPage(page + 1)}>Następna<ChevronRight size={16} /></button></div>
         </nav>}
       </>}
-    {action?.type === 'edit' && projects.data && <EditTimeEntry userId={userId} entry={action.entry} projects={projects.data} onClose={() => setAction(null)} />}
+    {action?.type === 'edit' && projects.data && <EditTimeEntry userId={userId} entry={action.entry} projects={projects.data} timezone={timezone} onClose={() => setAction(null)} />}
     {action?.type === 'delete' && <DeleteTimeEntry userId={userId} entry={action.entry} onClose={() => setAction(null)} onDeleted={() => {
       setAction(null)
       if (page > 0 && history.data?.content.length === 1) setPage(page - 1)
