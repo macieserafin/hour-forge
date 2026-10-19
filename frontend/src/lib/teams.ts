@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, acceptInvitation, archiveTeam, createInvitation, createTeam, deleteTeam, getInvitationPreview, getTeamSummary, getTeams,
+import { ApiError, acceptInvitation, archiveTeam, createInvitation, createTeam, deleteTeam, getInvitationPreview, getInvitations, revokeInvitation, getTeamSummary, getTeams,
   transferOwnership, updateTeam, type Team } from './api'
 import { sessionOptions } from './auth'
 
@@ -112,9 +112,38 @@ export function useInvitationPreview(userId: string, token: string) {
   return query
 }
 
-export function useCreateInvitation() {
+export const invitationsKey = (userId: string, teamId: string) => [...teamsKey(userId), teamId, 'invitations'] as const
+
+export function useInvitations(userId: string, teamId: string, page: number) {
+  const client = useQueryClient()
+  const handleError = useAuthError()
+  const query = useQuery({ queryKey: [...invitationsKey(userId, teamId), page],
+    queryFn: ({ signal }) => getInvitations(teamId, page, signal), retry: false,
+    refetchInterval: 30_000, refetchOnWindowFocus: 'always' })
+  useEffect(() => {
+    if (query.error) {
+      handleError(query.error)
+      if (query.error instanceof ApiError && [403, 404].includes(query.error.status)) void client.invalidateQueries({ queryKey: teamsKey(userId), exact: true })
+    }
+  }, [query.error, handleError, client, userId])
+  return query
+}
+
+export function useRevokeInvitation(userId: string, teamId: string) {
+  const client = useQueryClient()
   const onError = useAuthError()
-  return useMutation({ mutationFn: createInvitation, onError, gcTime: 0 })
+  return useMutation({ mutationFn: (id: string) => revokeInvitation(teamId, id), onError, retry: false,
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: invitationsKey(userId, teamId) })
+      await client.invalidateQueries({ queryKey: teamsKey(userId), exact: true })
+    } })
+}
+
+export function useCreateInvitation(userId: string) {
+  const client = useQueryClient()
+  const onError = useAuthError()
+  return useMutation({ mutationFn: createInvitation, onError, gcTime: 0, retry: false,
+    onSettled: (_data, _error, input) => client.invalidateQueries({ queryKey: invitationsKey(userId, input.teamId) }) })
 }
 
 export function useAcceptInvitation(userId: string) {

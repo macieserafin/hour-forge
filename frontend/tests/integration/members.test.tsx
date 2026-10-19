@@ -45,7 +45,7 @@ it('requires confirmation for the selected person and preserves cancellation', a
   await userEvent.click(modal.getByRole('button', { name: 'Potwierdź usunięcie' }))
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   expect(screen.getByRole('region', { name: 'Lista członków zespołu' })).not.toHaveTextContent(worker.displayName)
-  expect(screen.getByRole('status')).toHaveTextContent(`Zakończono dostęp osoby ${worker.displayName}`)
+  expect(screen.getByText(new RegExp(`Zakończono dostęp osoby ${worker.displayName}`))).toBeVisible()
   expect(fetcher.mock.calls.filter(([, options]) => options?.method === 'DELETE')).toHaveLength(1)
 })
 

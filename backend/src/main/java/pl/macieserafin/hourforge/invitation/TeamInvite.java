@@ -11,7 +11,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
-import org.hibernate.annotations.CreationTimestamp;
+import jakarta.persistence.PrePersist;
 import pl.macieserafin.hourforge.team.Team;
 import pl.macieserafin.hourforge.user.User;
 
@@ -46,9 +46,18 @@ public class TeamInvite {
     @Column(name = "revoked_at")
     private Instant revokedAt;
 
-    @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    @PrePersist
+    void initializeCreatedAt() {
+        if (createdAt == null) createdAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+    }
+
+    public TeamInvite(Team team, User creator, String hash, Integer maxUses, Instant expiresAt, Instant createdAt) {
+        this(team, creator, hash, maxUses, expiresAt);
+        this.createdAt = createdAt;
+    }
 
     protected TeamInvite() {
     }

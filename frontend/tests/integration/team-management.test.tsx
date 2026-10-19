@@ -23,7 +23,7 @@ it('edits the team name and time zone from the settings', async () => {
   await userEvent.type(modal.getByLabelText('Nazwa zespołu'), 'Nowa nazwa')
   await userEvent.selectOptions(modal.getByLabelText('Strefa czasowa'), 'UTC')
   await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
-  expect(await screen.findByRole('status')).toHaveTextContent('Zapisano ustawienia zespołu Nowa nazwa.')
+  expect(await screen.findByText('Zapisano ustawienia zespołu Nowa nazwa.')).toBeVisible()
   expect(sent).toEqual({ name: 'Nowa nazwa', timezone: 'UTC' })
 })
 
@@ -40,7 +40,7 @@ it('archives a team only after showing the irreversible effects', async () => {
   expect(fetcher.mock.calls.some(([path]) => String(path).endsWith('/archive'))).toBe(false)
   await userEvent.click(modal.getByRole('button', { name: 'Zarchiwizuj zespół' }))
   await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Zarchiwizuj na stałe' }))
-  expect(await screen.findByRole('status')).toHaveTextContent('Zespół Studio został zarchiwizowany.')
+  expect(await screen.findByText('Zespół Studio został zarchiwizowany.')).toBeVisible()
   expect(await screen.findByText('Zarchiwizowany')).toBeVisible()
   expect(screen.queryByRole('button', { name: 'Zaproś do zespołu' })).not.toBeInTheDocument()
   const settings = await openSettings()

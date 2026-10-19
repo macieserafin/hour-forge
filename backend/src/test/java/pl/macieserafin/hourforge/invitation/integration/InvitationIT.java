@@ -78,11 +78,11 @@ class InvitationIT extends ApiIntegrationTestSupport {
     }
 
     @Test
-    void createsDistinctTokensAndAllowsUnboundedUseCount() {
+    void createsDistinctTokensAndDefaultsToOneUse() {
         var first = create(null);
         var second = create(null);
         assertThat(first.token()).isNotEqualTo(second.token());
-        assertThat(first.maxUses()).isNull();
+        assertThat(first.maxUses()).isEqualTo(1);
     }
 
     @Test
@@ -104,7 +104,7 @@ class InvitationIT extends ApiIntegrationTestSupport {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"{}", "{\"expiresAt\":null}", "{\"expiresAt\":\"2020-01-01T00:00:00Z\"}",
+    @ValueSource(strings = {"{\"expiresAt\":\"2020-01-01T00:00:00Z\"}", "{\"expiresAt\":\"9999-01-01T00:00:00Z\"}",
             "{\"expiresAt\":\"FUTURE\",\"maxUses\":0}", "{\"expiresAt\":\"FUTURE\",\"maxUses\":-1}"})
     void validatesExpirationAndOptionalLimit(String body) throws Exception {
         mvc.perform(post("/api/teams/{id}/invites", team.getId()).with(user(principal(owner))).with(csrf())

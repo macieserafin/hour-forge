@@ -6,11 +6,12 @@ import type { Team } from '../lib/api'
 import { useCreateInvitation, useCreateTeam, useTeams } from '../lib/teams'
 import { TeamMembersPanel } from './TeamMembersPanel'
 import { TeamSettingsModal } from './TeamSettings'
+import { TeamInvitationsPanel } from './TeamInvitationsPanel'
 
 const roleLabel = (role: Team['role']) => role === 'OWNER' ? 'Właściciel' : 'Członek'
 const dateLabel = (date: string) => new Date(date).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })
-const localDateTime = () => {
-  const now = new Date()
+const localDateTime = (days = 0) => {
+  const now = new Date(Date.now() + days * 86_400_000)
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
 }
 
@@ -39,10 +40,10 @@ function CreateTeamModal({ userId, onCreated, onClose }: { userId: string; onCre
   </Modal>
 }
 
-function InviteModal({ team, onClose }: { team: Team; onClose: () => void }) {
-  const invite = useCreateInvitation()
-  const [expires, setExpires] = useState('')
-  const [limit, setLimit] = useState('')
+function InviteModal({ userId, team, onClose }: { userId: string; team: Team; onClose: () => void }) {
+  const invite = useCreateInvitation(userId)
+  const [expires, setExpires] = useState(() => localDateTime(7))
+  const [limit, setLimit] = useState('1')
   const [validation, setValidation] = useState('')
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState('')
@@ -50,10 +51,10 @@ function InviteModal({ team, onClose }: { team: Team; onClose: () => void }) {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const date = new Date(expires)
-    if (!Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) {
-      setValidation('Wybierz datę wygaśnięcia w przyszłości.'); return
+    if (!Number.isFinite(date.getTime()) || date.getTime() <= Date.now() || date.getTime() > Date.now() + 30 * 86_400_000) {
+      setValidation('Wybierz datę wygaśnięcia w ciągu najbliższych 30 dni.'); return
     }
-    const maxUses = limit === '' ? null : Number(limit)
+    const maxUses = limit === '' ? 1 : Number(limit)
     if (maxUses !== null && (!Number.isInteger(maxUses) || maxUses < 1 || maxUses > 2147483647)) {
       setValidation('Limit użyć musi być dodatnią liczbą całkowitą.'); return
     }
@@ -81,8 +82,8 @@ function InviteModal({ team, onClose }: { team: Team; onClose: () => void }) {
       <p className="sr-only" role="status">{copied ? 'Skopiowano link do schowka.' : ''}</p>
     </div> : <form onSubmit={submit}>
       <fieldset disabled={invite.isPending}>
-        <div className="field-group"><label htmlFor="invite-expiration">Data wygaśnięcia</label><input className="text-input" id="invite-expiration" type="datetime-local" min={localDateTime()} required value={expires} onChange={event => setExpires(event.target.value)} /><p className="field-hint">Data i godzina w Twojej lokalnej strefie czasowej.</p></div>
-        <div className="field-group"><label htmlFor="invite-limit">Limit użyć <span className="optional-label">(opcjonalnie)</span></label><input className="text-input" id="invite-limit" type="number" min={1} max={2147483647} step={1} value={limit} onChange={event => setLimit(event.target.value)} placeholder="Bez limitu" /><p className="field-hint">Pozostaw puste, aby nie ograniczać liczby dołączeń.</p></div>
+        <div className="field-group"><label htmlFor="invite-expiration">Data wygaśnięcia</label><input className="text-input" id="invite-expiration" type="datetime-local" min={localDateTime()} max={localDateTime(30)} required value={expires} onChange={event => setExpires(event.target.value)} /><p className="field-hint">Domyślnie 7 dni, najwyżej 30 dni. Data i godzina w Twojej lokalnej strefie czasowej.</p></div>
+        <div className="field-group"><label htmlFor="invite-limit">Limit użyć</label><input className="text-input" id="invite-limit" type="number" min={1} max={2147483647} step={1} value={limit} onChange={event => setLimit(event.target.value)} placeholder="1" /><p className="field-hint">Domyślnie jedno użycie. Możesz podać większy dodatni limit.</p></div>
       </fieldset>
       {(validation || invite.isError) && <p role="alert" className="form-error">{validation || invite.error?.message}</p>}
       <footer className="dialog-actions"><button type="button" className="button-secondary" disabled={invite.isPending} onClick={onClose}>Anuluj</button><button type="submit" className="button-primary" disabled={invite.isPending}>{invite.isPending ? <LoaderCircle size={16} className="spin" /> : <Link2 size={16} />}{invite.isPending ? 'Generowanie…' : 'Generuj link'}</button></footer>
@@ -115,7 +116,8 @@ export function TeamsPanel({ userId }: { userId: string }) {
         }} /> : <p className="form-error" role="alert">Ten zespół jest niedostępny. Wybierz inny zespół z listy.</p>}
       </>}
     {modal === 'create' && <CreateTeamModal userId={userId} onClose={() => setModal(null)} onCreated={team => { select(team); setModal(null) }} />}
-    {modal === 'invite' && selected?.role === 'OWNER' && !selected.archivedAt && <InviteModal key={selected.id} team={selected} onClose={() => setModal(null)} />}
+    {!teams.isError && selected?.role === 'OWNER' && <TeamInvitationsPanel key={`${selected.id}:${selected.role}`} userId={userId} team={selected} />}
+    {modal === 'invite' && selected?.role === 'OWNER' && !selected.archivedAt && <InviteModal key={selected.id} userId={userId} team={selected} onClose={() => setModal(null)} />}
     {modal === 'settings' && selected?.role === 'OWNER' && <TeamSettingsModal key={selected.id} userId={userId} team={selected} onClose={() => setModal(null)}
       onSaved={team => { setModal(null); setNotice(`Zapisano ustawienia zespołu ${team.name}.`) }}
       onArchived={team => { setModal(null); setNotice(`Zespół ${team.name} został zarchiwizowany.`) }}

@@ -43,22 +43,23 @@ public class TeamMembershipService {
         requireOwner(activeMember(teamId, actorId));
         var target = members.findByTeamIdAndUserId(teamId, targetUserId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        endMembership(target);
+        endMembership(target, true);
     }
 
     @Transactional
     public void leave(UUID actorId, UUID teamId) {
         requireUser(actorId);
         lockTeam(teamId);
-        endMembership(activeMember(teamId, actorId));
+        endMembership(activeMember(teamId, actorId), false);
     }
 
-    private void endMembership(TeamMember member) {
+    private void endMembership(TeamMember member, boolean removed) {
         if (member.getRole() == TeamRole.OWNER) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "The owner cannot leave or be removed");
         }
         if (member.getLeftAt() == null) {
             member.setLeftAt(clock.instant().truncatedTo(ChronoUnit.MICROS));
+            member.setRemovedAt(removed ? member.getLeftAt() : null);
             members.save(member);
         }
     }

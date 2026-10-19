@@ -41,6 +41,12 @@ public class TeamMember {
     @Column(name = "left_at")
     private Instant leftAt;
 
+    @Column(name = "removed_at")
+    private Instant removedAt;
+
+    public Instant getRemovedAt() { return removedAt; }
+    public void setRemovedAt(Instant removedAt) { this.removedAt = removedAt; }
+
     protected TeamMember() {
     }
 

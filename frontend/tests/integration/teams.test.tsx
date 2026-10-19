@@ -29,7 +29,7 @@ it('validates a team name before sending a create request', async () => {
 it('creates a team and generates an invitation through the shared API boundary', async () => {
   let teams = [] as typeof team[]
   mockApi({ 'GET /api/teams': () => json(teams), 'POST /api/teams': () => { teams = [team]; return json(team, 201) },
-    'POST /api/teams/team/invites': () => json({ id: 'invite', teamId: team.id, invitationUrl: 'https://example.test/invite/token', token: 'token', maxUses: 1, expiresAt: '2099-01-01T00:00:00Z' }) })
+    'POST /api/teams/team/invites': () => json({ id: 'invite', teamId: team.id, invitationUrl: 'https://example.test/invite/token', token: 'token', maxUses: 1, expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }) })
   renderApp(<App />, '/teams')
   await userEvent.click(await screen.findByRole('button', { name: 'Utwórz zespół' }))
   let modal = within(screen.getByRole('dialog'))
@@ -37,8 +37,7 @@ it('creates a team and generates an invitation through the shared API boundary',
   await userEvent.click(modal.getByRole('button', { name: 'Utwórz zespół' }))
   await userEvent.click(await screen.findByRole('button', { name: 'Zaproś do zespołu' }))
   modal = within(screen.getByRole('dialog'))
-  await userEvent.type(modal.getByLabelText('Data wygaśnięcia'), '2099-01-01T00:00')
-  await userEvent.type(modal.getByLabelText('Limit użyć', { exact: false }), '1')
+  expect(modal.getByLabelText('Limit użyć', { exact: false })).toHaveValue(1)
   await userEvent.click(modal.getByRole('button', { name: 'Generuj link' }))
   expect(await modal.findByLabelText('Link zaproszeniowy')).toHaveValue('https://example.test/invite/token')
 })

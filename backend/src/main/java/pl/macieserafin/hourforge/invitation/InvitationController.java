@@ -5,6 +5,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,6 +19,19 @@ import java.util.UUID;
 
 @RestController
 public class InvitationController {
+    @GetMapping("/api/teams/{teamId}/invites")
+    public InviteSummaryResponse.Page list(@AuthenticationPrincipal AppUserPrincipal principal, @PathVariable UUID teamId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return invitations.list(principal.getUserId(), teamId, page, size);
+    }
+
+    @DeleteMapping("/api/teams/{teamId}/invites/{inviteId}")
+    public ResponseEntity<Void> revoke(@AuthenticationPrincipal AppUserPrincipal principal, @PathVariable UUID teamId,
+                                      @PathVariable UUID inviteId) {
+        invitations.revoke(principal.getUserId(), teamId, inviteId);
+        return ResponseEntity.noContent().build();
+    }
     private final InvitationService invitations;
     private final RequestRateLimits rateLimits;
 

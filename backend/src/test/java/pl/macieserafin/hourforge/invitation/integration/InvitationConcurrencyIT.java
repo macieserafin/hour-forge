@@ -40,6 +40,7 @@ import static org.mockito.Mockito.doThrow;
 @SpringBootTest(properties = "app.frontend-url=https://hourforge.test")
 class InvitationConcurrencyIT extends IntegrationTestSupport {
     @Autowired InvitationService service;
+    @Autowired pl.macieserafin.hourforge.team.TeamMembershipService memberships;
     @Autowired UserRepository users;
     @Autowired TeamRepository teams;
     @Autowired TeamMemberRepository members;
@@ -82,6 +83,30 @@ class InvitationConcurrencyIT extends IntegrationTestSupport {
         assertThat(outcomes).containsExactlyInAnyOrder(200, 409);
         assertThat(invites.findById(invite.id()).orElseThrow().getUsedCount()).isEqualTo(1);
         assertThat(memberCount()).isEqualTo(2); // One owner and one accepted invite.
+    }
+
+    @Test
+    void revocationAndAcceptanceAreSerializedWithoutConsumptionAfterRevocation() throws Exception {
+        var invite = create(1);
+        var outcomes = concurrently(() -> acceptStatus(first.getId(), invite.token()), () -> {
+            service.revoke(owner.getId(), team.getId(), invite.id()); return 204;
+        });
+        assertThat(outcomes.getFirst()).isIn(200, 410);
+        assertThat(invites.findById(invite.id()).orElseThrow().getRevokedAt()).isNotNull();
+        assertThat(invites.findById(invite.id()).orElseThrow().getUsedCount()).isEqualTo(outcomes.getFirst() == 200 ? 1 : 0);
+        assertThat(acceptStatus(second.getId(), invite.token())).isEqualTo(410);
+    }
+
+    @Test
+    void removalAndAcceptanceCannotRestoreMembershipThroughTheOldLink() throws Exception {
+        fixtures.member(team, first, TeamRole.MEMBER, Instant.now());
+        var invite = create(10);
+        concurrently(() -> acceptStatus(first.getId(), invite.token()), () -> {
+            memberships.remove(owner.getId(), team.getId(), first.getId()); return 204;
+        });
+        assertThat(members.findByTeamIdAndUserId(team.getId(), first.getId()).orElseThrow().getRemovedAt()).isNotNull();
+        assertThat(acceptStatus(first.getId(), invite.token())).isEqualTo(410);
+        assertThat(invites.findById(invite.id()).orElseThrow().getUsedCount()).isZero();
     }
 
     @Test

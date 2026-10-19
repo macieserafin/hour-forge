@@ -1,4 +1,39 @@
-import { test, expect, owner, member, submitLogin as signIn, signOut } from '../support/e2e'
+import { test, expect, owner, member, setupTeam, login, submitLogin as signIn, signOut } from '../support/e2e'
+
+test('owner lists and revokes a new invitation and the recipient cannot use it', { tag: '@responsive' }, async ({ page, browser }, info) => {
+  const { team } = await setupTeam(page, `Invitation management ${info.project.name} ${Date.now()}`)
+  await page.goto(`/teams?team=${team.id}`)
+  await page.getByRole('button', { name: 'Zaproś do zespołu' }).click()
+  const modal = page.getByRole('dialog', { name: 'Zaproś do zespołu' })
+  await expect(modal.getByLabel('Limit użyć')).toHaveValue('1')
+  await modal.getByRole('button', { name: 'Generuj link' }).click()
+  const link = await modal.getByLabel('Link zaproszeniowy').inputValue()
+  await modal.getByRole('button', { name: 'Zamknij', exact: true }).click()
+  const list = page.getByRole('region', { name: 'Zaproszenia zespołu', exact: true })
+  await expect(list.getByRole('cell', { name: 'Aktywne', exact: true })).toBeVisible()
+  await list.getByRole('button', { name: 'Unieważnij', exact: true }).click()
+  const confirm = page.getByRole('dialog', { name: 'Unieważnij zaproszenie' })
+  await confirm.getByRole('button', { name: 'Anuluj' }).click()
+  await expect(list.getByRole('cell', { name: 'Aktywne', exact: true })).toBeVisible()
+  await list.getByRole('button', { name: 'Unieważnij', exact: true }).click()
+  await confirm.getByRole('button', { name: 'Unieważnij zaproszenie', exact: true }).click()
+  await expect(confirm).not.toBeVisible()
+  await page.reload()
+  await expect(list.getByRole('cell', { name: 'Unieważnione', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  expect((await page.request.get('/')).headers()['referrer-policy']).toBe('no-referrer')
+  const guest = await browser.newContext({ baseURL: new URL(page.url()).origin })
+  try {
+    const recipient = await guest.newPage()
+    await login(recipient, member)
+    await recipient.goto(link)
+    await expect(recipient.getByRole('alert')).toContainText('unieważnione')
+    await expect(recipient.getByRole('button', { name: 'Dołącz do zespołu' })).toHaveCount(0)
+    const request = recipient.waitForRequest(req => req.url().endsWith('/api/me'))
+    await recipient.evaluate(() => fetch('/api/me'))
+    expect((await (await request).allHeaders()).referer).toBeUndefined()
+  } finally { await guest.close() }
+})
 
 test('create and select a team, share invitation and join after login', { tag: '@responsive' }, async ({ page, context }, testInfo) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])

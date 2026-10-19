@@ -5,6 +5,7 @@ import type { InvitationStatus, User } from '../lib/api'
 import { useAcceptInvitation, useInvitationPreview } from '../lib/teams'
 
 const unavailable: Record<Exclude<InvitationStatus, 'ACTIVE' | 'ALREADY_MEMBER'>, (team: string) => string> = {
+  NEW_INVITATION_REQUIRED: team => `Po usunięciu z zespołu ${team} potrzebujesz zaproszenia utworzonego później. Poproś właściciela o nowy link.`,
   EXPIRED: team => `To zaproszenie do zespołu ${team} wygasło. Poproś właściciela o nowy link.`,
   REVOKED: team => `To zaproszenie do zespołu ${team} zostało unieważnione. Poproś właściciela o nowy link.`,
   EXHAUSTED: team => `Limit użyć zaproszenia do zespołu ${team} został wyczerpany. Poproś właściciela o nowy link.`,

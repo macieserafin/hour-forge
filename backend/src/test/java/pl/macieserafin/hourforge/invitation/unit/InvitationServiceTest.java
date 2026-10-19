@@ -50,6 +50,17 @@ class InvitationServiceTest {
         assertThatThrownBy(() -> service.create(actor.getId(), team.getId(), new CreateInviteRequest(NOW, 1))).isInstanceOf(ResponseStatusException.class);
         verifyNoInteractions(invites);
     }
+    @Test void defaultsAndMaximumValidityUseTheControlledClock() {
+        creator(TeamRole.OWNER);
+        when(invites.saveAndFlush(any())).thenAnswer(call -> identified(call.getArgument(0)));
+        var defaults = service.create(actor.getId(), team.getId(), new CreateInviteRequest(null, null));
+        assertThat(defaults.expiresAt()).isEqualTo(NOW.plusSeconds(7 * 86400));
+        assertThat(defaults.maxUses()).isEqualTo(1);
+        var boundary = service.create(actor.getId(), team.getId(), new CreateInviteRequest(NOW.plusSeconds(30 * 86400), 20));
+        assertThat(boundary.maxUses()).isEqualTo(20);
+        assertThatThrownBy(() -> service.create(actor.getId(), team.getId(), new CreateInviteRequest(NOW.plusSeconds(30 * 86400 + 1), 1)))
+                .isInstanceOf(ResponseStatusException.class);
+    }
     @Test void generatedTokenIsRandomAndOnlyItsHashIsPersisted() {
         creator(TeamRole.OWNER);
         when(invites.saveAndFlush(any())).thenAnswer(call -> identified(call.getArgument(0)));

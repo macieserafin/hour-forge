@@ -31,7 +31,7 @@ it('explains a missing invitation without offering to join', async () => {
   expect(screen.queryByRole('button', { name: 'Dołącz do zespołu' })).not.toBeInTheDocument()
 })
 
-it.each([['EXPIRED', 'wygasło'], ['REVOKED', 'unieważnione'], ['EXHAUSTED', 'Limit użyć'], ['TEAM_ARCHIVED', 'zarchiwizowany']])
+it.each([['EXPIRED', 'wygasło'], ['REVOKED', 'unieważnione'], ['EXHAUSTED', 'Limit użyć'], ['TEAM_ARCHIVED', 'zarchiwizowany'], ['NEW_INVITATION_REQUIRED', 'potrzebujesz zaproszenia utworzonego później']])
   ('explains an unusable %s invitation without offering to join', async (status, message) => {
     mockApi({ [`GET /api/invites/${token}`]: preview(status) })
     renderApp(<App />, `/invite/${token}`)

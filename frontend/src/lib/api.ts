@@ -20,7 +20,25 @@ export interface TeamSummary {
   activeTimers: boolean
 }
 
-export type InvitationStatus = 'ACTIVE' | 'ALREADY_MEMBER' | 'EXPIRED' | 'REVOKED' | 'EXHAUSTED' | 'TEAM_ARCHIVED'
+export type InvitationStatus = 'ACTIVE' | 'ALREADY_MEMBER' | 'EXPIRED' | 'REVOKED' | 'EXHAUSTED' | 'TEAM_ARCHIVED' | 'NEW_INVITATION_REQUIRED'
+
+export interface InvitationSummary {
+  id: string
+  createdAt: string
+  expiresAt: string
+  maxUses: number | null
+  usedCount: number
+  revokedAt: string | null
+  status: 'ACTIVE' | 'EXPIRED' | 'REVOKED' | 'EXHAUSTED'
+}
+
+export interface InvitationsPage {
+  content: InvitationSummary[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+}
 
 export interface InvitationPreview {
   teamId: string
@@ -246,7 +264,7 @@ async function teamRequest<T>(path: string, body?: unknown, signal?: AbortSignal
   })
   if (!response.ok) {
     const messages: Record<number, string> = {
-      400: path.endsWith('/invites') ? 'Sprawdź datę wygaśnięcia i limit użyć. Data musi być w przyszłości.' : 'Sprawdź nazwę zespołu i strefę czasową.',
+      400: path.endsWith('/invites') ? 'Sprawdź datę wygaśnięcia (najwyżej 30 dni w przyszłości) i dodatni limit użyć.' : 'Sprawdź nazwę zespołu i strefę czasową.',
       401: 'Sesja wygasła. Zaloguj się ponownie.',
       403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
       404: path.startsWith('/api/invites/') ? 'Nie znaleziono zaproszenia. Sprawdź, czy link jest kompletny.' : 'Nie znaleziono zespołu lub nie masz już do niego dostępu.',
@@ -263,6 +281,29 @@ export const getTeams = (signal?: AbortSignal) => teamRequest<Team[]>('/api/team
 export const createTeam = (body: { name: string; timezone: string }) => teamRequest<Team>('/api/teams', body)
 export const createInvitation = ({ teamId, ...body }: { teamId: string; expiresAt: string; maxUses: number | null }) =>
   teamRequest<Invitation>(`/api/teams/${encodeURIComponent(teamId)}/invites`, body)
+
+export async function getInvitations(teamId: string, page: number, signal?: AbortSignal): Promise<InvitationsPage> {
+  return invitationManagementRequest(`/api/teams/${encodeURIComponent(teamId)}/invites?page=${page}&size=20`, 'GET', signal) as Promise<InvitationsPage>
+}
+
+export const revokeInvitation = (teamId: string, id: string) => invitationManagementRequest(
+  `/api/teams/${encodeURIComponent(teamId)}/invites/${encodeURIComponent(id)}`, 'DELETE')
+
+async function invitationManagementRequest(path: string, method: 'GET' | 'DELETE', signal?: AbortSignal): Promise<InvitationsPage | null> {
+  const csrf = method === 'DELETE' ? await getCsrf() : null
+  const response = await request(path, { method, signal, headers: csrf ? { [csrf.headerName]: csrf.token } : undefined })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: 'Nieprawidłowa strona listy zaproszeń.',
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Zarządzanie zaproszeniami jest dostępne wyłącznie dla właściciela zespołu lub sesja formularza wygasła.',
+      404: 'Zespół lub zaproszenie są niedostępne. Odśwież listę.',
+      409: 'Zarchiwizowanego zespołu nie można zmieniać.',
+    }
+    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wczytać lub unieważnić zaproszenia. Spróbuj ponownie.')
+  }
+  return response.status === 204 ? null : response.json() as Promise<InvitationsPage>
+}
 export const acceptInvitation = (token: string) => teamRequest<Team>(`/api/invites/${encodeURIComponent(token)}/accept`, {})
 
 export async function getInvitationPreview(token: string, signal?: AbortSignal): Promise<InvitationPreview> {

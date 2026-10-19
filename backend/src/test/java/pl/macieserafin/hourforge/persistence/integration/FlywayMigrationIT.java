@@ -35,7 +35,29 @@ class FlywayMigrationIT {
                             '00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003',
                             'MANUAL', '2026-10-19', 60)
                         """);
-                assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(5);
+                statement.execute("""
+                        INSERT INTO team_members (id, team_id, user_id, role, joined_at, left_at)
+                        VALUES ('00000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000002',
+                            '00000000-0000-0000-0000-000000000001', 'MEMBER', '2020-01-01', '2020-01-02');
+                        INSERT INTO team_invites (id, team_id, created_by, token_hash, expires_at)
+                        VALUES ('00000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000002',
+                            '00000000-0000-0000-0000-000000000001', 'legacy-long', '9999-01-01'),
+                            ('00000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000002',
+                            '00000000-0000-0000-0000-000000000001', 'legacy-expired', '2000-01-01')
+                        """);
+                assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(6);
+                try (var result = statement.executeQuery("SELECT removed_at = left_at FROM team_members")) {
+                    assertThat(result.next()).isTrue();
+                    assertThat(result.getBoolean(1)).isTrue();
+                }
+                try (var result = statement.executeQuery("SELECT expires_at <= CURRENT_TIMESTAMP + interval '30 days' AND expires_at > CURRENT_TIMESTAMP FROM team_invites WHERE token_hash = 'legacy-long'")) {
+                    assertThat(result.next()).isTrue();
+                    assertThat(result.getBoolean(1)).isTrue();
+                }
+                try (var result = statement.executeQuery("SELECT expires_at = TIMESTAMPTZ '2000-01-01' FROM team_invites WHERE token_hash = 'legacy-expired'")) {
+                    assertThat(result.next()).isTrue();
+                    assertThat(result.getBoolean(1)).isTrue();
+                }
                 upgraded.validate();
                 try (var result = statement.executeQuery("SELECT work_date, duration_seconds FROM time_entries")) {
                     assertThat(result.next()).isTrue();
