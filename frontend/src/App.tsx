@@ -11,6 +11,14 @@ import { ConfirmEmailChangePage } from './pages/ConfirmEmailChangePage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { loginUrl, safeReturnTo } from './lib/navigation'
+import { startPaths, usePreferences } from './lib/preferences'
+
+/** Sends a signed-in person to the page they chose as their start page. */
+function StartRedirect({ userId }: { userId: string }) {
+  const preferences = usePreferences(userId)
+  if (preferences.isPending) return <div className="session-screen" aria-busy="true"><Brand /><div className="session-loader"><LoaderCircle className="spin" size={22} /><p role="status">Wczytywanie ustawień…</p></div></div>
+  return <Navigate to={startPaths[preferences.data?.startPage ?? 'DASHBOARD']} replace />
+}
 
 export function App() {
   const session = useSession()
@@ -36,8 +44,8 @@ export function App() {
   const user = session.data
   const signIn = <Navigate to={loginUrl(location.pathname + location.search)} replace />
   return <Routes>
-    <Route path="/login" element={user ? <Navigate to={safeReturnTo(search.get('returnTo'))} replace /> : <LoginPage />} />
-    <Route path="/register" element={user ? <Navigate to={safeReturnTo(search.get('returnTo'))} replace /> : <RegisterPage />} />
+    <Route path="/login" element={user ? search.get('returnTo') ? <Navigate to={safeReturnTo(search.get('returnTo'))} replace /> : <StartRedirect userId={user.id} /> : <LoginPage />} />
+    <Route path="/register" element={user ? search.get('returnTo') ? <Navigate to={safeReturnTo(search.get('returnTo'))} replace /> : <StartRedirect userId={user.id} /> : <RegisterPage />} />
     <Route path="/dashboard" element={user ? <DashboardPage user={user} /> : signIn} />
     <Route path="/teams" element={user ? <DashboardPage user={user} section="teams" /> : signIn} />
     <Route path="/projects" element={user ? <DashboardPage user={user} section="projects" /> : signIn} />
@@ -49,6 +57,6 @@ export function App() {
     <Route path="/integrations" element={user ? <DashboardPage user={user} section="integrations" /> : signIn} />
     <Route path="/account" element={user ? <DashboardPage user={user} section="account" /> : signIn} />
     <Route path="/invite/:token" element={user ? <InvitePage user={user} /> : signIn} />
-    <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
+    <Route path="*" element={user ? <StartRedirect userId={user.id} /> : <Navigate to="/login" replace />} />
   </Routes>
 }

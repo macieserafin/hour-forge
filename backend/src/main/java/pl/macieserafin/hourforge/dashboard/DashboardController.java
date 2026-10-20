@@ -13,7 +13,8 @@ public class DashboardController {
     public DashboardController(DashboardService dashboard) { this.dashboard = dashboard; }
 
     @GetMapping("/api/dashboard/summary")
-    public DashboardSummary summary(@AuthenticationPrincipal AppUserPrincipal principal, @RequestParam UUID teamId) {
-        return dashboard.summary(principal.getUserId(), teamId);
+    public DashboardSummary summary(@AuthenticationPrincipal AppUserPrincipal principal, @RequestParam UUID teamId,
+                                    @RequestParam(defaultValue = "MONDAY") pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart weekStart) {
+        return dashboard.summary(principal.getUserId(), teamId, weekStart);
     }
 }

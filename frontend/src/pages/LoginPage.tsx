@@ -11,6 +11,7 @@ export function LoginPage() {
   const [email, setEmail] = useState(() => registered && typeof location.state?.email === 'string' ? location.state.email : '')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [rememberMe, setRememberMe] = useState(false)
   const login = useLogin()
   const resend = useResendVerification()
   const [search] = useSearchParams()
@@ -18,7 +19,7 @@ export function LoginPage() {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    login.mutate({ email, password }, { onSuccess: () => setPassword('') })
+    login.mutate({ email, password, rememberMe }, { onSuccess: () => setPassword('') })
   }
 
   return <AuthLayout>
@@ -49,6 +50,7 @@ export function LoginPage() {
               </button>
             </div>
           </div>
+          <label className="remember-me"><input type="checkbox" checked={rememberMe} disabled={login.isPending} onChange={event => setRememberMe(event.target.checked)} />Zapamiętaj mnie na tym urządzeniu (30 dni)</label>
           <p className="field-hint"><Link className="text-link" to="/forgot-password">Nie pamiętasz hasła?</Link></p>
           {login.isError && <p className="form-error" role="alert" id="login-error">{login.error.message}</p>}
           {login.isError && (login.error as { code?: string }).code === 'EMAIL_NOT_VERIFIED' && <div className="field-hint">

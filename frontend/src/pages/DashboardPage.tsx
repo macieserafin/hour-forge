@@ -10,6 +10,8 @@ import { TimePanel } from './TimePanel'
 import { PersonalDashboard } from './PersonalDashboard'
 import { AccountPanel } from './AccountPanel'
 import { IntegrationsPanel } from './IntegrationsPanel'
+import { usePreferences } from '../lib/preferences'
+import { setTimeFormat } from '../lib/time'
 
 function initials(name: string) {
   return name.trim().split(/\s+/).slice(0, 2).map(part => part.charAt(0)).join('').toLocaleUpperCase('pl-PL') || 'U'
@@ -49,6 +51,11 @@ export function DashboardPage({ user, section = 'dashboard' }: { user: User; sec
   const logout = useLogout()
   const [search] = useSearchParams()
   const menu = useRef<HTMLDialogElement>(null)
+  const preferences = usePreferences(user.id)
+  // Saved time is written the way the person chose; the content is rebuilt when that choice changes.
+  const timeFormat = preferences.data?.timeFormat ?? 'CLOCK'
+  setTimeFormat(timeFormat)
+  if (preferences.isPending) return <div className="session-screen" aria-busy="true"><Brand /><div className="session-loader"><LoaderCircle className="spin" size={22} /><p role="status">Wczytywanie ustawień…</p></div></div>
   const firstName = user.displayName.trim().split(/\s+/)[0] || user.displayName
   const date = new Date().toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
   const sectionTitle = section === 'teams' ? 'Zespoły' : section === 'projects' ? 'Projekty' : section === 'time' ? 'Rejestr czasu' : section === 'integrations' ? 'Integracje' : section === 'account' ? 'Konto' : 'Pulpit'
@@ -67,7 +74,7 @@ export function DashboardPage({ user, section = 'dashboard' }: { user: User; sec
         <div className="topbar-right"><span className="topbar-user">{user.displayName}</span><span className="avatar avatar-small" aria-label={user.displayName}>{initials(user.displayName)}</span></div>
       </header>
 
-      <main id="main" className="dashboard-content">
+      <main id="main" className="dashboard-content" key={timeFormat}>
         <div className="page-heading"><div><h1>{section === 'dashboard' ? `Cześć, ${firstName}.` : sectionTitle}</h1><p>{section === 'teams' ? 'Wspólna praca zaczyna się od zespołu.' : section === 'projects' ? 'Projekty i historia pracy Twojego zespołu.' : section === 'time' ? 'Uruchom timer lub dodaj czas wykonanej pracy.' : section === 'integrations' ? 'Połącz zespół z narzędziami, z których już korzystasz.' : section === 'account' ? 'Nazwa, hasło i bezpieczeństwo Twojego konta.' : 'To jest Twój pulpit w HourForge.'}</p></div><p className="date-label">{date}</p></div>
         {logout.isError && <div className="dashboard-error" role="alert">{logout.error.message}<button onClick={() => logout.mutate()}>Spróbuj ponownie</button></div>}
 

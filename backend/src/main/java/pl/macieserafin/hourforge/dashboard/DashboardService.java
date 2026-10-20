@@ -26,15 +26,20 @@ public class DashboardService {
         this.clock = clock;
     }
 
-    @Transactional(readOnly = true)
     public DashboardSummary summary(UUID userId, UUID teamId) {
+        return summary(userId, teamId, pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart.MONDAY);
+    }
+
+    /** The week starts on the day the person chose; the seven days of {@code days} follow from it. */
+    @Transactional(readOnly = true)
+    public DashboardSummary summary(UUID userId, UUID teamId, pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart firstDay) {
         if (!users.existsById(userId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         var membership = members.findByTeamIdAndUserId(teamId, userId)
                 .filter(member -> member.getLeftAt() == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         var timezone = membership.getTeam().getTimezone();
         var today = clock.instant().atZone(ZoneId.of(timezone)).toLocalDate();
-        var weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        var weekStart = today.with(TemporalAdjusters.previousOrSame(firstDay == pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart.SUNDAY ? DayOfWeek.SUNDAY : DayOfWeek.MONDAY));
         var weekEnd = weekStart.plusDays(6);
         var totals = dashboard.totals(userId, teamId, today, weekStart, weekEnd);
         var perDay = dashboard.dailyTotals(userId, teamId, weekStart, weekEnd).stream()

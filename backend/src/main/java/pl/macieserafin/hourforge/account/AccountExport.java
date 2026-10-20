@@ -6,7 +6,8 @@ import java.util.List;
 import java.util.UUID;
 
 /** Everything the application stores about one user: profile, team memberships and own time entries. */
-public record AccountExport(Instant exportedAt, Profile profile, List<Membership> teams, List<Entry> timeEntries) {
+public record AccountExport(Instant exportedAt, Profile profile, List<Membership> teams, List<Entry> timeEntries,
+                            pl.macieserafin.hourforge.preferences.PreferencesResponse preferences) {
     public record Profile(UUID id, String email, String displayName, Instant createdAt, Instant emailVerifiedAt) {
     }
 

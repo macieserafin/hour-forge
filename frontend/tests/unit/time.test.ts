@@ -11,3 +11,14 @@ it('derives today and the allowed work date range in the team time zone', () => 
   expect(workDateRange('Europe/Warsaw', now)).toEqual({ min: '2024-10-19', max: '2026-10-19' })
   expect(workDateRange('UTC', new Date('2028-02-29T12:00:00Z'))).toEqual({ min: '2026-02-28', max: '2028-02-29' })
 })
+
+it('writes saved time in the chosen format and keeps counters in clock form', async () => {
+  const { formatClock, setTimeFormat } = await import('../../src/lib/time')
+  setTimeFormat('DECIMAL')
+  expect(formatDuration(5400)).toBe('1,50 h')
+  expect(formatDuration(900)).toBe('0,25 h')
+  expect(formatDuration(-5)).toBe('0,00 h')
+  expect(formatClock(5400)).toBe('01:30:00')
+  setTimeFormat('CLOCK')
+  expect(formatDuration(5400)).toBe('01:30:00')
+})

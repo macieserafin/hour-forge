@@ -109,12 +109,12 @@ export interface DashboardSummary {
   weekEnd: string
   todaySeconds: number
   weekSeconds: number
-  /** The seven days of the week, Monday first. */
+  /** The seven days of the week, starting with the first day the person chose. */
   days: { date: string; seconds: number }[]
 }
 
-export async function getDashboardSummary(teamId: string, signal?: AbortSignal): Promise<DashboardSummary> {
-  const response = await request(`/api/dashboard/summary?${new URLSearchParams({ teamId })}`, { signal })
+export async function getDashboardSummary(teamId: string, signal?: AbortSignal, weekStart: Preferences['weekStart'] = 'MONDAY'): Promise<DashboardSummary> {
+  const response = await request(`/api/dashboard/summary?${new URLSearchParams({ teamId, weekStart })}`, { signal })
   if (!response.ok) {
     const messages: Record<number, string> = {
       401: 'Sesja wygasła. Zaloguj się ponownie.',
@@ -224,12 +224,12 @@ async function getCsrf(): Promise<CsrfToken> {
   return response.json() as Promise<CsrfToken>
 }
 
-export async function login({ email, password }: { email: string; password: string }): Promise<void> {
+export async function login({ email, password, rememberMe }: { email: string; password: string; rememberMe?: boolean }): Promise<void> {
   const csrf = await getCsrf()
   const response = await request('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', [csrf.headerName]: csrf.token },
-    body: new URLSearchParams({ email: email.trim(), password }),
+    body: new URLSearchParams({ email: email.trim(), password, ...(rememberMe ? { rememberMe: 'true' } : {}) }),
   })
   if (response.status === 429) throw new ApiError(429, tooManyRequestsMessage(response))
   if (response.status === 401) throw new ApiError(401, 'Nieprawidłowy adres e-mail lub hasło.')
@@ -814,4 +814,36 @@ export function getJiraIssues(teamId: string, filters: JiraIssueFilters, pageTok
   if (filters.q.trim()) params.set('q', filters.q.trim())
   if (pageToken) params.set('pageToken', pageToken)
   return jiraRequest<JiraIssuePage>(`/api/integrations/jira/issues?${params}`, 'GET', undefined, signal)
+}
+
+export interface Preferences {
+  defaultTeamId: string | null
+  startPage: 'DASHBOARD' | 'TIME' | 'PROJECTS' | 'TEAMS'
+  timeFormat: 'CLOCK' | 'DECIMAL'
+  weekStart: 'MONDAY' | 'SUNDAY'
+  longTimerEmail: boolean
+  browserNotifications: boolean
+  longTimerHours: number
+  titleTimer: boolean
+}
+
+export async function getPreferences(signal?: AbortSignal): Promise<Preferences> {
+  const response = await request('/api/account/preferences', { signal })
+  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.' : 'Nie udało się wczytać ustawień.')
+  return response.json() as Promise<Preferences>
+}
+
+export async function savePreferences(input: Preferences): Promise<Preferences> {
+  const csrf = await getCsrf()
+  const response = await request('/api/account/preferences', { method: 'PUT',
+    headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token }, body: JSON.stringify(input) })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: 'Sprawdź wybrane ustawienia. Zespół domyślny musi być jednym z Twoich zespołów.',
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Sesja formularza wygasła. Spróbuj ponownie.',
+    }
+    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się zapisać ustawień. Spróbuj ponownie.')
+  }
+  return response.json() as Promise<Preferences>
 }

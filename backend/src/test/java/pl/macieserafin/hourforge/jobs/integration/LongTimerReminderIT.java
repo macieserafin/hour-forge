@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LongTimerReminderIT extends ApiIntegrationTestSupport {
     @Autowired LongTimerReminderService reminders;
     @Autowired TimeEntryRepository entries;
+    @Autowired pl.macieserafin.hourforge.preferences.UserPreferencesRepository preferences;
     @Autowired EntityManager entityManager;
 
     private final Instant now = Instant.parse("2026-10-21T20:00:00Z");
@@ -86,5 +87,22 @@ class LongTimerReminderIT extends ApiIntegrationTestSupport {
         timer("later@example.com", 9, 0);
         assertThat(reminders.remindDue(now)).isZero();
         assertThat(reminders.remindDue(now.plus(90, ChronoUnit.MINUTES))).isEqualTo(1);
+    }
+
+    @Test
+    void usesThePersonsOwnThresholdAndRespectsTurningTheEmailOff() {
+        var six = timer("six@example.com", 7, 0);
+        var off = timer("off@example.com", 14, 0);
+        var prefsSix = new pl.macieserafin.hourforge.preferences.UserPreferences(six.getUser().getId());
+        prefsSix.apply(null, pl.macieserafin.hourforge.preferences.UserPreferences.StartPage.DASHBOARD, pl.macieserafin.hourforge.preferences.UserPreferences.TimeFormat.CLOCK, pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart.MONDAY, true, false, 6, true);
+        var prefsOff = new pl.macieserafin.hourforge.preferences.UserPreferences(off.getUser().getId());
+        prefsOff.apply(null, pl.macieserafin.hourforge.preferences.UserPreferences.StartPage.DASHBOARD, pl.macieserafin.hourforge.preferences.UserPreferences.TimeFormat.CLOCK, pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart.MONDAY, false, false, 10, true);
+        preferences.saveAllAndFlush(java.util.List.of(prefsSix, prefsOff));
+
+        assertThat(reminders.remindDue(now)).isEqualTo(1);
+        assertThat(mail.last().to()).isEqualTo("six@example.com");
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(entries.findById(off.getId()).orElseThrow().getLongTimerRemindedAt()).isNull();
     }
 }

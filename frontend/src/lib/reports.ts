@@ -102,11 +102,11 @@ function localDate(timezone: string, now: Date) {
 
 const isoDate = (date: Date) => date.toISOString().slice(0, 10)
 
-/** Quick report ranges in the team's time zone; weeks run Monday to Sunday. */
-export function reportRanges(timezone: string, now = new Date()) {
+/** Quick report ranges in the team's time zone; weeks start on Monday unless the person chose Sunday. */
+export function reportRanges(timezone: string, now = new Date(), weekStart: 'MONDAY' | 'SUNDAY' = 'MONDAY') {
   const today = localDate(timezone, now)
   const monday = new Date(today)
-  monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7)
+  monday.setUTCDate(monday.getUTCDate() - (weekStart === 'SUNDAY' ? monday.getUTCDay() : (monday.getUTCDay() + 6) % 7))
   const sunday = new Date(monday)
   sunday.setUTCDate(sunday.getUTCDate() + 6)
   const lastMonday = new Date(monday)

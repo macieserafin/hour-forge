@@ -51,6 +51,7 @@ class AccountDataIT extends ApiIntegrationTestSupport {
     @Autowired TimeEntryRepository entries;
     @Autowired TeamInviteRepository invites;
     @Autowired jakarta.persistence.EntityManager em;
+    @Autowired pl.macieserafin.hourforge.preferences.UserPreferencesRepository preferenceRows;
 
     private User user;
     private User colleague;
@@ -115,10 +116,13 @@ class AccountDataIT extends ApiIntegrationTestSupport {
         entries.saveAndFlush(new TimeEntry(user, team, project, EntryType.TIMER, LocalDate.parse("2026-10-19"),
                 Instant.now().minusSeconds(60).truncatedTo(ChronoUnit.MICROS), null, null, "Running"));
         var invite = invites.saveAndFlush(new TeamInvite(team, user, "h".repeat(64), 1, Instant.now().plus(1, ChronoUnit.DAYS)));
+        preferenceRows.saveAndFlush(new pl.macieserafin.hourforge.preferences.UserPreferences(user.getId()));
         var session = signIn();
         mail.clear();
 
         delete(session, PASSWORD).andExpect(status().isNoContent());
+        em.clear();
+        assertThat(preferenceRows.findById(user.getId())).isEmpty();
 
         var gone = users.findById(user.getId()).orElseThrow();
         assertThat(gone.getEmail()).isEqualTo("deleted-" + user.getId() + "@deleted.invalid");

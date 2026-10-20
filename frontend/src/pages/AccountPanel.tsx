@@ -2,7 +2,9 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { LoaderCircle } from 'lucide-react'
 import { Modal } from '../components/Modal'
-import type { User } from '../lib/api'
+import type { Preferences, User } from '../lib/api'
+import { defaultPreferences, usePreferences, useSavePreferences } from '../lib/preferences'
+import { useTeams } from '../lib/teams'
 import { passwordChangeError, useChangePassword, useDeleteAccount, useDownloadAccountData, useRequestEmailChange, useSignOutEverywhere, useUpdateProfile } from '../lib/account'
 
 function ProfileSection({ user }: { user: User }) {
@@ -30,6 +32,70 @@ function ProfileSection({ user }: { user: User }) {
       <button className="button-primary" type="submit" disabled={save.isPending || name.trim() === user.displayName}>
         {save.isPending && <LoaderCircle size={16} className="spin" />}{save.isPending ? 'Zapisywanie…' : 'Zapisz nazwę'}</button>
     </form>
+  </section>
+}
+
+const hourChoices = [6, 8, 10, 12, 16, 24]
+
+function PreferencesSection({ userId }: { userId: string }) {
+  const teams = useTeams(userId)
+  const stored = usePreferences(userId)
+  const save = useSavePreferences(userId)
+  const [draft, setDraft] = useState<Preferences | null>(null)
+  const [saved, setSaved] = useState(false)
+  const [notificationHint, setNotificationHint] = useState('')
+  const current = draft ?? stored.data ?? defaultPreferences
+  const hours = hourChoices.includes(current.longTimerHours) ? hourChoices : [...hourChoices, current.longTimerHours].sort((a, b) => a - b)
+  const change = (patch: Partial<Preferences>) => { setDraft({ ...current, ...patch }); setSaved(false); setNotificationHint(''); if (save.isError) save.reset() }
+
+  async function toggleNotifications(on: boolean) {
+    if (!on) { change({ browserNotifications: false }); return }
+    if (!('Notification' in window)) { setNotificationHint('Ta przeglądarka nie obsługuje powiadomień.'); return }
+    const permission = Notification.permission === 'default' ? await Notification.requestPermission() : Notification.permission
+    if (permission !== 'granted') { setNotificationHint('Przeglądarka nie zezwoliła na powiadomienia. Zmień to w ustawieniach witryny i spróbuj ponownie.'); return }
+    change({ browserNotifications: true })
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    save.mutate(current, { onSuccess: () => { setSaved(true); setDraft(null) } })
+  }
+
+  return <section className="overview-panel account-section" aria-labelledby="account-preferences-title">
+    <h2 id="account-preferences-title">Preferencje</h2>
+    <p className="field-hint">Dotyczą tylko Twojego konta, na każdym urządzeniu.</p>
+    {stored.isPending ? <p className="teams-loading" role="status"><LoaderCircle size={18} className="spin" />Ładowanie ustawień…</p> : <form onSubmit={submit}>
+      <fieldset disabled={save.isPending}>
+        <div className="field-group"><label htmlFor="pref-team">Domyślny zespół</label>
+          <select id="pref-team" className="text-input" value={current.defaultTeamId ?? ''} onChange={event => change({ defaultTeamId: event.target.value || null })}>
+            <option value="">Pierwszy z listy</option>{teams.data?.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select>
+          <p className="field-hint">Wybrany, gdy w adresie nie ma zespołu: na pulpicie, w rejestrze czasu, projektach i integracjach.</p></div>
+        <div className="field-group"><label htmlFor="pref-start">Strona startowa po zalogowaniu</label>
+          <select id="pref-start" className="text-input" value={current.startPage} onChange={event => change({ startPage: event.target.value as Preferences['startPage'] })}>
+            <option value="DASHBOARD">Pulpit</option><option value="TIME">Rejestr czasu</option><option value="PROJECTS">Projekty</option><option value="TEAMS">Zespoły</option></select></div>
+        <div className="field-group"><label htmlFor="pref-format">Zapis czasu</label>
+          <select id="pref-format" className="text-input" value={current.timeFormat} onChange={event => change({ timeFormat: event.target.value as Preferences['timeFormat'] })}>
+            <option value="CLOCK">Godziny:minuty:sekundy (01:30:00)</option><option value="DECIMAL">Godziny dziesiętnie (1,50 h)</option></select>
+          <p className="field-hint">Dotyczy zapisanego czasu. Licznik działającego timera zawsze pokazuje sekundy.</p></div>
+        <div className="field-group"><label htmlFor="pref-week">Pierwszy dzień tygodnia</label>
+          <select id="pref-week" className="text-input" value={current.weekStart} onChange={event => change({ weekStart: event.target.value as Preferences['weekStart'] })}>
+            <option value="MONDAY">Poniedziałek</option><option value="SUNDAY">Niedziela</option></select>
+          <p className="field-hint">Dla Twojego pulpitu i zakresów „ten tydzień” w Twoim raporcie.</p></div>
+        <div className="field-group"><label className="remember-me"><input type="checkbox" checked={current.titleTimer} onChange={event => change({ titleTimer: event.target.checked })} />Pokazuj czas działającego timera w tytule karty przeglądarki</label></div>
+        <h3 className="preferences-heading">Zapomniany timer</h3>
+        <div className="field-group"><label htmlFor="pref-hours">Przypomnij, gdy timer działa dłużej niż</label>
+          <select id="pref-hours" className="text-input" value={current.longTimerHours} onChange={event => change({ longTimerHours: Number(event.target.value) })}>
+            {hours.map(hour => <option key={hour} value={hour}>{hour} godz. czystej pracy</option>)}</select>
+          <p className="field-hint">Przerwy się nie liczą. Przypomnienie wysyłamy raz dla każdego timera.</p></div>
+        <div className="field-group"><label className="remember-me"><input type="checkbox" checked={current.longTimerEmail} onChange={event => change({ longTimerEmail: event.target.checked })} />Wyślij przypomnienie e-mailem</label></div>
+        <div className="field-group"><label className="remember-me"><input type="checkbox" checked={current.browserNotifications} onChange={event => void toggleNotifications(event.target.checked)} />Pokaż powiadomienie w przeglądarce, gdy aplikacja jest otwarta</label>
+          {notificationHint && <p className="field-hint" role="status">{notificationHint}</p>}</div>
+      </fieldset>
+      {save.isError && <p className="form-error" role="alert">{save.error.message}</p>}
+      {saved && <p className="project-notice" role="status">Ustawienia zostały zapisane.</p>}
+      <button className="button-primary" type="submit" disabled={save.isPending || draft === null}>
+        {save.isPending && <LoaderCircle size={16} className="spin" />}{save.isPending ? 'Zapisywanie…' : 'Zapisz ustawienia'}</button>
+    </form>}
   </section>
 }
 
@@ -154,6 +220,7 @@ function DeleteSection() {
 export function AccountPanel({ user }: { user: User }) {
   return <div className="account-panel">
     <ProfileSection user={user} />
+    <PreferencesSection userId={user.id} />
     <EmailChangeSection />
     <PasswordSection />
     <SignOutSection />

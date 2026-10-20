@@ -5,6 +5,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,6 +34,8 @@ import java.io.IOException;
 public class SecurityConfig {
     private static final String LOGIN_URL = "/api/auth/login";
     private static final String EMAIL_PARAMETER = "email";
+    private static final String REMEMBER_PARAMETER = "rememberMe";
+    static final java.time.Duration REMEMBER_FOR = java.time.Duration.ofDays(30);
 
     @Bean
     PasswordEncoder passwordEncoder() {
@@ -41,7 +44,8 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, LoginAttemptService loginAttempts,
-                                            UserCredentialRepository credentials) throws Exception {
+                                            UserCredentialRepository credentials,
+                                            @Value("${server.servlet.session.cookie.secure:false}") boolean secureCookie) throws Exception {
         return http
                 .headers(headers -> headers.referrerPolicy(policy -> policy.policy(
                         org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
@@ -74,6 +78,7 @@ public class SecurityConfig {
                                 return;
                             }
                             loginAttempts.recordSuccess(request.getParameter(EMAIL_PARAMETER), request.getRemoteAddr());
+                            if ("true".equals(request.getParameter(REMEMBER_PARAMETER))) rememberDevice(request, response, secureCookie);
                             response.setStatus(HttpServletResponse.SC_NO_CONTENT);
                         })
                         .failureHandler((request, response, exception) -> {
@@ -87,6 +92,18 @@ public class SecurityConfig {
                         .logoutSuccessHandler((request, response, authentication) ->
                                 response.setStatus(HttpServletResponse.SC_NO_CONTENT)))
                 .build();
+    }
+
+    /**
+     * "Remember me": this session may stay idle for 30 days, and the cookie is made persistent so it survives closing
+     * the browser. The cookie is re-issued with the same name and attributes, so only its lifetime changes.
+     */
+    private static void rememberDevice(HttpServletRequest request, HttpServletResponse response, boolean secure) {
+        var session = request.getSession();
+        session.setMaxInactiveInterval((int) REMEMBER_FOR.toSeconds());
+        var path = request.getContextPath().isEmpty() ? "/" : request.getContextPath();
+        response.addHeader(HttpHeaders.SET_COOKIE, org.springframework.http.ResponseCookie.from("JSESSIONID", session.getId())
+                .path(path).httpOnly(true).secure(secure).sameSite("Lax").maxAge(REMEMBER_FOR).build().toString());
     }
 
     // Not a bean: a Filter bean would also be registered in the servlet container outside the security chain.

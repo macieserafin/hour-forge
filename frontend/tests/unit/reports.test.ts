@@ -44,3 +44,13 @@ it('writes only the filter parameters and leaves the rest of the address alone',
   expect(Object.fromEntries(undated)).toEqual({ team: 't', view: 'team', undated: 'true' })
   expect(Object.fromEntries(clearedSearch(base))).toEqual({ team: 't', view: 'team' })
 })
+
+it('starts the quick week on Sunday when the person chose so', () => {
+  const now = new Date('2026-10-21T10:00:00Z') // a Wednesday
+  expect(reportRanges('UTC', now).week).toEqual({ from: '2026-10-19', to: '2026-10-25' })
+  expect(reportRanges('UTC', now, 'SUNDAY').week).toEqual({ from: '2026-10-18', to: '2026-10-24' })
+  expect(reportRanges('UTC', now, 'SUNDAY').lastWeek).toEqual({ from: '2026-10-11', to: '2026-10-17' })
+  const sunday = new Date('2026-10-18T10:00:00Z')
+  expect(reportRanges('UTC', sunday, 'SUNDAY').week).toEqual({ from: '2026-10-18', to: '2026-10-24' })
+  expect(reportRanges('UTC', sunday).week).toEqual({ from: '2026-10-12', to: '2026-10-18' })
+})

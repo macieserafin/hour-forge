@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Modal } from '../components/Modal'
 import type { Team } from '../lib/api'
 import { useCreateInvitation, useCreateTeam, useTeams } from '../lib/teams'
+import { pickTeam, usePreferences } from '../lib/preferences'
 import { TeamMembersPanel } from './TeamMembersPanel'
 import { TeamSettingsModal } from './TeamSettings'
 import { TeamInvitationsPanel } from './TeamInvitationsPanel'
@@ -97,7 +98,8 @@ export function TeamsPanel({ userId }: { userId: string }) {
   const [modal, setModal] = useState<'create' | 'invite' | 'settings' | null>(null)
   const [notice, setNotice] = useState('')
   const selectedId = search.get('team')
-  const selected = selectedId ? teams.data?.find(team => team.id === selectedId) : teams.data?.[0]
+  const defaultTeamId = usePreferences(userId).data?.defaultTeamId
+  const selected = pickTeam(teams.data, selectedId, defaultTeamId)
   function select(team: Team) { setNotice(''); setSearch({ team: team.id }, { replace: true }) }
 
   return <section className="teams-panel" aria-label="Zarządzanie zespołami">

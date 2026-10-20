@@ -31,7 +31,7 @@ it('rejects an empty display name without calling the server', async () => {
   await userEvent.type(field, '   ')
   await userEvent.click(screen.getByRole('button', { name: 'Zapisz nazwę' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Wpisz nazwę wyświetlaną')
-  expect(fetcher.mock.calls.some(([url]) => String(url).includes('/api/account'))).toBe(false)
+  expect(fetcher.mock.calls.some(([url]) => String(url).includes('/api/account/profile'))).toBe(false)
 })
 
 it('validates a password change locally and never posts an invalid form', async () => {

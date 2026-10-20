@@ -11,6 +11,8 @@ import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.invitation.TeamInviteRepository;
 import pl.macieserafin.hourforge.jira.JiraUserAuthorizationRepository;
 import pl.macieserafin.hourforge.jira.OAuthStateRepository;
+import pl.macieserafin.hourforge.preferences.PreferencesService;
+import pl.macieserafin.hourforge.preferences.UserPreferencesRepository;
 import pl.macieserafin.hourforge.security.PasswordChangeAttempts;
 import pl.macieserafin.hourforge.security.RateLimitProperties;
 import pl.macieserafin.hourforge.security.RateLimiter;
@@ -39,6 +41,8 @@ public class AccountDataService {
     private final EmailTokenRepository tokens;
     private final JiraUserAuthorizationRepository jiraAuthorizations;
     private final OAuthStateRepository oauthStates;
+    private final UserPreferencesRepository preferenceRows;
+    private final PreferencesService preferences;
     private final PasswordEncoder encoder;
     private final PasswordChangeAttempts attempts;
     private final AccountMailService mail;
@@ -49,7 +53,8 @@ public class AccountDataService {
     public AccountDataService(UserRepository users, UserCredentialRepository credentials, TeamMemberRepository members,
                               TeamRepository teams, TimeEntryRepository entries, TeamInviteRepository invites,
                               EmailTokenRepository tokens, JiraUserAuthorizationRepository jiraAuthorizations,
-                              OAuthStateRepository oauthStates, PasswordEncoder encoder, PasswordChangeAttempts attempts,
+                              OAuthStateRepository oauthStates, UserPreferencesRepository preferenceRows,
+                              PreferencesService preferences, PasswordEncoder encoder, PasswordChangeAttempts attempts,
                               AccountMailService mail, RateLimiter limiter, RateLimitProperties limits, Clock clock) {
         this.users = users;
         this.credentials = credentials;
@@ -60,6 +65,8 @@ public class AccountDataService {
         this.tokens = tokens;
         this.jiraAuthorizations = jiraAuthorizations;
         this.oauthStates = oauthStates;
+        this.preferenceRows = preferenceRows;
+        this.preferences = preferences;
         this.encoder = encoder;
         this.attempts = attempts;
         this.mail = mail;
@@ -86,7 +93,7 @@ public class AccountDataService {
         return new AccountExport(clock.instant(),
                 new AccountExport.Profile(user.getId(), user.getEmail(), user.getDisplayName(), user.getCreatedAt(),
                         user.getEmailVerifiedAt()),
-                teamsOfUser, timeEntries);
+                teamsOfUser, timeEntries, preferences.get(userId));
     }
 
     /**
@@ -119,6 +126,7 @@ public class AccountDataService {
         tokens.deleteByUserId(userId);
         jiraAuthorizations.deleteAllByUserId(userId);
         oauthStates.deleteAllByUserId(userId);
+        preferenceRows.deleteByUserId(userId);
         var user = credential.getUser();
         var oldEmail = user.getEmail();
         credentials.delete(credential);

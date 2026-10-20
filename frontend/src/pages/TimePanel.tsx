@@ -3,11 +3,12 @@ import { Clock3, LoaderCircle, Pause, Plus, Play, Square, Trash2 } from 'lucide-
 import { Link, useSearchParams } from 'react-router-dom'
 import { JiraIssuePicker, type JiraIssueLink } from '../components/JiraIssuePicker'
 import { Modal } from '../components/Modal'
+import { pickTeam, usePreferences } from '../lib/preferences'
 import { TimeEntryHistory } from './TimeEntryHistory'
 import type { Project, Team, TimeEntry } from '../lib/api'
 import { useProject, useProjects } from '../lib/projects'
 import { useTeams } from '../lib/teams'
-import { LONG_TIMER_SECONDS, MAX_MANUAL_DURATION_SECONDS, clearTimerLocalState, dismissLongTimer, formatDuration, isLongTimerDismissed, maxDurationMessage, readLastProject, readTimerDraft, saveLastProject, saveTimerDraft, teamToday, useActiveTimer, useChangeTimerState, useDiscardTimer, useManualTimeEntry, useStartTimer, useStopTimer, workDateRange, workDateRangeMessage } from '../lib/time'
+import { LONG_TIMER_SECONDS, MAX_MANUAL_DURATION_SECONDS, clearTimerLocalState, dismissLongTimer, formatClock, formatDuration, isLongTimerDismissed, maxDurationMessage, readLastProject, readTimerDraft, saveLastProject, saveTimerDraft, teamToday, useActiveTimer, useChangeTimerState, useDiscardTimer, useManualTimeEntry, useStartTimer, useStopTimer, workDateRange, workDateRangeMessage } from '../lib/time'
 
 const dateLabel = (date: string | null) => date === null ? 'Bez daty' : new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
 
@@ -97,7 +98,7 @@ function RunningTimer({ userId, entry, teams, stop, state, discard, onStopped, o
     <div className="timer-heading"><span className="timer-running-label"><span aria-hidden="true" />{paused ? 'Praca wstrzymana' : 'Timer działa'}</span><span className="field-hint">Od {new Date(entry.startedAt!).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}</span></div>
     <p className="timer-project-name">{team && project.data ? project.data.name : project.isPending && team ? 'Wczytywanie projektu…' : 'Projekt niedostępny'}</p>
     <p className="timer-team-name">{team?.name ?? 'Poprzedni zespół'} · {dateLabel(entry.workDate)}</p>
-    <p className="timer-counter" role="timer" aria-label="Czas aktywnego timera" aria-live="off">{formatDuration(elapsed)}</p>
+    <p className="timer-counter" role="timer" aria-label="Czas aktywnego timera" aria-live="off">{formatClock(elapsed)}</p>
     {longRunning && <div className="project-notice" role="status">
       <p>Ten timer działa już ponad {LONG_TIMER_SECONDS / 3600} godzin pracy. Być może o nim zapomniałeś. Możesz zakończyć pracę (wpis poprawisz później w historii), odrzucić timer albo kontynuować.</p>
       <button type="button" className="button-secondary" onClick={() => { dismissLongTimer(userId, entry.id); setLongDismissed(true) }}>Kontynuuj</button>
@@ -161,7 +162,8 @@ export function TimePanel({ userId }: { userId: string }) {
   const [saved, setSaved] = useState<TimeEntry | null>(null)
   const [search, setSearch] = useSearchParams()
   const selectedId = search.get('team')
-  const selected = selectedId ? teams.data?.find(team => team.id === selectedId) : teams.data?.[0]
+  const defaultTeamId = usePreferences(userId).data?.defaultTeamId
+  const selected = pickTeam(teams.data, selectedId, defaultTeamId)
   useEffect(() => {
     if (!selectedId && selected) setSearch({ team: selected.id }, { replace: true })
   }, [selectedId, selected, setSearch])

@@ -5,6 +5,7 @@ import { Modal } from '../components/Modal'
 import type { Team } from '../lib/api'
 import { jiraOutcomeMessages, useDisconnectJiraAccount, useDisconnectJiraSite, useJiraSites, useJiraStatus, useSelectJiraSite, useStartJira } from '../lib/jira'
 import { useTeams } from '../lib/teams'
+import { pickTeam, usePreferences } from '../lib/preferences'
 
 function SiteChooser({ userId, team, onChosen }: { userId: string; team: Team; onChosen: () => void }) {
   const sites = useJiraSites(userId, team.id, true)
@@ -91,7 +92,8 @@ export function IntegrationsPanel({ userId }: { userId: string }) {
   const teams = useTeams(userId)
   const [search, setSearch] = useSearchParams()
   const selectedId = search.get('team')
-  const selected = selectedId ? teams.data?.find(team => team.id === selectedId) : teams.data?.[0]
+  const defaultTeamId = usePreferences(userId).data?.defaultTeamId
+  const selected = pickTeam(teams.data, selectedId, defaultTeamId)
 
   useEffect(() => {
     if (!selectedId && selected) {

@@ -6,7 +6,8 @@ import { useDashboardSummary } from '../lib/dashboard'
 import { useProject } from '../lib/projects'
 import { reportRanges, useDownloadReport } from '../lib/reports'
 import { useTeams } from '../lib/teams'
-import { formatDuration, formatHours, useActiveTimer } from '../lib/time'
+import { formatClock, formatDuration, formatHours, useActiveTimer } from '../lib/time'
+import { pickTeam, usePreferences } from '../lib/preferences'
 import { BarChart } from '../components/BarChart'
 import { OwnerDashboard } from './OwnerDashboard'
 
@@ -25,7 +26,7 @@ function TimerOverview({ userId, entry, teams }: { userId: string; entry: TimeEn
     <h2>{entry.pausedAt ? 'Timer wstrzymany' : 'Praca w toku'}</h2>
     <p className="timer-project-name">{team && project.data ? project.data.name : project.isPending && team ? 'Wczytywanie projektu…' : 'Projekt niedostępny'}</p>
     <p className="timer-team-name">{team?.name ?? 'Poprzedni zespół'}</p>
-    <p className="timer-counter" role="timer" aria-label="Czas aktywnego timera" aria-live="off">{formatDuration(elapsed)}</p>
+    <p className="timer-counter" role="timer" aria-label="Czas aktywnego timera" aria-live="off">{formatClock(elapsed)}</p>
     {project.isError && <p className="form-error" role="alert">{project.error.message}</p>}
     <p className="field-hint">Czas w toku nie jest wliczony do zapisanych godzin. Przerwy nie są naliczane.</p>
     <Link className="button-secondary" to={timeLink(entry.teamId)}>Przejdź do timera</Link>
@@ -35,9 +36,9 @@ function TimerOverview({ userId, entry, teams }: { userId: string; entry: TimeEn
 const ownRanges = [['week', 'Ten tydzień'], ['lastWeek', 'Poprzedni tydzień'], ['month', 'Ten miesiąc']] as const
 
 /** A personal PDF for one of a few ranges; the server returns only the member's own entries. */
-function OwnReport({ team }: { team: Team }) {
+function OwnReport({ team, weekStart }: { team: Team; weekStart: 'MONDAY' | 'SUNDAY' }) {
   const [range, setRange] = useState<(typeof ownRanges)[number][0]>('week')
-  const dates = reportRanges(team.timezone)[range]
+  const dates = reportRanges(team.timezone, new Date(), weekStart)[range]
   const download = useDownloadReport(team.id, { ...dates, userId: '', projectId: '', entryType: '', q: '' }, 'mine-pdf')
   return <section className="overview-panel own-report" aria-label="Mój raport">
     <h2>Mój raport</h2>
@@ -55,7 +56,8 @@ function OwnReport({ team }: { team: Team }) {
 }
 
 function Summary({ userId, team }: { userId: string; team: Team }) {
-  const summary = useDashboardSummary(userId, team.id)
+  const weekStart = usePreferences(userId).data?.weekStart ?? 'MONDAY'
+  const summary = useDashboardSummary(userId, team.id, weekStart)
   if (summary.isPending) return <p className="teams-loading" role="status"><LoaderCircle className="spin" size={18} />Wczytywanie podsumowania…</p>
   if (summary.isError) return <div className="dashboard-error" role="alert">{summary.error.message}<button onClick={() => void summary.refetch()}>Spróbuj ponownie</button></div>
   const data = summary.data
@@ -70,7 +72,7 @@ function Summary({ userId, team }: { userId: string; team: Team }) {
         value: day.seconds, display: `${dateLabel(day.date)}: ${formatDuration(day.seconds)}`, short: formatHours(day.seconds) }))} />
     </section>
     <Link className="text-link" to={timeLink(team.id)}>Przejdź do historii i rejestru czasu</Link>
-    <OwnReport team={team} />
+    <OwnReport team={team} weekStart={weekStart} />
   </>
 }
 
@@ -79,7 +81,8 @@ export function PersonalDashboard({ userId }: { userId: string }) {
   const active = useActiveTimer(userId)
   const [search, setSearch] = useSearchParams()
   const selectedId = search.get('team')
-  const selected = selectedId ? teams.data?.find(team => team.id === selectedId) : teams.data?.[0]
+  const defaultTeamId = usePreferences(userId).data?.defaultTeamId
+  const selected = pickTeam(teams.data, selectedId, defaultTeamId)
   const teamView = selected?.role === 'OWNER' && search.get('view') === 'team'
   return <div className="personal-dashboard">
     {teams.isPending ? <p className="teams-loading" role="status"><LoaderCircle size={18} className="spin" />Ładowanie zespołów…</p>

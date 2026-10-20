@@ -473,3 +473,5 @@ fieldset:disabled { opacity: .65; }
 .jira-hint { margin: 0 0 14px; }
 .jira-key { display: inline-block; margin-top: 6px; padding: 1px 8px; border: 1px solid var(--border); border-radius: 99px; background: #faf9fe; font-size: 12px; font-weight: 550; color: #6250b9; text-decoration: none; }
 a.jira-key:hover, a.jira-key:focus-visible { border-color: var(--accent); text-decoration: underline; }
+.remember-me { display: flex; align-items: center; gap: 10px; font-size: 13px; margin: 4px 0 10px; }
+.preferences-heading { margin: 22px 0 10px; font-size: 14px; }

@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Download, LoaderCircle, RefreshCw } from 'lucide-react'
 import { ApiError, type ReportBucket, type ReportFilters, type ReportGroup, type ReportPage, type ReportSort, type Team } from '../lib/api'
 import { MAX_REPORT_DAYS, clearedSearch, filtersFromSearch, filtersToSearch, reportRangeDays, reportRanges, useDownloadReport, useReportActive, useReportBreakdown, useReportEntries, useReportMembers, useReportProjects, useReportSummary } from '../lib/reports'
-import { formatDuration, formatHours } from '../lib/time'
+import { formatClock, formatDuration, formatHours } from '../lib/time'
 import { BarChart, type ChartItem } from '../components/BarChart'
 
 const dateLabel = (date: string | null) => date === null ? 'Bez daty' : new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
@@ -111,7 +111,7 @@ function ActivePanel({ userId, team }: { userId: string; team: Team }) {
                 <td data-label="Projekt">{entry.projectName}{entry.projectArchivedAt && <span className="report-meta">Projekt archiwalny</span>}</td>
                 <td data-label="Stan">{entry.pausedAt ? 'Wstrzymany' : 'Pracuje'}</td>
                 <td data-label="Od">{startedAt(entry.startedAt)}</td>
-                <td data-label="Czas pracy" className="history-duration">{formatDuration(elapsedSeconds)}</td>
+                <td data-label="Czas pracy" className="history-duration">{formatClock(elapsedSeconds)}</td>
               </tr>)}</tbody>
             </table>
           </div>}

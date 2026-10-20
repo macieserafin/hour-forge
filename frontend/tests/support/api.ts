@@ -23,6 +23,8 @@ export function mockApi(overrides: Record<string, Handler> = {}) {
     [`GET /api/teams/${team.id}/projects`]: () => json([project]),
     [`GET /api/teams/${team.id}/projects/${project.id}`]: () => json(project),
     'GET /api/integrations/jira/status': () => json({ available: false, siteConnected: false, siteName: null, siteUrl: null, userConnected: false, canManage: false }),
+    'GET /api/account/preferences': () => json({ defaultTeamId: null, startPage: 'DASHBOARD', timeFormat: 'CLOCK', weekStart: 'MONDAY', longTimerEmail: true,
+      browserNotifications: false, longTimerHours: 10, titleTimer: true }),
     'GET /api/timer/active': () => json(null, 204),
     'GET /api/time-entries': () => json(history()),
     'GET /api/dashboard/summary': url => json({ teamId: url.searchParams.get('teamId'), timezone: 'Europe/Warsaw',

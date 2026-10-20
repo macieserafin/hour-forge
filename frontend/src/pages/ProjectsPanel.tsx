@@ -5,6 +5,7 @@ import { Modal } from '../components/Modal'
 import type { Project, Team } from '../lib/api'
 import { useArchiveProject, useRestoreProject, useDeleteProject, useProject, useProjects, useSaveProject } from '../lib/projects'
 import { useTeams } from '../lib/teams'
+import { pickTeam, usePreferences } from '../lib/preferences'
 
 const dateLabel = (value: string) => new Date(value).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })
 
@@ -118,7 +119,8 @@ export function ProjectsPanel({ userId }: { userId: string }) {
   const teams = useTeams(userId)
   const [search, setSearch] = useSearchParams()
   const selectedId = search.get('team')
-  const selected = selectedId ? teams.data?.find(team => team.id === selectedId) : teams.data?.[0]
+  const defaultTeamId = usePreferences(userId).data?.defaultTeamId
+  const selected = pickTeam(teams.data, selectedId, defaultTeamId)
 
   useEffect(() => {
     if (!selectedId && selected) setSearch({ team: selected.id }, { replace: true })

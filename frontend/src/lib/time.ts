@@ -147,8 +147,20 @@ export function formatHours(seconds: number) {
   return `${Math.floor(safe / 3600)}:${String(Math.floor(safe / 60) % 60).padStart(2, '0')}`
 }
 
-export function formatDuration(seconds: number) {
+export type TimeFormat = 'CLOCK' | 'DECIMAL'
+let preferredFormat: TimeFormat = 'CLOCK'
+/** The person's chosen way of writing saved time; set once their settings are known. */
+export const setTimeFormat = (format: TimeFormat) => { preferredFormat = format }
+
+/** Always hours:minutes:seconds, for counters that change every second. */
+export function formatClock(seconds: number) {
   const safe = Math.max(0, Math.floor(seconds))
   return [Math.floor(safe / 3600), Math.floor(safe / 60) % 60, safe % 60]
     .map(part => String(part).padStart(2, '0')).join(':')
+}
+
+/** Saved time, in the person's chosen format: 01:30:00 or 1,50 h. */
+export function formatDuration(seconds: number) {
+  if (preferredFormat === 'DECIMAL') return `${(Math.max(0, Math.floor(seconds)) / 3600).toFixed(2).replace('.', ',')} h`
+  return formatClock(seconds)
 }
