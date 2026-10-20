@@ -7,3 +7,5 @@
 /private-docs/
 /claude/
 /.claude/
+/.agents/
+skills-lock.json

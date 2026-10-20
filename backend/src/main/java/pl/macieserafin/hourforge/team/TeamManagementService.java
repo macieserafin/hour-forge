@@ -5,6 +5,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.invitation.TeamInviteRepository;
+import pl.macieserafin.hourforge.jira.JiraConnectionRepository;
+import pl.macieserafin.hourforge.jira.JiraUserAuthorizationRepository;
+import pl.macieserafin.hourforge.jira.OAuthStateRepository;
 import pl.macieserafin.hourforge.project.ProjectRepository;
 import pl.macieserafin.hourforge.timeentry.EntryType;
 import pl.macieserafin.hourforge.timeentry.TimeEntryRepository;
@@ -23,17 +26,24 @@ public class TeamManagementService {
     private final ProjectRepository projects;
     private final TimeEntryRepository entries;
     private final TeamInviteRepository invites;
+    private final JiraConnectionRepository jiraConnections;
+    private final JiraUserAuthorizationRepository jiraAuthorizations;
+    private final OAuthStateRepository oauthStates;
     private final Clock clock;
 
     public TeamManagementService(TeamRepository teams, TeamMemberRepository members, UserRepository users,
                                  ProjectRepository projects, TimeEntryRepository entries, TeamInviteRepository invites,
-                                 Clock clock) {
+                                 JiraConnectionRepository jiraConnections, JiraUserAuthorizationRepository jiraAuthorizations,
+                                 OAuthStateRepository oauthStates, Clock clock) {
         this.teams = teams;
         this.members = members;
         this.users = users;
         this.projects = projects;
         this.entries = entries;
         this.invites = invites;
+        this.jiraConnections = jiraConnections;
+        this.jiraAuthorizations = jiraAuthorizations;
+        this.oauthStates = oauthStates;
         this.clock = clock;
     }
 
@@ -94,6 +104,12 @@ public class TeamManagementService {
         entries.deleteAllByTeamId(team.getId());
         projects.deleteAllByTeamId(team.getId());
         invites.deleteAllByTeamId(team.getId());
+        oauthStates.deleteAllByTeamId(team.getId());
+        jiraConnections.findByTeamId(team.getId()).ifPresent(connection -> {
+            jiraConnections.deleteAllByTeamId(team.getId());
+            // Grants for a site are only needed while some team still uses that site.
+            if (!jiraConnections.existsByCloudId(connection.getCloudId())) jiraAuthorizations.deleteAllByCloudId(connection.getCloudId());
+        });
         members.deleteAllByTeamId(team.getId());
         teams.deleteTeamById(team.getId());
     }

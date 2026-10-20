@@ -25,6 +25,8 @@ public class RequestRateLimits {
 
     public void reportExport(UUID userId) { acquire("report-export:" + userId, limits.reportExport()); }
 
+    public void jiraAuthorize(UUID userId) { acquire("jira-authorize:" + userId, limits.jiraAuthorize()); }
+
     private void acquire(String key, RateLimitProperties.Limit limit) {
         limiter.tryAcquire(key, limit).ifPresent(retryAfter -> { throw new TooManyRequestsException(retryAfter); });
     }

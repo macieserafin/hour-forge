@@ -12,12 +12,19 @@ import org.springframework.data.jpa.repository.Query;
 public interface JiraUserAuthorizationRepository extends JpaRepository<JiraUserAuthorization, UUID> {
     Optional<JiraUserAuthorization> findByUserIdAndCloudId(UUID userId, String cloudId);
 
-    /** Serializes token refreshes of one grant: Atlassian disables the refresh token that was used. */
+    /**
+     * Serializes token refreshes: Atlassian disables the refresh token that was used, and one grant can sit in several
+     * rows (one per site), so every row of the person is locked, always in the same order.
+     */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select a from JiraUserAuthorization a where a.user.id = :userId and a.cloudId = :cloudId")
-    Optional<JiraUserAuthorization> findLockedByUserIdAndCloudId(UUID userId, String cloudId);
+    @Query("select a from JiraUserAuthorization a where a.user.id = :userId order by a.id")
+    List<JiraUserAuthorization> findAllLockedByUserId(UUID userId);
 
-    List<JiraUserAuthorization> findAllByUserId(UUID userId);
+    List<JiraUserAuthorization> findAllByUserIdOrderByUpdatedAtDesc(UUID userId);
+
+    @Modifying(flushAutomatically = true)
+    @Query("delete from JiraUserAuthorization a where a.cloudId = :cloudId")
+    int deleteAllByCloudId(String cloudId);
 
     @Modifying(flushAutomatically = true)
     @Query("delete from JiraUserAuthorization a where a.user.id = :userId")

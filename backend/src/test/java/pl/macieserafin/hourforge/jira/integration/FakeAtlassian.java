@@ -1,0 +1,137 @@
+package pl.macieserafin.hourforge.jira.integration;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * A stand-in for auth.atlassian.com and api.atlassian.com. Refresh tokens rotate exactly like the real ones: using a
+ * refresh token kills it and issues a new one.
+ */
+public final class FakeAtlassian {
+    public record Site(String id, String url, String name) {
+    }
+
+    private final HttpServer server;
+    private final AtomicInteger generation = new AtomicInteger();
+    private final Set<String> liveRefreshTokens = ConcurrentHashMap.newKeySet();
+    private final Set<String> liveAccessTokens = ConcurrentHashMap.newKeySet();
+    private final List<String> requests = new CopyOnWriteArrayList<>();
+
+    public final AtomicInteger refreshCalls = new AtomicInteger();
+    public volatile long expiresInSeconds = 3600;
+    public volatile long refreshDelayMillis = 0;
+    public volatile int tokenEndpointFailure = 0;
+    public volatile List<Site> sites = List.of(new Site("cloud-1", "https://team.atlassian.net", "Team site"));
+
+    public FakeAtlassian() {
+        try {
+            server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        } catch (IOException exception) {
+            throw new IllegalStateException(exception);
+        }
+        server.createContext("/oauth/token/accessible-resources", this::resources);
+        server.createContext("/oauth/token", this::token);
+        server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
+        server.start();
+    }
+
+    public String baseUrl() {
+        return "http://127.0.0.1:" + server.getAddress().getPort();
+    }
+
+    public void reset() {
+        generation.set(0);
+        liveRefreshTokens.clear();
+        liveAccessTokens.clear();
+        requests.clear();
+        refreshCalls.set(0);
+        expiresInSeconds = 3600;
+        refreshDelayMillis = 0;
+        tokenEndpointFailure = 0;
+        sites = List.of(new Site("cloud-1", "https://team.atlassian.net", "Team site"));
+    }
+
+    public List<String> requests() {
+        return requests;
+    }
+
+    /** Makes the access token the fake has issued stop working, as if it expired at Atlassian. */
+    public void revokeAccessTokens() {
+        liveAccessTokens.clear();
+    }
+
+    private void token(HttpExchange exchange) throws IOException {
+        var body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        requests.add("POST /oauth/token");
+        if (tokenEndpointFailure != 0) {
+            respond(exchange, tokenEndpointFailure, "{\"error\":\"server_error\"}");
+            return;
+        }
+        if (body.contains("\"grant_type\":\"authorization_code\"")) {
+            if (body.contains("\"code\":\"good-code")) {
+                respond(exchange, 200, issue());
+            } else {
+                respond(exchange, 403, "{\"error\":\"invalid_grant\"}");
+            }
+            return;
+        }
+        refreshCalls.incrementAndGet();
+        sleep(refreshDelayMillis);
+        var used = body.replaceAll(".*\"refresh_token\":\"([^\"]+)\".*", "$1");
+        if (liveRefreshTokens.remove(used)) {
+            respond(exchange, 200, issue());
+        } else {
+            respond(exchange, 403, "{\"error\":\"invalid_grant\"}");
+        }
+    }
+
+    private void resources(HttpExchange exchange) throws IOException {
+        requests.add("GET /oauth/token/accessible-resources");
+        var header = exchange.getRequestHeaders().getFirst("Authorization");
+        if (header == null || !liveAccessTokens.contains(header.replace("Bearer ", ""))) {
+            respond(exchange, 401, "{\"message\":\"Unauthorized\"}");
+            return;
+        }
+        var json = new StringBuilder("[");
+        for (var site : sites) {
+            if (json.length() > 1) json.append(',');
+            json.append("{\"id\":\"").append(site.id()).append("\",\"url\":\"").append(site.url())
+                    .append("\",\"name\":\"").append(site.name()).append("\",\"scopes\":[\"read:jira-work\"]}");
+        }
+        respond(exchange, 200, json.append(']').toString());
+    }
+
+    private String issue() {
+        int n = generation.incrementAndGet();
+        liveRefreshTokens.add("refresh-" + n);
+        liveAccessTokens.add("access-" + n);
+        return "{\"access_token\":\"access-" + n + "\",\"refresh_token\":\"refresh-" + n + "\",\"expires_in\":" + expiresInSeconds
+                + ",\"scope\":\"read:jira-work offline_access\",\"token_type\":\"Bearer\"}";
+    }
+
+    private static void respond(HttpExchange exchange, int status, String body) throws IOException {
+        var bytes = body.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().add("Content-Type", "application/json");
+        exchange.sendResponseHeaders(status, bytes.length);
+        try (var out = exchange.getResponseBody()) {
+            out.write(bytes);
+        }
+    }
+
+    private static void sleep(long millis) {
+        if (millis <= 0) return;
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
