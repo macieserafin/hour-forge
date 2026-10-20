@@ -105,6 +105,8 @@ export interface DashboardSummary {
   weekEnd: string
   todaySeconds: number
   weekSeconds: number
+  /** The seven days of the week, Monday first. */
+  days: { date: string; seconds: number }[]
 }
 
 export async function getDashboardSummary(teamId: string, signal?: AbortSignal): Promise<DashboardSummary> {
@@ -681,6 +683,8 @@ export const getReportActive = (teamId: string, page: number, signal?: AbortSign
 
 export function getReportBreakdown(teamId: string, filters: ReportFilters, groupBy: ReportGroup, page: number, signal?: AbortSignal) {
   const params = reportParams(filters, page)
+  // A day-by-day table and chart should cover a month in one page.
+  if (groupBy === 'DAY') params.set('size', '100')
   params.set('groupBy', groupBy)
   return reportRequest<ReportResult<ReportBucket> & { groupBy: ReportGroup }>(teamId, 'breakdown', params, signal)
 }

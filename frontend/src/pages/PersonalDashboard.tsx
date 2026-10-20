@@ -6,10 +6,12 @@ import { useDashboardSummary } from '../lib/dashboard'
 import { useProject } from '../lib/projects'
 import { reportRanges, useDownloadReport } from '../lib/reports'
 import { useTeams } from '../lib/teams'
-import { formatDuration, useActiveTimer } from '../lib/time'
+import { formatDuration, formatHours, useActiveTimer } from '../lib/time'
+import { BarChart } from '../components/BarChart'
 import { OwnerDashboard } from './OwnerDashboard'
 
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
+const weekday = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { weekday: 'short' })
 const timeLink = (teamId: string) => `/time?${new URLSearchParams({ team: teamId })}`
 
 function TimerOverview({ userId, entry, teams }: { userId: string; entry: TimeEntry; teams: Team[] }) {
@@ -63,6 +65,10 @@ function Summary({ userId, team }: { userId: string; team: Team }) {
       <section className="overview-panel dashboard-stat" aria-label="Czas w tym tygodniu"><h2>Ten tydzień</h2><p className="dashboard-total">{formatDuration(data.weekSeconds)}</p><p className="field-hint">{dateLabel(data.weekStart)} – {dateLabel(data.weekEnd)}</p></section>
     </div>
     <p className="field-hint dashboard-summary-note">Zapisany czas w zespole {team.name} · {data.timezone}. Tydzień od poniedziałku do niedzieli.</p>
+    <section className="overview-panel" aria-label="Wykres tygodnia">
+      <BarChart title="Twój czas w tym tygodniu" labelHeading="Dzień" items={data.days.map(day => ({ key: day.date, label: weekday(day.date),
+        value: day.seconds, display: `${dateLabel(day.date)}: ${formatDuration(day.seconds)}`, short: formatHours(day.seconds) }))} />
+    </section>
     <Link className="text-link" to={timeLink(team.id)}>Przejdź do historii i rejestru czasu</Link>
     <OwnReport team={team} />
   </>

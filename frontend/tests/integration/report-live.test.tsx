@@ -46,7 +46,7 @@ it('keeps the rest of the report when only the live view is refused', async () =
 it('shows time per day and per person and project next to the existing tables', async () => {
   const fetcher = mockApi(reportHandlers())
   renderApp(<OwnerDashboard userId="actor" team={team} />)
-  const days = within(await screen.findByRole('region', { name: 'Czas według dni' }))
+  const days = within(await within(await screen.findByRole('region', { name: 'Czas według dni' })).findByRole('region', { name: 'Tabela czasu według dni' }))
   expect(await days.findByRole('cell', { name: /19 paź 2026/ })).toBeVisible()
   expect(days.getByRole('cell', { name: '00:15:00' })).toBeVisible()
   const mixed = within(screen.getByRole('region', { name: 'Czas według osób i projektów' }))

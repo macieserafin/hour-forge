@@ -141,6 +141,12 @@ export function workDateRange(timezone: string, now = new Date()) {
   return { min, max }
 }
 
+/** Hours and minutes only (1:05), compact enough to print on a chart bar. */
+export function formatHours(seconds: number) {
+  const safe = Math.max(0, Math.floor(seconds))
+  return `${Math.floor(safe / 3600)}:${String(Math.floor(safe / 60) % 60).padStart(2, '0')}`
+}
+
 export function formatDuration(seconds: number) {
   const safe = Math.max(0, Math.floor(seconds))
   return [Math.floor(safe / 3600), Math.floor(safe / 60) % 60, safe % 60]

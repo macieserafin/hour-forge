@@ -25,7 +25,8 @@ export function mockApi(overrides: Record<string, Handler> = {}) {
     'GET /api/timer/active': () => json(null, 204),
     'GET /api/time-entries': () => json(history()),
     'GET /api/dashboard/summary': url => json({ teamId: url.searchParams.get('teamId'), timezone: 'Europe/Warsaw',
-      today: '2026-10-19', weekStart: '2026-10-19', weekEnd: '2026-10-25', todaySeconds: 900, weekSeconds: 3600 }),
+      today: '2026-10-19', weekStart: '2026-10-19', weekEnd: '2026-10-25', todaySeconds: 900, weekSeconds: 3600,
+      days: ['19', '20', '21', '22', '23', '24', '25'].map((day, index) => ({ date: `2026-10-${day}`, seconds: index === 0 ? 900 : index === 2 ? 2700 : 0 })) }),
     ...overrides,
   }
   const fetcher = vi.fn(async (input: string | URL | Request, options: RequestInit = {}) => {

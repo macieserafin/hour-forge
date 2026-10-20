@@ -37,6 +37,9 @@ public class DashboardService {
         var weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         var weekEnd = weekStart.plusDays(6);
         var totals = dashboard.totals(userId, teamId, today, weekStart, weekEnd);
-        return new DashboardSummary(teamId, timezone, today, weekStart, weekEnd, totals.todaySeconds(), totals.weekSeconds());
+        var perDay = dashboard.dailyTotals(userId, teamId, weekStart, weekEnd).stream()
+                .collect(java.util.stream.Collectors.toMap(DashboardDayTotal::workDate, DashboardDayTotal::seconds));
+        var days = weekStart.datesUntil(weekEnd.plusDays(1)).map(date -> new DashboardSummary.Day(date, perDay.getOrDefault(date, 0L))).toList();
+        return new DashboardSummary(teamId, timezone, today, weekStart, weekEnd, totals.todaySeconds(), totals.weekSeconds(), days);
     }
 }

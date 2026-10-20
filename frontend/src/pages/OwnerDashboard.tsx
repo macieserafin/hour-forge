@@ -3,7 +3,8 @@ import { useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Download, LoaderCircle, RefreshCw } from 'lucide-react'
 import { ApiError, type ReportBucket, type ReportFilters, type ReportGroup, type ReportPage, type ReportSort, type Team } from '../lib/api'
 import { MAX_REPORT_DAYS, clearedSearch, filtersFromSearch, filtersToSearch, reportRangeDays, reportRanges, useDownloadReport, useReportActive, useReportBreakdown, useReportEntries, useReportMembers, useReportProjects, useReportSummary } from '../lib/reports'
-import { formatDuration } from '../lib/time'
+import { formatDuration, formatHours } from '../lib/time'
+import { BarChart, type ChartItem } from '../components/BarChart'
 
 const dateLabel = (date: string | null) => date === null ? 'Bez daty' : new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
 
@@ -37,6 +38,28 @@ const breakdowns: Record<ReportGroup, { title: string; table: string; pages: str
   PROJECT: { title: 'Czas według projektów', table: 'Tabela czasu projektów', pages: 'Strony czasu projektów', columns: ['Projekt'] },
   DAY: { title: 'Czas według dni', table: 'Tabela czasu według dni', pages: 'Strony czasu według dni', columns: ['Dzień'] },
   MEMBER_PROJECT: { title: 'Czas według osób i projektów', table: 'Tabela czasu osób i projektów', pages: 'Strony czasu osób i projektów', columns: ['Osoba', 'Projekt'] },
+}
+
+const MAX_CHART_PROJECTS = 8
+
+/** A chart is only drawn for a complete result; a single page of a longer list would misrepresent the whole. */
+const complete = (data: ReportPage<ReportBucket>) => data.page === 0 && !data.hasNext && data.content.length > 0
+
+function dayChart(data: ReportPage<ReportBucket>): ChartItem[] {
+  const manyDays = data.content.length > 7
+  return data.content.map(bucket => ({ key: bucket.workDate ?? 'none',
+    label: bucket.workDate ? (manyDays ? bucket.workDate.slice(8) : new Date(`${bucket.workDate}T12:00:00`).toLocaleDateString('pl-PL', { weekday: 'short' })) : 'Bez daty',
+    value: bucket.durationSeconds, display: `${dateLabel(bucket.workDate)}: ${formatDuration(bucket.durationSeconds)}`, short: formatHours(bucket.durationSeconds) }))
+}
+
+function projectChart(data: ReportPage<ReportBucket>): ChartItem[] {
+  const sorted = [...data.content].sort((a, b) => b.durationSeconds - a.durationSeconds)
+  const shown = sorted.slice(0, MAX_CHART_PROJECTS)
+  const rest = sorted.slice(MAX_CHART_PROJECTS).reduce((sum, bucket) => sum + bucket.durationSeconds, 0)
+  const items: ChartItem[] = shown.map(bucket => ({ key: bucket.projectId!, label: bucket.projectName ?? '',
+    value: bucket.durationSeconds, display: formatDuration(bucket.durationSeconds), short: formatHours(bucket.durationSeconds) }))
+  if (rest > 0) items.push({ key: 'rest', label: 'Pozostałe projekty', value: rest, display: formatDuration(rest), short: formatHours(rest) })
+  return items
 }
 
 const archivedNote = (bucket: ReportBucket) => bucket.projectArchivedAt && <span className="report-meta">Projekt archiwalny</span>
@@ -212,8 +235,8 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
       </>}</ReportState>
       <div className="report-breakdowns">
         <section className="report-section" aria-label="Czas według osób"><h3>Czas według osób</h3><ReportState query={people}>{data => <BreakdownTable data={data.data} group="MEMBER" busy={people.isFetching} onPage={setMemberPage} />}</ReportState></section>
-        <section className="report-section" aria-label="Czas według projektów"><h3>Czas według projektów</h3><ReportState query={projects}>{data => <BreakdownTable data={data.data} group="PROJECT" busy={projects.isFetching} onPage={setProjectPage} />}</ReportState></section>
-        <section className="report-section" aria-label="Czas według dni"><h3>Czas według dni</h3><ReportState query={days}>{data => <BreakdownTable data={data.data} group="DAY" busy={days.isFetching} onPage={setDayPage} />}</ReportState></section>
+        <section className="report-section" aria-label="Czas według projektów"><h3>Czas według projektów</h3><ReportState query={projects}>{data => <>{complete(data.data) && <BarChart title="Podział czasu na projekty" layout="rows" labelHeading="Projekt" items={projectChart(data.data)} />}<BreakdownTable data={data.data} group="PROJECT" busy={projects.isFetching} onPage={setProjectPage} /></>}</ReportState></section>
+        <section className="report-section" aria-label="Czas według dni"><h3>Czas według dni</h3><ReportState query={days}>{data => <>{complete(data.data) && <BarChart title="Czas w kolejnych dniach" labelHeading="Dzień" items={dayChart(data.data)} />}<BreakdownTable data={data.data} group="DAY" busy={days.isFetching} onPage={setDayPage} /></>}</ReportState></section>
         <section className="report-section" aria-label="Czas według osób i projektów"><h3>Osoby i projekty</h3><ReportState query={mixed}>{data => <BreakdownTable data={data.data} group="MEMBER_PROJECT" busy={mixed.isFetching} onPage={setMixedPage} />}</ReportState></section>
       </div>
       <section className="report-section report-history" aria-label="Wpisy zespołu">

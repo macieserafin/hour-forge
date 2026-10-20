@@ -27,6 +27,30 @@ class DashboardIT extends ApiIntegrationTestSupport {
                 .andExpect(jsonPath("$.weekSeconds").value(0));
     }
 
+    @Test
+    void listsTheSevenDaysOfTheWeekMondayFirstWithOnlyOwnCompletedWorkAndZerosForEmptyDays() throws Exception {
+        manual(actor, project, "2026-10-19", 3600);
+        manual(actor, project, "2026-10-19", 60);
+        manual(actor, project, "2026-10-22", 120);
+        manual(actor, project, "2026-10-26", 999);
+        manual(actor, project, "2026-10-18", 999);
+        var colleague = fixtures.user("dashboard-colleague@example.test", "Colleague");
+        fixtures.member(team, colleague, TeamRole.MEMBER, NOW);
+        manual(colleague, project, "2026-10-20", 777);
+        entries.saveAndFlush(new TimeEntry(actor, team, project, EntryType.TIMER, LocalDate.parse("2026-10-21"),
+                NOW.minusSeconds(60), null, null, "Running"));
+        entries.saveAndFlush(new TimeEntry(actor, team, project, EntryType.MANUAL, null, null, null, 500, "Undated"));
+
+        mvc.perform(get("/api/dashboard/summary").with(user(principal)).param("teamId", team.getId().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.days.length()").value(7))
+                .andExpect(jsonPath("$.days[0].date").value("2026-10-19")).andExpect(jsonPath("$.days[0].seconds").value(3660))
+                .andExpect(jsonPath("$.days[1].seconds").value(0)).andExpect(jsonPath("$.days[2].seconds").value(0))
+                .andExpect(jsonPath("$.days[3].date").value("2026-10-22")).andExpect(jsonPath("$.days[3].seconds").value(120))
+                .andExpect(jsonPath("$.days[6].date").value("2026-10-25")).andExpect(jsonPath("$.days[6].seconds").value(0))
+                .andExpect(jsonPath("$.weekSeconds").value(3780));
+    }
+
     @Autowired MockMvc mvc;
     @Autowired TimeEntryRepository entries;
     @Autowired TeamMemberRepository members;

@@ -46,7 +46,7 @@ it('keeps an own timer visible after departure without exposing the cached proje
 it('allows retrying a failed summary', async () => {
   let failed = true
   mockApi({ 'GET /api/dashboard/summary': () => failed ? json({}, 404) : json({ teamId: 'team', timezone: 'UTC',
-    today: '2026-10-19', weekStart: '2026-10-19', weekEnd: '2026-10-25', todaySeconds: 0, weekSeconds: 0 }) })
+    today: '2026-10-19', weekStart: '2026-10-19', weekEnd: '2026-10-25', todaySeconds: 0, weekSeconds: 0, days: [] }) })
   renderApp(<PersonalDashboard userId="actor" />)
   expect(await screen.findByRole('alert')).toHaveTextContent('Nie znaleziono zespołu')
   failed = false

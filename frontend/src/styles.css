@@ -386,6 +386,13 @@ fieldset:disabled { opacity: .65; }
 .dashboard-view-switch { display: flex; gap: 8px; margin-bottom: 28px; }
 .dashboard-view-switch [aria-pressed="true"] { background: #eeeafa; border-color: var(--accent); color: #6250b9; }
 .owner-dashboard, .report-section { min-width: 0; }
+.chart { margin: 4px 0 16px; }
+.chart-title { margin-bottom: 6px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.chart svg { display: block; width: 100%; height: auto; max-height: 280px; }
+.chart-bar { fill: var(--accent); }
+.chart-axis { stroke: var(--border); stroke-width: 1; }
+.chart-label { fill: var(--muted); font-size: 11px; }
+.chart-value { fill: var(--text); font-size: 11px; font-weight: 600; }
 .own-report { margin-top: 24px; }
 .own-report-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
 .own-report-controls .field-group { margin-bottom: 0; }
