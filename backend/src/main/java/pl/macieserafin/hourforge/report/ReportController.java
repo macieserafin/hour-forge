@@ -53,6 +53,21 @@ public class ReportController {
         return download(exports.csv(actor.getUserId(), teamId, filter), "text/csv; charset=UTF-8");
     }
 
+    @GetMapping("/export.pdf")
+    public ResponseEntity<byte[]> pdf(@AuthenticationPrincipal AppUserPrincipal actor,
+            @PathVariable UUID teamId, @ModelAttribute ReportFilter filter) {
+        rateLimits.reportExport(actor.getUserId());
+        return download(exports.pdf(actor.getUserId(), teamId, filter, false), "application/pdf");
+    }
+
+    /** Any active member can download their own entries; the person filter is ignored. */
+    @GetMapping("/mine/export.pdf")
+    public ResponseEntity<byte[]> ownPdf(@AuthenticationPrincipal AppUserPrincipal actor,
+            @PathVariable UUID teamId, @ModelAttribute ReportFilter filter) {
+        rateLimits.reportExport(actor.getUserId());
+        return download(exports.pdf(actor.getUserId(), teamId, filter, true), "application/pdf");
+    }
+
     private static ResponseEntity<byte[]> download(ReportExportService.Download download, String contentType) {
         return ResponseEntity.ok().contentType(MediaType.parseMediaType(contentType))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + download.filename() + "\"")

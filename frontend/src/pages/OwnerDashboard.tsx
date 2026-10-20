@@ -115,6 +115,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
   const mixed = useReportBreakdown(userId, team.id, filters, 'MEMBER_PROJECT', mixedPage)
   const entries = useReportEntries(userId, team.id, filters, sort, entryPage)
   const csv = useDownloadReport(team.id, filters, 'csv')
+  const pdf = useDownloadReport(team.id, filters, 'pdf')
   const memberOptions = useReportMembers(userId, team.id)
   const projectOptions = useReportProjects(userId, team.id)
   const queries = [summary, people, projects, days, mixed, entries, memberOptions, projectOptions]
@@ -160,12 +161,15 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
         <button className="button-secondary" disabled={csv.isPending} onClick={() => csv.mutate()}>
           {csv.isPending ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />}Pobierz CSV
         </button>
+        <button className="button-secondary" disabled={pdf.isPending} onClick={() => pdf.mutate()}>
+          {pdf.isPending ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />}Pobierz PDF
+        </button>
         <button className="button-secondary" disabled={busy} onClick={() => void Promise.all(queries.map(query => query.refetch()))}>
           <RefreshCw size={15} className={busy ? 'spin' : ''} />Odśwież raport
         </button>
       </div>
     </header>
-    {csv.isError && <p className="form-error" role="alert">{csv.error.message}</p>}
+    {(csv.isError || pdf.isError) && <p className="form-error" role="alert">{(csv.error ?? pdf.error)?.message}</p>}
     <ActivePanel userId={userId} team={team} />
     <div className="report-ranges" role="group" aria-label="Szybkie zakresy dat">
       <button type="button" className="button-secondary" onClick={() => applyRange(ranges.today)}>Dzisiaj</button>

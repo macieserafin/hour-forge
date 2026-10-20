@@ -693,11 +693,13 @@ export function getReportEntries(teamId: string, filters: ReportFilters, sort: R
   return reportRequest<ReportResult<ReportEntry>>(teamId, 'entries', params, signal)
 }
 
-export type ReportDownload = 'csv' | 'pdf'
+export type ReportDownload = 'csv' | 'pdf' | 'mine-pdf'
+
+const downloadPaths: Record<ReportDownload, string> = { csv: 'export.csv', pdf: 'export.pdf', 'mine-pdf': 'mine/export.pdf' }
 
 /** A file version of the report the owner is looking at; the server applies the same filters as on screen. */
 export async function downloadReport(teamId: string, filters: ReportFilters, kind: ReportDownload): Promise<{ blob: Blob; filename: string }> {
-  const response = await request(`/api/teams/${encodeURIComponent(teamId)}/reports/export.${kind}?${reportParams(filters)}`)
+  const response = await request(`/api/teams/${encodeURIComponent(teamId)}/reports/${downloadPaths[kind]}?${reportParams(filters)}`)
   if (!response.ok) {
     throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
       : response.status === 400 ? 'Sprawdź zakres dat (najwyżej 366 dni) i filtry. Plik CSV może mieć najwyżej 50 000 wpisów, więc zawęź raport.'
@@ -705,7 +707,7 @@ export async function downloadReport(teamId: string, filters: ReportFilters, kin
       : response.status === 403 || response.status === 404 ? 'Raport jest niedostępny. Sprawdź swoje uprawnienia i filtry.'
       : 'Nie udało się pobrać pliku. Spróbuj ponownie.')
   }
-  return { blob: await response.blob(), filename: filenameFrom(response, `hourforge-raport.${kind}`) }
+  return { blob: await response.blob(), filename: filenameFrom(response, kind === 'csv' ? 'hourforge-raport.csv' : 'hourforge-raport.pdf') }
 }
 
 export const getReportMembers = (teamId: string, page: number, signal?: AbortSignal) =>

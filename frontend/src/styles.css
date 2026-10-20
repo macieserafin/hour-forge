@@ -386,6 +386,9 @@ fieldset:disabled { opacity: .65; }
 .dashboard-view-switch { display: flex; gap: 8px; margin-bottom: 28px; }
 .dashboard-view-switch [aria-pressed="true"] { background: #eeeafa; border-color: var(--accent); color: #6250b9; }
 .owner-dashboard, .report-section { min-width: 0; }
+.own-report { margin-top: 24px; }
+.own-report-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.own-report-controls .field-group { margin-bottom: 0; }
 .report-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .report-ranges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .report-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 28px; }

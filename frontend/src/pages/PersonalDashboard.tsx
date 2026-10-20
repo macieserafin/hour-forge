@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Clock3, LoaderCircle } from 'lucide-react'
+import { Clock3, Download, LoaderCircle } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import type { Team, TimeEntry } from '../lib/api'
 import { useDashboardSummary } from '../lib/dashboard'
 import { useProject } from '../lib/projects'
+import { reportRanges, useDownloadReport } from '../lib/reports'
 import { useTeams } from '../lib/teams'
 import { formatDuration, useActiveTimer } from '../lib/time'
 import { OwnerDashboard } from './OwnerDashboard'
@@ -29,6 +30,28 @@ function TimerOverview({ userId, entry, teams }: { userId: string; entry: TimeEn
   </section>
 }
 
+const ownRanges = [['week', 'Ten tydzień'], ['lastWeek', 'Poprzedni tydzień'], ['month', 'Ten miesiąc']] as const
+
+/** A personal PDF for one of a few ranges; the server returns only the member's own entries. */
+function OwnReport({ team }: { team: Team }) {
+  const [range, setRange] = useState<(typeof ownRanges)[number][0]>('week')
+  const dates = reportRanges(team.timezone)[range]
+  const download = useDownloadReport(team.id, { ...dates, userId: '', projectId: '', entryType: '', q: '' }, 'mine-pdf')
+  return <section className="overview-panel own-report" aria-label="Mój raport">
+    <h2>Mój raport</h2>
+    <p className="field-hint">Pobierz własne wpisy w zespole {team.name} jako plik PDF.</p>
+    <div className="own-report-controls">
+      <div className="field-group"><label htmlFor="own-report-range">Zakres raportu</label>
+        <select className="text-input" id="own-report-range" value={range} onChange={event => { setRange(event.target.value as typeof range); download.reset() }}>
+          {ownRanges.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select></div>
+      <button className="button-secondary" disabled={download.isPending} onClick={() => download.mutate()}>
+        {download.isPending ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />}Pobierz mój raport (PDF)</button>
+    </div>
+    {download.isError && <p className="form-error" role="alert">{download.error.message}</p>}
+  </section>
+}
+
 function Summary({ userId, team }: { userId: string; team: Team }) {
   const summary = useDashboardSummary(userId, team.id)
   if (summary.isPending) return <p className="teams-loading" role="status"><LoaderCircle className="spin" size={18} />Wczytywanie podsumowania…</p>
@@ -41,6 +64,7 @@ function Summary({ userId, team }: { userId: string; team: Team }) {
     </div>
     <p className="field-hint dashboard-summary-note">Zapisany czas w zespole {team.name} · {data.timezone}. Tydzień od poniedziałku do niedzieli.</p>
     <Link className="text-link" to={timeLink(team.id)}>Przejdź do historii i rejestru czasu</Link>
+    <OwnReport team={team} />
   </>
 }
 
