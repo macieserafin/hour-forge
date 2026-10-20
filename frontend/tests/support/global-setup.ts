@@ -11,9 +11,11 @@ const backendPath = fileURLToPath(new URL('../../../backend', import.meta.url))
 
 export default async function globalSetup() {
   const container = `hour-forge-e2e-${process.pid}`
+  const mailContainer = `hour-forge-e2e-mail-${process.pid}`
   const backendPort = process.env.E2E_BACKEND_PORT ?? '18086'
   let backend: ChildProcess | undefined
   let started = false
+  let mailStarted = false
   const directory = await mkdtemp(join(tmpdir(), 'hour-forge-e2e-'))
   const output = createWriteStream(join(directory, 'backend.log'))
   const cleanup = async () => {
@@ -27,6 +29,7 @@ export default async function globalSetup() {
       if (!stopped) { backend.kill('SIGKILL'); await exited }
     }
     output.end()
+    if (mailStarted) await exec('docker', ['rm', '-f', mailContainer])
     if (started) await exec('docker', ['rm', '-f', container])
   }
   try {
@@ -37,6 +40,12 @@ export default async function globalSetup() {
     started = true
     const { stdout } = await exec('docker', ['port', container, '5432'])
     const databasePort = stdout.trim().split(':').at(-1)!
+    // The backend requires a mail server; Mailpit keeps the messages so scenarios can follow the real links.
+    await exec('docker', ['run', '--rm', '-d', '--name', mailContainer, '-p', '127.0.0.1::1025', '-p', '127.0.0.1::8025', 'axllent/mailpit'])
+    mailStarted = true
+    const mapped = async (port: string) => (await exec('docker', ['port', mailContainer, port])).stdout.trim().split(/\r?\n/)[0]!.split(':').at(-1)!
+    const smtpPort = await mapped('1025')
+    const mailApiPort = await mapped('8025')
     if (process.platform === 'win32') {
       await exec('cmd.exe', ['/d', '/s', '/c', 'mvnw.cmd -q -DskipTests package'], { cwd: backendPath, maxBuffer: 8 * 1024 * 1024 })
     } else {
@@ -46,7 +55,7 @@ export default async function globalSetup() {
       cwd: backendPath,
       env: { ...process.env, DB_URL: `jdbc:postgresql://127.0.0.1:${databasePort}/hourforge_e2e`,
         DB_USERNAME: 'hourforge_e2e', DB_PASSWORD: 'e2e-only-password',
-        SESSION_COOKIE_SECURE: 'false', FRONTEND_URL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:5186',
+        SESSION_COOKIE_SECURE: 'false', SPRING_MAIL_HOST: '127.0.0.1', SPRING_MAIL_PORT: smtpPort, MAIL_STARTTLS: 'false', FRONTEND_URL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:5186',
         // Every scenario registers its accounts from 127.0.0.1; limits are verified by backend tests.
         APP_RATELIMIT_REGISTRATION_MAX: '100000', APP_RATELIMIT_TEAMCREATION_MAX: '100000',
         APP_RATELIMIT_INVITATIONCREATION_MAX: '100000', APP_RATELIMIT_PROJECTCREATION_MAX: '100000' },
@@ -68,6 +77,7 @@ export default async function globalSetup() {
       await new Promise(resolve => setTimeout(resolve, 200))
     }
     process.env.HOUR_FORGE_E2E_CONTAINER = container
+    process.env.HOUR_FORGE_E2E_MAIL_API = `http://127.0.0.1:${mailApiPort}`
     return cleanup
   } catch (error) {
     await cleanup()

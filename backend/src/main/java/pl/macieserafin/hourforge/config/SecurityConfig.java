@@ -20,7 +20,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
-import pl.macieserafin.hourforge.mail.EmailVerificationProperties;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
 import pl.macieserafin.hourforge.security.LoginAttemptService;
 import pl.macieserafin.hourforge.security.SessionVersionFilter;
@@ -42,8 +41,7 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, LoginAttemptService loginAttempts,
-                                            UserCredentialRepository credentials,
-                                            EmailVerificationProperties verification) throws Exception {
+                                            UserCredentialRepository credentials) throws Exception {
         return http
                 .headers(headers -> headers.referrerPolicy(policy -> policy.policy(
                         org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
@@ -51,7 +49,6 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/auth/options").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/email-verification/confirm",
                                 "/api/auth/email-verification/resend", "/api/auth/password-reset/request",
                                 "/api/auth/password-reset/confirm", "/api/auth/email-change/confirm").permitAll()
@@ -68,8 +65,7 @@ public class SecurityConfig {
                         .loginProcessingUrl(LOGIN_URL)
                         .usernameParameter(EMAIL_PARAMETER)
                         .successHandler((request, response, authentication) -> {
-                            if (verification.required() && authentication.getPrincipal() instanceof AppUserPrincipal principal
-                                    && !principal.isEmailVerified()) {
+                            if (authentication.getPrincipal() instanceof AppUserPrincipal principal && !principal.isEmailVerified()) {
                                 // The password was right, so this reveals nothing to a stranger; the session is dropped again.
                                 new SecurityContextLogoutHandler().logout(request, response, authentication);
                                 response.setStatus(HttpServletResponse.SC_FORBIDDEN);

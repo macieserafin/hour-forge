@@ -24,7 +24,12 @@ public class TestData {
         this.members = members;
     }
 
-    public User user(String email, String name) { return users.saveAndFlush(new User(email, name)); }
+    /** Users start with a confirmed address, as sign-in requires it; tests of the unconfirmed state clear it. */
+    public User user(String email, String name) {
+        var user = new User(email, name);
+        user.setEmailVerifiedAt(Instant.now());
+        return users.saveAndFlush(user);
+    }
     public Team team(String name, String timezone) { return teams.saveAndFlush(new Team(name, timezone)); }
     public Project project(Team team, String name, String description) {
         return projects.saveAndFlush(new Project(team, name, description));

@@ -34,9 +34,9 @@ public class AuthController {
     public record CsrfResponse(String token, String headerName, String parameterName) {
     }
 
-    public record MeResponse(UUID id, String email, String displayName, boolean emailVerified) {
+    public record MeResponse(UUID id, String email, String displayName) {
         public static MeResponse of(pl.macieserafin.hourforge.user.User user) {
-            return new MeResponse(user.getId(), user.getEmail(), user.getDisplayName(), user.isEmailVerified());
+            return new MeResponse(user.getId(), user.getEmail(), user.getDisplayName());
         }
     }
 }

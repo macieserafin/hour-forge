@@ -1,29 +1,25 @@
 package pl.macieserafin.hourforge.mail;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.mail.javamail.JavaMailSender;
 
 /**
- * Mail is optional. Setting {@code SPRING_MAIL_HOST} (with port, username and password as needed) turns it on;
- * {@code MAIL_FROM} sets the sender address and {@code FRONTEND_URL} the base of the links in the messages.
+ * E-mail is required: addresses are confirmed by link and passwords are reset by link. Set {@code SPRING_MAIL_HOST}
+ * (with {@code SPRING_MAIL_PORT}, username and password as needed); {@code MAIL_FROM} sets the sender address and
+ * {@code FRONTEND_URL} the base of the links in the messages. The application does not start without a mail server.
  */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(EmailVerificationProperties.class)
 public class MailConfig {
     @Bean
-    @ConditionalOnExpression("!'${spring.mail.host:}'.isEmpty()")
-    EmailSender smtpEmailSender(JavaMailSender mailSender, @Value("${app.mail.from}") String from) {
-        return new SmtpEmailSender(mailSender, from);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(EmailSender.class)
-    EmailSender disabledEmailSender() {
-        return new DisabledEmailSender();
+    EmailSender smtpEmailSender(ObjectProvider<JavaMailSender> mailSender, @Value("${app.mail.from}") String from) {
+        var sender = mailSender.getIfAvailable();
+        if (sender == null) {
+            throw new IllegalStateException("A mail server is required. Set SPRING_MAIL_HOST (and SPRING_MAIL_PORT); "
+                    + "for local development start Mailpit with Docker Compose and use localhost:1025.");
+        }
+        return new SmtpEmailSender(sender, from);
     }
 }

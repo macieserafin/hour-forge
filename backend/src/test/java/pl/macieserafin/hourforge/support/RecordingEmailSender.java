@@ -14,11 +14,6 @@ public class RecordingEmailSender implements EmailSender {
     private final List<Message> sent = new ArrayList<>();
 
     @Override
-    public boolean enabled() {
-        return true;
-    }
-
-    @Override
     public synchronized void send(String to, String subject, String body) {
         sent.add(new Message(to, subject, body));
     }

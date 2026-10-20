@@ -1,13 +1,16 @@
-import { test, expect, fillRegistration, submitLogin, signOut, login } from '../support/e2e'
+import { test, expect, fillRegistration, submitLogin, signOut, login, mailLink } from '../support/e2e'
 
 const email = 'cycle@account.example.test'
 const secret = 'Account-password-2026!'
 const newSecret = 'Account-new-password-2026!'
 
-test('an account can be renamed, get a new password, be downloaded and be deleted', async ({ page }) => {
+test('an account can be confirmed, renamed, get a new password, be downloaded and be deleted', async ({ page }) => {
   await page.goto('/register')
   await fillRegistration(page, email, secret, 'Anna Konto')
   await page.getByRole('button', { name: 'Utwórz konto', exact: true }).click()
+  await page.goto(await mailLink(page.request, email, 'verify-email'))
+  await expect(page.getByText('Adres e-mail został potwierdzony.')).toBeVisible()
+  await page.goto('/login')
   await submitLogin(page, email, secret)
   await expect(page).toHaveURL(/\/dashboard$/)
 

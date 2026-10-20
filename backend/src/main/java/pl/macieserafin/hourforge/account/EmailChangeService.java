@@ -52,7 +52,6 @@ public class EmailChangeService {
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public void request(UUID userId, EmailChangeRequest request) {
         attempts.requireNotBlocked(userId);
-        if (!mail.enabled()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "E-mail is not configured");
         var password = request.currentPassword();
         if (password == null || password.isEmpty() || password.length() > 1024) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is required");

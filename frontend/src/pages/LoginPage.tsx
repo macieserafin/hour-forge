@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowRight, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail } from 'lucide-react'
 import { AuthLayout } from '../components/AuthLayout'
-import { useAuthOptions, useLogin, useResendVerification } from '../lib/auth'
+import { useLogin, useResendVerification } from '../lib/auth'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { registrationUrl, safeReturnTo } from '../lib/navigation'
 
@@ -13,7 +13,6 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const login = useLogin()
   const resend = useResendVerification()
-  const options = useAuthOptions()
   const [search] = useSearchParams()
   const isInvitation = safeReturnTo(search.get('returnTo')).startsWith('/invite/')
 
@@ -25,9 +24,7 @@ export function LoginPage() {
   return <AuthLayout>
         <h2>Zaloguj się</h2>
         <p className="form-intro">{isInvitation ? 'Zaloguj się, aby wrócić do zaproszenia i potwierdzić dołączenie do zespołu.' : 'Użyj adresu e-mail przypisanego do Twojego konta.'}</p>
-        {registered && <p className="project-notice auth-success" role="status">{options.data?.emailEnabled
-          ? 'Rejestracja przyjęta. Wysłaliśmy wiadomość na podany adres e-mail. Sprawdź skrzynkę i zaloguj się.'
-          : 'Konto zostało utworzone. Zaloguj się, aby kontynuować.'}</p>}
+        {registered && <p className="project-notice auth-success" role="status">Rejestracja przyjęta. Wysłaliśmy wiadomość na podany adres e-mail. Potwierdź adres linkiem z wiadomości, a potem zaloguj się.</p>}
 
         <form onSubmit={submit} aria-label="Logowanie">
           <div className="field-group">
@@ -52,7 +49,7 @@ export function LoginPage() {
               </button>
             </div>
           </div>
-          {options.data?.emailEnabled && <p className="field-hint"><Link className="text-link" to="/forgot-password">Nie pamiętasz hasła?</Link></p>}
+          <p className="field-hint"><Link className="text-link" to="/forgot-password">Nie pamiętasz hasła?</Link></p>
           {login.isError && <p className="form-error" role="alert" id="login-error">{login.error.message}</p>}
           {login.isError && (login.error as { code?: string }).code === 'EMAIL_NOT_VERIFIED' && <div className="field-hint">
             <button type="button" className="text-link" disabled={resend.isPending} onClick={() => resend.mutate(email)}>Wyślij link potwierdzający ponownie</button>

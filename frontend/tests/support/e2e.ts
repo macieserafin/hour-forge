@@ -12,8 +12,9 @@ export const test = base.extend<{ isolatedDatabase: void }>({
     const container = process.env.HOUR_FORGE_E2E_CONTAINER
     if (!container?.startsWith('hour-forge-e2e-')) throw new Error('Managed E2E database was not started. Run tests through playwright.config.ts.')
     const reset = () => execFileSync('docker', ['exec', container, 'psql', '-U', 'hourforge_e2e', '-d', 'hourforge_e2e',
-      '-v', 'ON_ERROR_STOP=1', '-c', 'TRUNCATE TABLE teams CASCADE; DELETE FROM user_credentials; DELETE FROM users;'], { stdio: 'pipe' })
+      '-v', 'ON_ERROR_STOP=1', '-c', 'TRUNCATE TABLE teams CASCADE; DELETE FROM email_tokens; DELETE FROM user_credentials; DELETE FROM users;'], { stdio: 'pipe' })
     reset()
+    await request.delete(`${mailApi()}/api/v1/messages`)
     try {
       for (const account of [
         { displayName: 'User One', email: owner, password },
@@ -22,10 +23,30 @@ export const test = base.extend<{ isolatedDatabase: void }>({
         const response = await post(request, '/api/auth/register', account)
         expect(response.status()).toBe(201)
       }
+      // Sign-in needs a confirmed address; the seeded accounts skip the mailbox round trip.
+      execFileSync('docker', ['exec', container, 'psql', '-U', 'hourforge_e2e', '-d', 'hourforge_e2e', '-v', 'ON_ERROR_STOP=1',
+        '-c', 'UPDATE users SET email_verified_at = now();'], { stdio: 'pipe' })
       await use()
     } finally { reset() }
   }, { auto: true }],
 })
+
+const mailApi = () => process.env.HOUR_FORGE_E2E_MAIL_API ?? (() => { throw new Error('Managed E2E mail server was not started.') })()
+
+/** Path of the newest link `/<kind>/<token>` that the mail server received for the address. */
+export async function mailLink(request: APIRequestContext, to: string, kind: string): Promise<string> {
+  const deadline = Date.now() + 15000
+  while (Date.now() < deadline) {
+    const found = await (await request.get(`${mailApi()}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`)).json() as { messages?: { ID: string }[] }
+    for (const { ID } of found.messages ?? []) {
+      const message = await (await request.get(`${mailApi()}/api/v1/message/${ID}`)).json() as { Text: string }
+      const match = new RegExp(`/${kind}/([A-Za-z0-9_-]+)`).exec(message.Text)
+      if (match) return `/${kind}/${match[1]}`
+    }
+    await new Promise(resolve => setTimeout(resolve, 250))
+  }
+  throw new Error(`No ${kind} link was mailed to ${to}`)
+}
 
 export async function submitLogin(page: Page, email = owner, secret = email === member ? memberPassword : password) {
   await page.getByLabel('Adres e-mail', { exact: true }).fill(email)

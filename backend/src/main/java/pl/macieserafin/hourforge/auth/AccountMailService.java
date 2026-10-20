@@ -19,10 +19,6 @@ public class AccountMailService {
         this.frontendUrl = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
     }
 
-    public boolean enabled() {
-        return sender.enabled();
-    }
-
     @Transactional
     public void sendPasswordReset(User user) {
         var token = tokens.issue(user, EmailTokenPurpose.RESET_PASSWORD, null);

@@ -3,18 +3,7 @@ import { Link } from 'react-router-dom'
 import { LoaderCircle } from 'lucide-react'
 import { Modal } from '../components/Modal'
 import type { User } from '../lib/api'
-import { passwordChangeError, useChangePassword, useDeleteAccount, useDownloadAccountData, useRequestEmailChange, useResendMyVerification, useSignOutEverywhere, useUpdateProfile } from '../lib/account'
-import { useAuthOptions } from '../lib/auth'
-
-function EmailConfirmation() {
-  const resend = useResendMyVerification()
-  return <div>
-    <button className="button-secondary" type="button" disabled={resend.isPending} onClick={() => resend.mutate()}>
-      {resend.isPending && <LoaderCircle size={16} className="spin" />}Wyślij link potwierdzający</button>
-    {resend.isSuccess && <p className="project-notice" role="status">Wysłaliśmy link potwierdzający na Twój adres.</p>}
-    {resend.isError && <p className="form-error" role="alert">{resend.error.message}</p>}
-  </div>
-}
+import { passwordChangeError, useChangePassword, useDeleteAccount, useDownloadAccountData, useRequestEmailChange, useSignOutEverywhere, useUpdateProfile } from '../lib/account'
 
 function ProfileSection({ user }: { user: User }) {
   const save = useUpdateProfile()
@@ -30,8 +19,7 @@ function ProfileSection({ user }: { user: User }) {
   }
   return <section className="overview-panel account-section" aria-labelledby="account-profile-title">
     <h2 id="account-profile-title">Profil</h2>
-    <p className="field-hint">Adres e-mail: <strong>{user.email}</strong> · {user.emailVerified ? 'potwierdzony' : 'niepotwierdzony'}</p>
-    {!user.emailVerified && <EmailConfirmation />}
+    <p className="field-hint">Adres e-mail: <strong>{user.email}</strong></p>
     <form onSubmit={submit} onInput={() => { setValidation(''); setSaved(false); if (save.isError) save.reset() }}>
       <fieldset disabled={save.isPending}>
         <div className="field-group"><label htmlFor="account-name">Nazwa wyświetlana</label>
@@ -65,7 +53,7 @@ function EmailChangeSection() {
       <fieldset disabled={change.isPending}>
         <div className="field-group"><label htmlFor="account-new-email">Nowy adres e-mail</label>
           <input className="text-input" id="account-new-email" type="email" autoComplete="off" maxLength={255} value={newEmail} onChange={event => setNewEmail(event.target.value)} /></div>
-        <div className="field-group"><label htmlFor="account-email-password">Obecne hasło</label>
+        <div className="field-group"><label htmlFor="account-email-password">Hasło do potwierdzenia</label>
           <input className="text-input" id="account-email-password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} /></div>
       </fieldset>
       {(validation || change.isError) && <p className="form-error" role="alert">{validation || change.error?.message}</p>}
@@ -164,10 +152,9 @@ function DeleteSection() {
 }
 
 export function AccountPanel({ user }: { user: User }) {
-  const options = useAuthOptions()
   return <div className="account-panel">
     <ProfileSection user={user} />
-    {options.data?.emailEnabled && <EmailChangeSection />}
+    <EmailChangeSection />
     <PasswordSection />
     <SignOutSection />
     <DataSection />

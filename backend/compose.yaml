@@ -39,5 +39,13 @@ services:
       - ./docker/postgres/01-create-app-user.sh:/create-app-user.sh:ro
     entrypoint: ["/bin/sh", "/create-app-user.sh"]
 
+  # Development mail server (required by the backend): SMTP on 1025, inbox in the browser on 8025.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAIL_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAIL_UI_PORT:-8025}:8025"
+
 volumes:
   postgres_data:

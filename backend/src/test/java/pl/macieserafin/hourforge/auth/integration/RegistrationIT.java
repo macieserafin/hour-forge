@@ -27,7 +27,7 @@ class RegistrationIT extends ApiIntegrationTestSupport {
             {"displayName":" New User ","email":" New@Example.test ","password":"Valid-password-2026!"}
             """;
 
-    @Test void registersAnAnonymousAccountAndAllowsLoginWithoutGrantingTeamAccess() throws Exception {
+    @Test void registersAnAnonymousAccountAndAllowsLoginOnlyAfterConfirmationWithoutGrantingTeamAccess() throws Exception {
         var session = new MockHttpSession();
         long membershipCount = members.count();
         mvc.perform(post("/api/auth/register").session(session).with(csrf()).contentType("application/json").content(BODY))
@@ -39,6 +39,13 @@ class RegistrationIT extends ApiIntegrationTestSupport {
         assertThat(encoder.matches("Valid-password-2026!", hash)).isTrue();
         assertThat(members.count()).isEqualTo(membershipCount);
         mvc.perform(get("/api/me").session(session)).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/login").session(session).with(csrf()).param("email", " NEW@EXAMPLE.TEST ")
+                        .param("password", "Valid-password-2026!"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("EMAIL_NOT_VERIFIED"));
+        mvc.perform(post("/api/auth/email-verification/confirm").with(csrf()).contentType("application/json")
+                        .content("{\"token\":\"" + mail.lastToken("verify-email") + "\"}"))
+                .andExpect(status().isNoContent());
+        session = new MockHttpSession();
         mvc.perform(post("/api/auth/login").session(session).with(csrf()).param("email", " NEW@EXAMPLE.TEST ")
                         .param("password", "Valid-password-2026!"))
                 .andExpect(status().isNoContent());

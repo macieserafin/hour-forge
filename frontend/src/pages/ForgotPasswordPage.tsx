@@ -2,10 +2,9 @@ import { useState, type FormEvent } from 'react'
 import { LoaderCircle, Mail } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { AuthLayout } from '../components/AuthLayout'
-import { useAuthOptions, useRequestPasswordReset } from '../lib/auth'
+import { useRequestPasswordReset } from '../lib/auth'
 
 export function ForgotPasswordPage() {
-  const options = useAuthOptions()
   const request = useRequestPasswordReset()
   const [email, setEmail] = useState('')
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -14,8 +13,7 @@ export function ForgotPasswordPage() {
   }
   return <AuthLayout>
     <h2>Nie pamiętasz hasła?</h2>
-    {options.data && !options.data.emailEnabled ? <p className="form-error" role="alert">Ten serwer nie wysyła e-maili, więc hasła nie można zresetować samodzielnie. Skontaktuj się z administratorem.</p>
-      : request.isSuccess ? <p className="project-notice auth-success" role="status">Jeśli konto o takim adresie istnieje, wysłaliśmy na nie link do ustawienia nowego hasła. Link jest ważny przez godzinę.</p>
+    {request.isSuccess ? <p className="project-notice auth-success" role="status">Jeśli konto o takim adresie istnieje, wysłaliśmy na nie link do ustawienia nowego hasła. Link jest ważny przez godzinę.</p>
       : <>
         <p className="form-intro">Podaj adres e-mail konta. Wyślemy link do ustawienia nowego hasła.</p>
         <form onSubmit={submit} aria-label="Reset hasła">

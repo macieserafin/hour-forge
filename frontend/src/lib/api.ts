@@ -2,7 +2,6 @@ export interface User {
   id: string
   email: string
   displayName: string
-  emailVerified: boolean
 }
 
 export interface Team {
@@ -247,18 +246,6 @@ async function publicPost(path: string, body: unknown, messages: Record<number, 
 export const confirmEmail = (token: string) => publicPost('/api/auth/email-verification/confirm', { token },
   { 400: 'Link jest nieprawidłowy albo wygasł. Poproś o nowy link.' }, 'Nie udało się potwierdzić adresu. Spróbuj ponownie.')
 
-export interface AuthOptions {
-  emailEnabled: boolean
-  emailVerificationRequired: boolean
-}
-
-export async function getAuthOptions(signal?: AbortSignal): Promise<AuthOptions> {
-  const response = await request('/api/auth/options', { signal })
-  // Without the answer the screens fall back to the e-mail-free behaviour instead of blocking sign-in.
-  if (!response.ok) return { emailEnabled: false, emailVerificationRequired: false }
-  return response.json() as Promise<AuthOptions>
-}
-
 export const requestPasswordReset = (email: string) => publicPost('/api/auth/password-reset/request', { email: email.trim() },
   {}, 'Nie udało się wysłać wiadomości. Spróbuj ponownie później.')
 
@@ -289,7 +276,6 @@ export async function register(input: RegistrationInput): Promise<void> {
     const messages: Record<number, string> = {
       400: 'Sprawdź nazwę, adres e-mail i hasło. Hasło musi mieć co najmniej 12 znaków i mieścić się w dozwolonej długości.',
       403: 'Sesja formularza wygasła. Spróbuj ponownie.',
-      409: 'Ten adres e-mail jest już zarejestrowany. Zaloguj się lub użyj innego adresu.',
       429: tooManyRequestsMessage(response),
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się utworzyć konta. Jeśli konto mogło już powstać, spróbuj się zalogować.')
@@ -330,12 +316,6 @@ export async function changePassword(input: { currentPassword: string; newPasswo
 export async function requestEmailChange(input: { newEmail: string; currentPassword: string }): Promise<void> {
   await accountRequest('/api/account/email', 'POST', { newEmail: input.newEmail.trim(), currentPassword: input.currentPassword },
     { 400: 'Sprawdź nowy adres i obecne hasło. Nowy adres musi różnić się od obecnego.', 503: 'Wysyłanie e-maili nie jest skonfigurowane na tym serwerze.' },
-    'Nie udało się wysłać linku. Spróbuj ponownie później.')
-}
-
-export async function resendMyVerification(): Promise<void> {
-  await accountRequest('/api/account/email-verification/resend', 'POST', {},
-    { 409: 'Ten adres jest już potwierdzony.', 503: 'Wysyłanie e-maili nie jest skonfigurowane na tym serwerze.' },
     'Nie udało się wysłać linku. Spróbuj ponownie później.')
 }
 

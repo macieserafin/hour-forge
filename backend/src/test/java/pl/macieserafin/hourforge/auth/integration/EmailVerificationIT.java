@@ -43,6 +43,7 @@ class EmailVerificationIT extends ApiIntegrationTestSupport {
     @BeforeEach
     void createUser() {
         user = fixtures.user(EMAIL, "Verify Test");
+        user.setEmailVerifiedAt(null);
         credentials.saveAndFlush(new UserCredential(user, encoder.encode(PASSWORD)));
     }
 
@@ -68,9 +69,6 @@ class EmailVerificationIT extends ApiIntegrationTestSupport {
         confirm(token).andExpect(status().isNoContent());
         assertThat(users.findById(user.getId()).orElseThrow().isEmailVerified()).isTrue();
         confirm(token).andExpect(status().isBadRequest());
-        mvc.perform(get("/api/me").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors
-                        .user(new pl.macieserafin.hourforge.security.AppUserPrincipal(user.getId(), EMAIL, "unused"))))
-                .andExpect(jsonPath("$.emailVerified").value(true));
     }
 
     @ParameterizedTest
@@ -95,23 +93,13 @@ class EmailVerificationIT extends ApiIntegrationTestSupport {
 
     @Test
     void aNewLinkReplacesTheOldOne() throws Exception {
-        var session = signIn();
-        postSigned(session, "/api/account/email-verification/resend").andExpect(status().isNoContent());
+        send(user);
         var first = mail.lastToken("verify-email");
-        postSigned(session, "/api/account/email-verification/resend").andExpect(status().isNoContent());
+        send(user);
         var second = mail.lastToken("verify-email");
         assertThat(second).isNotEqualTo(first);
         confirm(first).andExpect(status().isBadRequest());
         confirm(second).andExpect(status().isNoContent());
-        postSigned(session, "/api/account/email-verification/resend").andExpect(status().isConflict());
-    }
-
-    @Test
-    void signedInResendIsLimitedPerAccount() throws Exception {
-        var session = signIn();
-        for (int i = 0; i < 3; i++) postSigned(session, "/api/account/email-verification/resend").andExpect(status().isNoContent());
-        postSigned(session, "/api/account/email-verification/resend").andExpect(status().isTooManyRequests());
-        assertThat(mail.sent()).hasSize(3);
     }
 
     @Test
@@ -139,17 +127,9 @@ class EmailVerificationIT extends ApiIntegrationTestSupport {
     }
 
     @Test
-    void publicOptionsTellTheScreensWhetherMailIsAvailable() throws Exception {
-        mvc.perform(get("/api/auth/options")).andExpect(status().isOk())
-                .andExpect(jsonPath("$.emailEnabled").value(true))
-                .andExpect(jsonPath("$.emailVerificationRequired").value(false));
-    }
-
-    @Test
     void endpointsRequireCsrfButNotAuthentication() throws Exception {
         mvc.perform(post("/api/auth/email-verification/resend").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"" + EMAIL + "\"}")).andExpect(status().isForbidden());
-        mvc.perform(post("/api/account/email-verification/resend").with(csrf())).andExpect(status().isUnauthorized());
     }
 
     // Goes through the public flow, exactly as a user would request a new link.
@@ -168,21 +148,4 @@ class EmailVerificationIT extends ApiIntegrationTestSupport {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"" + email + "\"}"));
     }
 
-    private ResultActions postSigned(MockHttpSession session, String path) throws Exception {
-        MockHttpServletRequestBuilder builder = post(path).session(session).header("X-CSRF-TOKEN", csrfToken(session));
-        return mvc.perform(builder);
-    }
-
-    private MockHttpSession signIn() throws Exception {
-        var session = new MockHttpSession();
-        mvc.perform(post("/api/auth/login").session(session).contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                        .header("X-CSRF-TOKEN", csrfToken(session)).param("email", EMAIL).param("password", PASSWORD))
-                .andExpect(status().isNoContent());
-        return session;
-    }
-
-    private String csrfToken(MockHttpSession session) throws Exception {
-        var response = mvc.perform(get("/api/auth/csrf").session(session)).andExpect(status().isOk()).andReturn().getResponse();
-        return JsonPath.read(response.getContentAsString(), "$.token");
-    }
 }

@@ -3,36 +3,23 @@ import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../../src/App'
 import { renderApp } from '../support/render'
-import { mockApi, json, user } from '../support/api'
+import { mockApi, json } from '../support/api'
 
-const withMail = { 'GET /api/auth/options': () => json({ emailEnabled: true, emailVerificationRequired: false }) }
-
-it('shows the forgot-password link only when the server can send e-mail', async () => {
+it('links to the password reset from the sign-in page', async () => {
   mockApi({ 'GET /api/me': () => json(null, 401) })
-  const first = renderApp(<App />, '/login')
-  await screen.findByRole('heading', { name: 'Zaloguj się' })
-  expect(screen.queryByRole('link', { name: 'Nie pamiętasz hasła?' })).not.toBeInTheDocument()
-  first.unmount()
-  mockApi({ 'GET /api/me': () => json(null, 401), ...withMail })
   renderApp(<App />, '/login')
   expect(await screen.findByRole('link', { name: 'Nie pamiętasz hasła?' })).toHaveAttribute('href', '/forgot-password')
 })
 
 it('asks for a reset link and gives the same answer for every address', async () => {
   let body: unknown
-  mockApi({ 'GET /api/me': () => json(null, 401), ...withMail,
+  mockApi({ 'GET /api/me': () => json(null, 401),
     'POST /api/auth/password-reset/request': (_url, options) => { body = JSON.parse(String(options.body)); return json(null, 204) } })
   renderApp(<App />, '/forgot-password')
   await userEvent.type(await screen.findByLabelText('Adres e-mail'), ' ktos@firma.pl ')
   await userEvent.click(screen.getByRole('button', { name: 'Wyślij link' }))
   expect(await screen.findByText(/Jeśli konto o takim adresie istnieje/)).toBeVisible()
   expect(body).toEqual({ email: 'ktos@firma.pl' })
-})
-
-it('explains that a server without e-mail cannot reset passwords', async () => {
-  mockApi({ 'GET /api/me': () => json(null, 401) })
-  renderApp(<App />, '/forgot-password')
-  expect(await screen.findByRole('alert')).toHaveTextContent('nie wysyła e-maili')
 })
 
 it('sets a new password from the e-mail link after checking it locally', async () => {
@@ -80,20 +67,13 @@ it('reports an address that has been taken in the meantime', async () => {
 
 it('requests an address change with the current password and shows a neutral confirmation', async () => {
   let body: unknown
-  mockApi({ ...withMail, 'POST /api/account/email': (_url, options) => { body = JSON.parse(String(options.body)); return json(null, 204) } })
+  mockApi({ 'POST /api/account/email': (_url, options) => { body = JSON.parse(String(options.body)); return json(null, 204) } })
   renderApp(<App />, '/account')
   await userEvent.type(await screen.findByLabelText('Nowy adres e-mail'), ' nowy@firma.pl ')
   await userEvent.click(screen.getAllByRole('button', { name: 'Wyślij link' })[0]!)
   expect(await screen.findByRole('alert')).toHaveTextContent('Podaj obecne hasło.')
-  await userEvent.type(screen.getByLabelText('Obecne hasło', { selector: '#account-email-password' }), 'Current-password-2026')
+  await userEvent.type(screen.getByLabelText('Hasło do potwierdzenia'), 'Current-password-2026')
   await userEvent.click(screen.getAllByRole('button', { name: 'Wyślij link' })[0]!)
   expect(await screen.findByText(/Jeśli adres jest dostępny/)).toBeVisible()
   expect(body).toEqual({ newEmail: 'nowy@firma.pl', currentPassword: 'Current-password-2026' })
-})
-
-it('hides the address change form when the server cannot send e-mail', async () => {
-  mockApi({ 'GET /api/me': () => json(user) })
-  renderApp(<App />, '/account')
-  await screen.findByLabelText('Nazwa wyświetlana')
-  expect(screen.queryByLabelText('Nowy adres e-mail')).not.toBeInTheDocument()
 })

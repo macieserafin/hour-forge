@@ -116,6 +116,6 @@ public class AccountDataService {
         user.anonymize("deleted-" + userId + "@deleted.invalid", DELETED_USER_NAME, now);
         users.flush();
         attempts.reset(userId);
-        if (mail.enabled()) mail.sendAccountDeleted(oldEmail);
+        mail.sendAccountDeleted(oldEmail);
     }
 }

@@ -1,7 +1,7 @@
 import { vi } from 'vitest'
 import type { Project, Team, TimeEntry, TimeEntryHistoryItem, User } from '../../src/lib/api'
 
-export const user: User = { id: 'actor', email: 'actor@example.test', displayName: 'Test Actor', emailVerified: true }
+export const user: User = { id: 'actor', email: 'actor@example.test', displayName: 'Test Actor' }
 export const team: Team = { id: 'team', name: 'Studio', timezone: 'Europe/Warsaw', role: 'OWNER', createdAt: '2026-10-19T10:00:00Z', archivedAt: null }
 export const project: Project = { id: 'project', teamId: team.id, name: 'Website', description: null, createdAt: team.createdAt, archivedAt: null }
 export const entry: TimeEntryHistoryItem = { id: 'entry', teamId: team.id, projectId: project.id, projectName: project.name,
@@ -15,7 +15,6 @@ type Handler = (url: URL, options: RequestInit) => Response | Promise<Response>
 export function mockApi(overrides: Record<string, Handler> = {}) {
   const handlers: Record<string, Handler> = {
     'GET /api/me': () => json(user),
-    'GET /api/auth/options': () => json({ emailEnabled: false, emailVerificationRequired: false }),
     'GET /api/auth/csrf': () => json({ token: 'csrf', headerName: 'X-CSRF-TOKEN', parameterName: '_csrf' }),
     'GET /api/teams': () => json([team]),
     [`GET /api/teams/${team.id}/members`]: () => json({ content: [{ userId: user.id, displayName: user.displayName,

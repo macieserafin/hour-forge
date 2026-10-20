@@ -1,9 +1,9 @@
-import { test, expect, fillRegistration, submitLogin, signOut, setupTeam, create } from '../support/e2e'
+import { test, expect, fillRegistration, submitLogin, signOut, setupTeam, create, mailLink } from '../support/e2e'
 
 const email = 'new-user@registration.example.test'
 const secret = 'Registration-password-2026!'
 
-test('a new user registers, signs in, creates a team and cannot overwrite an existing account', async ({ page }, info) => {
+test('a new user registers, confirms the address, signs in, creates a team and cannot overwrite an existing account', async ({ page }, info) => {
   await page.goto('/login')
   await page.getByRole('link', { name: 'Utwórz konto', exact: true }).click()
   await fillRegistration(page, email, secret)
@@ -13,10 +13,15 @@ test('a new user registers, signs in, creates a team and cannot overwrite an exi
   await page.screenshot({ path: info.outputPath('registration.png'), fullPage: true, animations: 'disabled' })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.getByRole('button', { name: 'Utwórz konto', exact: true }).click()
-  await expect(page.getByRole('status')).toHaveText('Konto zostało utworzone. Zaloguj się, aby kontynuować.')
+  await expect(page.getByRole('status')).toContainText('Rejestracja przyjęta')
   await expect(page.getByLabel('Adres e-mail')).toHaveValue(email)
   await expect(page.getByLabel('Hasło', { exact: true })).toHaveValue('')
   expect((await page.request.get('/api/me')).status()).toBe(401)
+  await submitLogin(page, email, secret)
+  await expect(page.getByRole('alert')).toContainText('Potwierdź adres e-mail')
+  await page.goto(await mailLink(page.request, email, 'verify-email'))
+  await expect(page.getByText('Adres e-mail został potwierdzony.')).toBeVisible()
+  await page.goto('/login')
   await submitLogin(page, email, secret)
   await expect(page).toHaveURL(/\/dashboard$/)
   await expect(page.getByRole('heading', { name: 'Cześć, Registration.' })).toBeVisible()
@@ -32,8 +37,8 @@ test('a new user registers, signs in, creates a team and cannot overwrite an exi
   await page.goto('/register')
   await fillRegistration(page, email.toUpperCase(), 'Different-password-2026!')
   await page.getByRole('button', { name: 'Utwórz konto', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('Ten adres e-mail jest już zarejestrowany')
-  await page.getByRole('link', { name: 'Zaloguj się', exact: true }).click()
+  // The same answer as for a new address, so sign-up reveals nothing; the original password is untouched.
+  await expect(page.getByRole('status')).toContainText('Rejestracja przyjęta')
   await submitLogin(page, email, secret)
   await expect(page).toHaveURL(/\/dashboard/)
 })
@@ -52,6 +57,10 @@ test('registration preserves an invitation and a new member can record work afte
     await newcomer.getByRole('button', { name: 'Utwórz konto', exact: true }).click()
     await expect(newcomer.getByRole('heading', { name: 'Zaloguj się' })).toBeVisible()
     expect(new URL(newcomer.url()).searchParams.get('returnTo')).toBe(`/invite/${invitation.token}`)
+    const loginWithInvitation = newcomer.url()
+    await newcomer.goto(await mailLink(newcomer.request, email, 'verify-email'))
+    await expect(newcomer.getByText('Adres e-mail został potwierdzony.')).toBeVisible()
+    await newcomer.goto(loginWithInvitation)
     await submitLogin(newcomer, email, secret)
     await expect(newcomer.getByRole('heading', { name: 'Zaproszenie do zespołu' })).toBeVisible()
     expect(await (await newcomer.request.get('/api/teams')).json()).toEqual([])

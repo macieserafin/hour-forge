@@ -7,7 +7,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import pl.macieserafin.hourforge.auth.UserCredential;
@@ -21,7 +20,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@TestPropertySource(properties = "app.email-verification.required=true")
 class EmailVerificationRequiredIT extends ApiIntegrationTestSupport {
     private static final String EMAIL = "required@example.com";
     private static final String PASSWORD = "Current-password-2026";
@@ -33,7 +31,9 @@ class EmailVerificationRequiredIT extends ApiIntegrationTestSupport {
 
     @BeforeEach
     void createUser() {
-        credentials.saveAndFlush(new UserCredential(fixtures.user(EMAIL, "Required Test"), encoder.encode(PASSWORD)));
+        var user = fixtures.user(EMAIL, "Required Test");
+        user.setEmailVerifiedAt(null);
+        credentials.saveAndFlush(new UserCredential(user, encoder.encode(PASSWORD)));
     }
 
     @Test
@@ -51,7 +51,7 @@ class EmailVerificationRequiredIT extends ApiIntegrationTestSupport {
 
         var confirmed = new MockHttpSession();
         login(PASSWORD, confirmed).andExpect(status().isNoContent());
-        mvc.perform(get("/api/me").session(confirmed)).andExpect(status().isOk()).andExpect(jsonPath("$.emailVerified").value(true));
+        mvc.perform(get("/api/me").session(confirmed)).andExpect(status().isOk());
     }
 
     private ResultActions login(String password, MockHttpSession session) throws Exception {

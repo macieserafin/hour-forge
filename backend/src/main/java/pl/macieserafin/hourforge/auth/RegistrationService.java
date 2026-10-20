@@ -35,9 +35,7 @@ public class RegistrationService {
         String hash = encoder.encode(password);
         var existing = users.findByEmailIgnoreCase(request.email());
         if (existing.isPresent()) {
-            // With e-mail the caller gets the usual answer and the owner of the address is told; without it
-            // there is no way to tell the owner, so the caller is told plainly.
-            if (!accountMail.enabled()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered");
+            // The caller gets the usual answer, so sign-up cannot be used to find out who has an account; the owner is told.
             accountMail.sendRegistrationAttempt(existing.get());
             return;
         }

@@ -27,11 +27,6 @@ public class SmtpEmailSender implements EmailSender, DisposableBean {
     }
 
     @Override
-    public boolean enabled() {
-        return true;
-    }
-
-    @Override
     public void send(String to, String subject, String body) {
         executor.execute(() -> {
             try {

@@ -1,5 +1,5 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { confirmEmail, confirmEmailChange, confirmPasswordReset, getAuthOptions, getUser, login, logout, register, requestPasswordReset, resendVerification } from './api'
+import { confirmEmail, confirmEmailChange, confirmPasswordReset, getUser, login, logout, register, requestPasswordReset, resendVerification } from './api'
 
 export const sessionOptions = queryOptions({
   queryKey: ['session'],
@@ -12,10 +12,6 @@ export function useSession() {
 
 export function useRegister() {
   return useMutation({ mutationFn: register, retry: false, gcTime: 0 })
-}
-
-export function useAuthOptions() {
-  return useQuery({ queryKey: ['auth-options'], queryFn: ({ signal }) => getAuthOptions(signal), staleTime: 5 * 60_000 })
 }
 
 export function useRequestPasswordReset() {

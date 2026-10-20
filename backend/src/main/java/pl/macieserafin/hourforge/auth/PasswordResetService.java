@@ -44,7 +44,7 @@ public class PasswordResetService {
     public void request(String email, String ip) {
         limiter.tryAcquire("password-reset-ip:" + ip, limits.emailVerificationIp())
                 .ifPresent(retryAfter -> { throw new TooManyRequestsException(retryAfter); });
-        if (email == null || email.isBlank() || !mail.enabled()) return;
+        if (email == null || email.isBlank()) return;
         users.findByEmailIgnoreCase(email.strip()).ifPresent(user -> {
             if (limiter.tryAcquire("password-reset:" + user.getId(), limits.emailVerification()).isEmpty()) {
                 mail.sendPasswordReset(user);

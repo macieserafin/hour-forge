@@ -63,8 +63,18 @@ class PasswordResetIT extends ApiIntegrationTestSupport {
         mvc.perform(get("/api/me").session(session)).andExpect(status().isUnauthorized());
         login(PASSWORD, new MockHttpSession()).andExpect(status().isUnauthorized());
         login(NEW_PASSWORD, new MockHttpSession()).andExpect(status().isNoContent());
-        assertThat(users.findById(user.getId()).orElseThrow().isEmailVerified()).isTrue();
         confirm(token, "Yet-another-password-2026").andExpect(status().isBadRequest());
+        login(NEW_PASSWORD, new MockHttpSession()).andExpect(status().isNoContent());
+    }
+
+    @Test
+    void resettingTheFlowOfAnUnconfirmedAccountAlsoConfirmsItsAddress() throws Exception {
+        user.setEmailVerifiedAt(null);
+        users.flush();
+        login(PASSWORD, new MockHttpSession()).andExpect(status().isForbidden());
+        request(EMAIL).andExpect(status().isNoContent());
+        confirm(mail.lastToken("reset-password"), NEW_PASSWORD).andExpect(status().isNoContent());
+        assertThat(users.findById(user.getId()).orElseThrow().isEmailVerified()).isTrue();
         login(NEW_PASSWORD, new MockHttpSession()).andExpect(status().isNoContent());
     }
 
