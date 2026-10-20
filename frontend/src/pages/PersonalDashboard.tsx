@@ -8,6 +8,9 @@ import { reportRanges, useDownloadReport } from '../lib/reports'
 import { useTeams } from '../lib/teams'
 import { formatClock, formatDuration, formatHours, useActiveTimer } from '../lib/time'
 import { pickTeam, usePreferences } from '../lib/preferences'
+import { ActivityHeatmap } from '../components/ActivityHeatmap'
+import { ProjectDot } from '../components/ProjectDot'
+import { useDashboardActivity, useDashboardOverview } from '../lib/dashboard'
 import { BarChart } from '../components/BarChart'
 import { OwnerDashboard } from './OwnerDashboard'
 
@@ -24,7 +27,7 @@ function TimerOverview({ userId, entry, teams }: { userId: string; entry: TimeEn
   const elapsed = Math.max(0, Math.floor((end - Date.parse(entry.startedAt!)) / 1000 - entry.pausedDurationSeconds))
   return <section className="overview-panel dashboard-timer" aria-label="Aktywny timer na pulpicie">
     <h2>{entry.pausedAt ? 'Timer wstrzymany' : 'Praca w toku'}</h2>
-    <p className="timer-project-name">{team && project.data ? project.data.name : project.isPending && team ? 'Wczytywanie projektu…' : 'Projekt niedostępny'}</p>
+    <p className="timer-project-name">{team && project.data && <ProjectDot color={project.data.color} />}{team && project.data ? project.data.name : project.isPending && team ? 'Wczytywanie projektu…' : 'Projekt niedostępny'}</p>
     <p className="timer-team-name">{team?.name ?? 'Poprzedni zespół'}</p>
     <p className="timer-counter" role="timer" aria-label="Czas aktywnego timera" aria-live="off">{formatClock(elapsed)}</p>
     {project.isError && <p className="form-error" role="alert">{project.error.message}</p>}
@@ -76,6 +79,29 @@ function Summary({ userId, team }: { userId: string; team: Team }) {
   </>
 }
 
+/** The person's time in every team they belong to; shown only when there is more than one. */
+function AllTeams({ userId }: { userId: string }) {
+  const weekStart = usePreferences(userId).data?.weekStart ?? 'MONDAY'
+  const overview = useDashboardOverview(userId, weekStart)
+  if (!overview.data || overview.data.teams.length < 2) return null
+  const data = overview.data
+  return <section className="overview-panel all-teams" aria-labelledby="all-teams-title">
+    <h2 id="all-teams-title">Wszystkie zespoły</h2>
+    <dl className="all-teams-totals"><div><dt>Dzisiaj</dt><dd>{formatDuration(data.todaySeconds)}</dd></div><div><dt>Ten tydzień</dt><dd>{formatDuration(data.weekSeconds)}</dd></div></dl>
+    <table className="team-table"><caption className="sr-only">Czas w poszczególnych zespołach</caption>
+      <thead><tr><th scope="col">Zespół</th><th scope="col">Dzisiaj</th><th scope="col">Ten tydzień</th></tr></thead>
+      <tbody>{data.teams.map(team => <tr key={team.teamId}><th scope="row">{team.teamName}{team.archived && <span className="report-meta"> (zarchiwizowany)</span>}</th><td>{formatDuration(team.todaySeconds)}</td><td>{formatDuration(team.weekSeconds)}</td></tr>)}</tbody></table>
+  </section>
+}
+
+function Activity({ userId }: { userId: string }) {
+  const weekStart = usePreferences(userId).data?.weekStart ?? 'MONDAY'
+  const activity = useDashboardActivity(userId, weekStart)
+  if (activity.isPending) return <p className="teams-loading" role="status"><LoaderCircle size={18} className="spin" />Wczytywanie aktywności…</p>
+  if (activity.isError) return <div className="dashboard-error" role="alert">{activity.error.message}<button onClick={() => void activity.refetch()}>Spróbuj ponownie</button></div>
+  return <section className="overview-panel" aria-label="Aktywność"><ActivityHeatmap activity={activity.data} /></section>
+}
+
 export function PersonalDashboard({ userId }: { userId: string }) {
   const teams = useTeams(userId)
   const active = useActiveTimer(userId)
@@ -96,7 +122,8 @@ export function PersonalDashboard({ userId }: { userId: string }) {
           <button className="button-secondary" aria-pressed={!teamView} onClick={() => setSearch({ team: selected.id })}>Mój czas</button>
           <button className="button-secondary" aria-pressed={teamView} onClick={() => setSearch({ team: selected.id, view: 'team' })}>Zespół</button>
         </div>}
-        {selected ? teamView ? <OwnerDashboard key={`${userId}:${selected.id}`} userId={userId} team={selected} /> : <Summary key={selected.id} userId={userId} team={selected} /> : <p className="form-error" role="alert">Ten zespół nie istnieje lub nie masz do niego dostępu. Wybierz inny zespół.</p>}
+        {!teamView && <AllTeams userId={userId} />}
+        {selected ? teamView ? <OwnerDashboard key={`${userId}:${selected.id}`} userId={userId} team={selected} /> : <><Summary key={selected.id} userId={userId} team={selected} /><Activity userId={userId} /></> : <p className="form-error" role="alert">Ten zespół nie istnieje lub nie masz do niego dostępu. Wybierz inny zespół.</p>}
       </>}
     {active.isPending ? <p className="teams-loading" role="status"><LoaderCircle size={18} className="spin" />Sprawdzanie aktywnego timera…</p>
       : active.isError ? <div className="dashboard-error" role="alert">{active.error.message}<button onClick={() => void active.refetch()}>Odśwież timer</button></div>

@@ -5,6 +5,8 @@ import { ChevronLeft, ChevronRight, Download, LoaderCircle, RefreshCw } from 'lu
 import { ApiError, type ReportBucket, type ReportFilters, type ReportGroup, type ReportPage, type ReportSort, type Team } from '../lib/api'
 import { MAX_REPORT_DAYS, clearedSearch, filtersFromSearch, filtersToSearch, reportRangeDays, reportRanges, useDownloadReport, useReportActive, useReportBreakdown, useReportEntries, useReportMembers, useReportProjects, useReportSummary } from '../lib/reports'
 import { formatClock, formatDuration, formatHours } from '../lib/time'
+import { ProjectDot } from '../components/ProjectDot'
+import { projectColorHex } from '../lib/projectColors'
 import { BarChart, type ChartItem } from '../components/BarChart'
 
 const dateLabel = (date: string | null) => date === null ? 'Bez daty' : new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
@@ -57,7 +59,7 @@ function projectChart(data: ReportPage<ReportBucket>): ChartItem[] {
   const sorted = [...data.content].sort((a, b) => b.durationSeconds - a.durationSeconds)
   const shown = sorted.slice(0, MAX_CHART_PROJECTS)
   const rest = sorted.slice(MAX_CHART_PROJECTS).reduce((sum, bucket) => sum + bucket.durationSeconds, 0)
-  const items: ChartItem[] = shown.map(bucket => ({ key: bucket.projectId!, label: bucket.projectName ?? '',
+  const items: ChartItem[] = shown.map(bucket => ({ key: bucket.projectId!, label: bucket.projectName ?? '', color: projectColorHex(bucket.projectColor),
     value: bucket.durationSeconds, display: formatDuration(bucket.durationSeconds), short: formatHours(bucket.durationSeconds) }))
   if (rest > 0) items.push({ key: 'rest', label: 'Pozostałe projekty', value: rest, display: formatDuration(rest), short: formatHours(rest) })
   return items
@@ -256,7 +258,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
                 <tbody>{data.data.content.map(entry => <tr key={entry.id}>
                   <td data-label="Data pracy">{entry.workDate ? <time dateTime={entry.workDate}>{dateLabel(entry.workDate)}</time> : 'Bez daty'}</td>
                   <td data-label="Osoba">{entry.displayName}</td>
-                  <td data-label="Projekt i opis pracy"><strong className="history-project-name">{entry.projectName}</strong>{entry.projectArchivedAt && <span className="report-meta">Projekt archiwalny</span>}<p className="history-description">{entry.description || 'Bez opisu'}</p><JiraKeyLink userId={userId} teamId={team.id} issueKey={entry.jiraIssueKey} />{entry.editedAt && <span className="edited-mark" title={`Ostatnio zmieniony ${new Date(entry.editedAt).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })}`}>edytowano</span>}</td>
+                  <td data-label="Projekt i opis pracy"><strong className="history-project-name"><ProjectDot color={entry.projectColor} />{entry.projectName}</strong>{entry.projectArchivedAt && <span className="report-meta">Projekt archiwalny</span>}<p className="history-description">{entry.description || 'Bez opisu'}</p><JiraKeyLink userId={userId} teamId={team.id} issueKey={entry.jiraIssueKey} />{entry.editedAt && <span className="edited-mark" title={`Ostatnio zmieniony ${new Date(entry.editedAt).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })}`}>edytowano</span>}</td>
                   <td data-label="Rodzaj"><span className="history-entry-type">{entry.entryType === 'TIMER' ? 'Timer' : 'Wpis ręczny'}</span></td>
                   <td data-label="Czas" className="history-duration">{formatDuration(entry.durationSeconds)}</td>
                 </tr>)}</tbody>

@@ -35,6 +35,12 @@ public class Project {
     @Column(name = "repository_url", length = 2048)
     private String repositoryUrl;
 
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "color")
+    private ProjectColor color;
+
+    public ProjectColor getColor() { return color; }
+    public void setColor(ProjectColor color) { this.color = color; }
     public String getRepositoryUrl() { return repositoryUrl; }
     public void setRepositoryUrl(String repositoryUrl) { this.repositoryUrl = repositoryUrl; }
 

@@ -64,6 +64,7 @@ public class ReportRepository {
             dimensions.add(root.get("project").get("id"));
             dimensions.add(root.get("project").get("name"));
             dimensions.add(root.get("project").get("archivedAt"));
+            dimensions.add(root.get("project").get("color"));
         }
         var selections = new ArrayList<Selection<?>>(dimensions);
         selections.add(cb.coalesce(cb.sumAsLong(root.get("durationSeconds")), 0L));
@@ -84,7 +85,8 @@ public class ReportRepository {
         var projectId = grouping.project ? row.get(index++, UUID.class) : null;
         var projectName = grouping.project ? row.get(index++, String.class) : null;
         var archived = grouping.project ? row.get(index++, java.time.Instant.class) : null;
-        return new ReportResponse.Bucket(day, userId, name, projectId, projectName, archived,
+        var color = grouping.project ? row.get(index++, pl.macieserafin.hourforge.project.ProjectColor.class) : null;
+        return new ReportResponse.Bucket(day, userId, name, projectId, projectName, archived, color == null ? null : color.name(),
                 row.get(index++, Long.class), row.get(index, Long.class));
     }
 

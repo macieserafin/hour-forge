@@ -55,6 +55,7 @@ public class ProjectService {
         var membership = requireMember(userId, teamId, true);
         var project = new Project(membership.getTeam(), request.name(), request.description());
         project.setRepositoryUrl(request.repositoryUrl());
+        project.setColor(request.color());
         project = projects.saveAndFlush(project);
         return response(project);
     }
@@ -69,6 +70,7 @@ public class ProjectService {
         project.setName(request.name());
         project.setDescription(request.description());
         project.setRepositoryUrl(request.repositoryUrl());
+        project.setColor(request.color());
         return response(projects.saveAndFlush(project));
     }
 
@@ -133,6 +135,6 @@ public class ProjectService {
 
     private ProjectResponse response(Project project) {
         return new ProjectResponse(project.getId(), project.getTeam().getId(), project.getName(),
-                project.getDescription(), project.getCreatedAt(), project.getArchivedAt(), project.getRepositoryUrl());
+                project.getDescription(), project.getCreatedAt(), project.getArchivedAt(), project.getRepositoryUrl(), project.getColor());
     }
 }

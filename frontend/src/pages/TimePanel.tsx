@@ -3,6 +3,7 @@ import { Clock3, LoaderCircle, Pause, Plus, Play, Square, Trash2 } from 'lucide-
 import { Link, useSearchParams } from 'react-router-dom'
 import { JiraIssuePicker, type JiraIssueLink } from '../components/JiraIssuePicker'
 import { TemplatePicker } from '../components/TemplatePicker'
+import { ProjectDot } from '../components/ProjectDot'
 import { Modal } from '../components/Modal'
 import { pickTeam, usePreferences } from '../lib/preferences'
 import { TimeEntryHistory } from './TimeEntryHistory'
@@ -103,7 +104,7 @@ function RunningTimer({ userId, entry, teams, stop, state, discard, onStopped, o
   const project = useProject(userId, entry.teamId, entry.projectId, !!team)
   return <section className={`running-timer overview-panel ${paused ? 'timer-paused' : ''}`} aria-label="Aktywny timer">
     <div className="timer-heading"><span className="timer-running-label"><span aria-hidden="true" />{paused ? 'Praca wstrzymana' : 'Timer działa'}</span><span className="field-hint">Od {new Date(entry.startedAt!).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}</span></div>
-    <p className="timer-project-name">{team && project.data ? project.data.name : project.isPending && team ? 'Wczytywanie projektu…' : 'Projekt niedostępny'}</p>
+    <p className="timer-project-name">{team && project.data && <ProjectDot color={project.data.color} />}{team && project.data ? project.data.name : project.isPending && team ? 'Wczytywanie projektu…' : 'Projekt niedostępny'}</p>
     <p className="timer-team-name">{team?.name ?? 'Poprzedni zespół'} · {dateLabel(entry.workDate)}</p>
     <p className="timer-counter" role="timer" aria-label="Czas aktywnego timera" aria-live="off">{formatClock(elapsed)}</p>
     {longRunning && <div className="project-notice" role="status">

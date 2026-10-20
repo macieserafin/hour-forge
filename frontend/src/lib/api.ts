@@ -66,12 +66,14 @@ export interface Project {
   createdAt: string
   archivedAt: string | null
   repositoryUrl?: string | null
+  color?: string | null
 }
 
 export interface ProjectInput {
   name: string
   description: string | null
   repositoryUrl?: string | null
+  color?: string | null
 }
 
 export interface TimeEntry {
@@ -139,6 +141,7 @@ export interface TimeEntryHistoryItem {
   jiraIssueId?: string | null
   jiraIssueKey?: string | null
   editedAt?: string | null
+  projectColor?: string | null
 }
 
 export interface TimeEntryHistory {
@@ -577,6 +580,7 @@ export interface ReportBucket {
   projectId: string | null
   projectName: string | null
   projectArchivedAt: string | null
+  projectColor?: string | null
   durationSeconds: number
   entryCount: number
 }
@@ -640,6 +644,7 @@ export interface ReportProject {
 export interface ReportEntry {
   jiraIssueKey?: string | null
   editedAt?: string | null
+  projectColor?: string | null
   id: string
   userId: string
   displayName: string
@@ -924,3 +929,30 @@ async function templateRequest<T>(teamId: string, method: string, suffix = '', b
 export const getTemplates = (teamId: string, signal?: AbortSignal) => templateRequest<EntryTemplate[]>(teamId, 'GET', '', undefined, signal)
 export const createTemplate = (teamId: string, input: TemplateInput) => templateRequest<EntryTemplate>(teamId, 'POST', '', input)
 export const deleteTemplate = (teamId: string, templateId: string) => templateRequest<null>(teamId, 'DELETE', `/${encodeURIComponent(templateId)}`)
+
+export interface DashboardOverview {
+  todaySeconds: number
+  weekSeconds: number
+  teams: { teamId: string; teamName: string; archived: boolean; todaySeconds: number; weekSeconds: number }[]
+}
+
+export interface DashboardActivity {
+  from: string
+  to: string
+  today: string
+  maxSeconds: number
+  days: { workDate: string; seconds: number }[]
+}
+
+async function dashboardRequest<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await request(path, { signal })
+  if (!response.ok) {
+    throw new ApiError(response.status, response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.' : 'Nie udało się wczytać podsumowania czasu. Spróbuj ponownie.')
+  }
+  return response.json() as Promise<T>
+}
+
+export const getDashboardOverview = (weekStart: Preferences['weekStart'], signal?: AbortSignal) =>
+  dashboardRequest<DashboardOverview>(`/api/dashboard/overview?${new URLSearchParams({ weekStart })}`, signal)
+export const getDashboardActivity = (weekStart: Preferences['weekStart'], weeks = 12, signal?: AbortSignal) =>
+  dashboardRequest<DashboardActivity>(`/api/dashboard/activity?${new URLSearchParams({ weekStart, weeks: String(weeks) })}`, signal)

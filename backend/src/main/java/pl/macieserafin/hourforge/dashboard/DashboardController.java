@@ -12,6 +12,18 @@ public class DashboardController {
     private final DashboardService dashboard;
     public DashboardController(DashboardService dashboard) { this.dashboard = dashboard; }
 
+    @GetMapping("/api/dashboard/overview")
+    public DashboardOverview overview(@AuthenticationPrincipal AppUserPrincipal principal,
+                                      @RequestParam(defaultValue = "MONDAY") pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart weekStart) {
+        return dashboard.overview(principal.getUserId(), weekStart);
+    }
+
+    @GetMapping("/api/dashboard/activity")
+    public DashboardActivity activity(@AuthenticationPrincipal AppUserPrincipal principal, @RequestParam(defaultValue = "12") int weeks,
+                                      @RequestParam(defaultValue = "MONDAY") pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart weekStart) {
+        return dashboard.activity(principal.getUserId(), weeks, weekStart);
+    }
+
     @GetMapping("/api/dashboard/summary")
     public DashboardSummary summary(@AuthenticationPrincipal AppUserPrincipal principal, @RequestParam UUID teamId,
                                     @RequestParam(defaultValue = "MONDAY") pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart weekStart) {

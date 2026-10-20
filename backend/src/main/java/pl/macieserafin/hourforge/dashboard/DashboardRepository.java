@@ -22,6 +22,14 @@ public interface DashboardRepository extends Repository<TimeEntry, UUID> {
     @Query("""
             select new pl.macieserafin.hourforge.dashboard.DashboardDayTotal(entry.workDate, coalesce(sum(entry.durationSeconds), 0L))
             from TimeEntry entry
+            where entry.user.id = :userId and entry.workDate between :from and :to and entry.durationSeconds is not null
+            group by entry.workDate
+            """)
+    List<DashboardDayTotal> dailyTotalsAllTeams(UUID userId, LocalDate from, LocalDate to);
+
+    @Query("""
+            select new pl.macieserafin.hourforge.dashboard.DashboardDayTotal(entry.workDate, coalesce(sum(entry.durationSeconds), 0L))
+            from TimeEntry entry
             where entry.user.id = :userId and entry.team.id = :teamId
                 and entry.workDate between :weekStart and :weekEnd
                 and entry.durationSeconds is not null

@@ -7,8 +7,11 @@ import java.net.URI;
 
 public record ProjectRequest(@NotBlank @Size(max = 255) String name,
                              @Size(max = 2000) String description,
-                             @Size(max = 2048) String repositoryUrl) {
-    public ProjectRequest(String name, String description) { this(name, description, null); }
+                             @Size(max = 2048) String repositoryUrl,
+                             ProjectColor color) {
+    public ProjectRequest(String name, String description) { this(name, description, null, null); }
+
+    public ProjectRequest(String name, String description, String repositoryUrl) { this(name, description, repositoryUrl, null); }
 
     public ProjectRequest {
         name = name == null ? null : name.strip();

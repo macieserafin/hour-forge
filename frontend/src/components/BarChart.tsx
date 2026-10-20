@@ -6,6 +6,8 @@ export interface ChartItem {
   display: string
   /** Compact text printed on the bar, e.g. 1:20. */
   short?: string
+  /** A colour for this bar (a project colour); the theme colour is used when absent. */
+  color?: string
 }
 
 const WIDTH = 420
@@ -48,7 +50,7 @@ function Columns({ items, max }: { items: ChartItem[]; max: number }) {
       const x = 8 + slot * index + (slot - barWidth) / 2
       const centre = x + barWidth / 2
       return <g key={item.key}>
-        {height > 0 && <rect className="chart-bar" x={x} y={COLUMN_HEIGHT - bottom - height} width={barWidth} height={height} rx="2" />}
+        {height > 0 && <rect className="chart-bar" style={item.color ? { fill: item.color } : undefined} x={x} y={COLUMN_HEIGHT - bottom - height} width={barWidth} height={height} rx="2" />}
         {height > 0 && slot >= 28 && item.short && <text className="chart-value" x={centre} y={COLUMN_HEIGHT - bottom - height - 6} textAnchor="middle">{item.short}</text>}
         {index % labelEvery === 0 && <text className="chart-label" x={centre} y={COLUMN_HEIGHT - 10} textAnchor="middle">{truncate(item.label, 8)}</text>}
       </g>
@@ -66,7 +68,7 @@ function Rows({ items, max }: { items: ChartItem[]; max: number }) {
       const width = item.value > 0 ? Math.max(2, (item.value / max) * plot) : 0
       return <g key={item.key}>
         <text className="chart-label" x="0" y={y + 17}>{truncate(item.label, 19)}</text>
-        {width > 0 && <rect className="chart-bar" x={labelWidth} y={y + 4} width={width} height={ROW_HEIGHT - 10} rx="2" />}
+        {width > 0 && <rect className="chart-bar" style={item.color ? { fill: item.color } : undefined} x={labelWidth} y={y + 4} width={width} height={ROW_HEIGHT - 10} rx="2" />}
         <text className="chart-value" x={WIDTH} y={y + 17} textAnchor="end">{item.short ?? item.display}</text>
       </g>
     })}

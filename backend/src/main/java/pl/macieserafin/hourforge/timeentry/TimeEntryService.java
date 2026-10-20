@@ -100,7 +100,7 @@ public class TimeEntryService {
                 entry.getId(), entry.getTeam().getId(), entry.getProject().getId(), entry.getProject().getName(),
                 entry.getEntryType(), entry.getWorkDate(), entry.getDurationSeconds(), entry.getDescription(),
                 entry.getStartedAt(), entry.getEndedAt(), entry.getJiraIssueId(), entry.getJiraIssueKey(),
-                entry.getLastEditedAt())).toList();
+                entry.getLastEditedAt(), entry.getProject().getColor() == null ? null : entry.getProject().getColor().name())).toList();
         return new TimeEntryHistoryResponse(content, page, size, result.getTotalElements(), result.getTotalPages());
     }
 

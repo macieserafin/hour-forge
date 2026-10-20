@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Archive, Folder, LoaderCircle, Pencil, Plus } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Modal } from '../components/Modal'
+import { ProjectDot } from '../components/ProjectDot'
+import { projectColorKeys, projectColors, type ProjectColor } from '../lib/projectColors'
 import type { Project, Team } from '../lib/api'
 import { useArchiveProject, useRestoreProject, useDeleteProject, useProject, useProjects, useSaveProject } from '../lib/projects'
 import { useTeams } from '../lib/teams'
@@ -16,13 +18,14 @@ function ProjectFormModal({ userId, team, project, onClose, onSaved }: {
   const [name, setName] = useState(project?.name ?? '')
   const [description, setDescription] = useState(project?.description ?? '')
   const [repositoryUrl, setRepositoryUrl] = useState(project?.repositoryUrl ?? '')
+  const [color, setColor] = useState<ProjectColor | ''>((project?.color as ProjectColor | null | undefined) ?? '')
   const [validation, setValidation] = useState('')
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!name.trim()) { setValidation('Wpisz nazwę projektu.'); return }
     setValidation('')
-    save.mutate({ name: name.trim(), description: description.trim() || null, repositoryUrl: repositoryUrl.trim() || null }, { onSuccess: onSaved })
+    save.mutate({ name: name.trim(), description: description.trim() || null, repositoryUrl: repositoryUrl.trim() || null, color: color || null }, { onSuccess: onSaved })
   }
 
   return <Modal title={project ? 'Edytuj projekt' : 'Utwórz projekt'} busy={save.isPending} onClose={onClose}>
@@ -31,6 +34,10 @@ function ProjectFormModal({ userId, team, project, onClose, onSaved }: {
       <fieldset disabled={save.isPending}>
         <div className="field-group"><label htmlFor="project-name">Nazwa projektu</label><input className="text-input" id="project-name" required maxLength={255} value={name} onChange={event => { setName(event.target.value); setValidation('') }} /></div>
         <div className="field-group"><label htmlFor="project-description">Opis <span className="optional-label">(opcjonalnie)</span></label><textarea className="text-input project-description-input" id="project-description" rows={5} maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></div>
+      </fieldset>
+      <fieldset className="color-choice" disabled={save.isPending}><legend>Kolor projektu <span className="optional-label">(opcjonalnie)</span></legend>
+        <label className="color-option"><input type="radio" name="project-color" checked={color === ''} onChange={() => setColor('')} /><span className="color-swatch color-none" aria-hidden="true" /><span>Bez koloru</span></label>
+        {projectColorKeys.map(key => <label className="color-option" key={key}><input type="radio" name="project-color" checked={color === key} onChange={() => setColor(key)} /><span className="color-swatch" style={{ background: projectColors[key].hex }} aria-hidden="true" /><span>{projectColors[key].label}</span></label>)}
       </fieldset>
       <div className="field-group"><label htmlFor="project-repository">Repozytorium GitHub (opcjonalnie)</label><input className="text-input" id="project-repository" type="url" maxLength={2048} disabled={save.isPending} placeholder="https://github.com/owner/repo" value={repositoryUrl} onChange={event => setRepositoryUrl(event.target.value)} /><p className="field-hint">Adres HTTPS repozytorium, bez danych logowania i parametrów.</p></div>
       {(validation || save.isError) && <p className="form-error" role="alert">{validation || save.error?.message}</p>}
@@ -46,7 +53,7 @@ function ProjectDetailsModal({ userId, team, projectId, onClose, onEdit }: {
   return <Modal title="Szczegóły projektu" busy={false} onClose={onClose}>
     {project.isPending ? <p role="status" className="teams-loading"><LoaderCircle size={18} className="spin" />Ładowanie projektu…</p>
       : project.isError ? <div className="dashboard-error" role="alert">{project.error.message}<button onClick={() => void project.refetch()}>Spróbuj ponownie</button></div>
-      : <><h3 className="project-detail-name">{project.data.name}</h3>
+      : <><h3 className="project-detail-name"><ProjectDot color={project.data.color} />{project.data.name}</h3>
         <p className="project-full-description">{project.data.description || 'Brak opisu projektu.'}</p>
         {project.data.repositoryUrl && <a className="text-link" href={project.data.repositoryUrl} target="_blank" rel="noopener noreferrer">Otwórz repozytorium</a>}
         <dl className="invite-summary project-summary"><dt>Zespół</dt><dd>{team.name}</dd><dt>Utworzono</dt><dd>{dateLabel(project.data.createdAt)}</dd><dt>Status</dt><dd>{project.data.archivedAt ? 'Archiwalny' : 'Aktywny'}</dd>{project.data.archivedAt && <><dt>Archiwizacja</dt><dd>{dateLabel(project.data.archivedAt)}</dd></>}</dl>
@@ -105,7 +112,7 @@ function TeamProjects({ userId, team }: { userId: string; team: Team }) {
       : projects.isError ? <div className="dashboard-error" role="alert">{projects.error.message}<button onClick={() => void projects.refetch()}>Spróbuj ponownie</button></div>
       : visible.length === 0 ? <div className="overview-panel empty-state"><Folder size={28} strokeWidth={1.4} /><h3>{search.trim() || status === 'archived' ? 'Brak projektów pasujących do filtrów.' : includeArchived ? 'Ten zespół nie ma jeszcze projektów.' : 'Brak aktywnych projektów.'}</h3><p>{owner ? 'Zmień filtry lub utwórz projekt, aby uporządkować pracę zespołu.' : 'Zmień filtry lub poproś właściciela zespołu o utworzenie projektu.'}</p></div>
       : <div className="team-table-wrap"><table className="team-table project-table"><caption className="sr-only">Projekty zespołu {team.name}</caption><thead><tr><th>Projekt</th><th>Status</th>{owner && <th><span className="sr-only">Działania</span></th>}</tr></thead><tbody>
-        {visible.map(project => <tr key={project.id}><td><button className="project-name-button" onClick={() => setModal({ type: 'details', project })}>{project.name}</button>{project.description && <p className="project-row-description">{project.description}</p>}</td><td><span className={`project-status ${project.archivedAt ? 'archived' : ''}`}>{project.archivedAt ? 'Archiwalny' : 'Aktywny'}</span></td>{owner && <td><div className="project-row-actions">{!project.archivedAt ? <><button aria-label={`Edytuj projekt ${project.name}`} onClick={() => { setNotice(''); setModal({ type: 'edit', project }) }}><Pencil size={14} />Edytuj</button><button aria-label={`Archiwizuj projekt ${project.name}`} onClick={() => { setNotice(''); setModal({ type: 'archive', project }) }}><Archive size={14} />Archiwizuj</button></> : <button aria-label={`Przywróć projekt ${project.name}`} onClick={() => { setNotice(''); setModal({ type: 'restore', project }) }}>Przywróć</button>}<button aria-label={`Usuń projekt ${project.name}`} onClick={() => { setNotice(''); setModal({ type: 'delete', project }) }}>Usuń</button></div></td>}</tr>)}
+        {visible.map(project => <tr key={project.id}><td><button className="project-name-button" onClick={() => setModal({ type: 'details', project })}><ProjectDot color={project.color} />{project.name}</button>{project.description && <p className="project-row-description">{project.description}</p>}</td><td><span className={`project-status ${project.archivedAt ? 'archived' : ''}`}>{project.archivedAt ? 'Archiwalny' : 'Aktywny'}</span></td>{owner && <td><div className="project-row-actions">{!project.archivedAt ? <><button aria-label={`Edytuj projekt ${project.name}`} onClick={() => { setNotice(''); setModal({ type: 'edit', project }) }}><Pencil size={14} />Edytuj</button><button aria-label={`Archiwizuj projekt ${project.name}`} onClick={() => { setNotice(''); setModal({ type: 'archive', project }) }}><Archive size={14} />Archiwizuj</button></> : <button aria-label={`Przywróć projekt ${project.name}`} onClick={() => { setNotice(''); setModal({ type: 'restore', project }) }}>Przywróć</button>}<button aria-label={`Usuń projekt ${project.name}`} onClick={() => { setNotice(''); setModal({ type: 'delete', project }) }}>Usuń</button></div></td>}</tr>)}
       </tbody></table></div>}
     {modal?.type === 'create' && owner && <ProjectFormModal userId={userId} team={team} onClose={close} onSaved={() => saved('Projekt został utworzony.')} />}
     {modal?.type === 'edit' && owner && <ProjectFormModal key={modal.project.id} userId={userId} team={team} project={modal.project} onClose={close} onSaved={() => saved('Zmiany zostały zapisane.')} />}
