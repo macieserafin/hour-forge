@@ -14,9 +14,10 @@ import org.springframework.mail.javamail.JavaMailSender;
 @Configuration(proxyBeanMethods = false)
 public class MailConfig {
     @Bean
-    EmailSender smtpEmailSender(ObjectProvider<JavaMailSender> mailSender, @Value("${app.mail.from}") String from) {
+    EmailSender smtpEmailSender(ObjectProvider<JavaMailSender> mailSender, @Value("${app.mail.from}") String from,
+                                @Value("${spring.mail.host:}") String host) {
         var sender = mailSender.getIfAvailable();
-        if (sender == null) {
+        if (sender == null || host.isBlank()) {
             throw new IllegalStateException("A mail server is required. Set SPRING_MAIL_HOST (and SPRING_MAIL_PORT); "
                     + "for local development start Mailpit with Docker Compose and use localhost:1025.");
         }
