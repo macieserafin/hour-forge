@@ -12,6 +12,7 @@ public abstract class JiraIntegrationTestSupport extends ApiIntegrationTestSuppo
     protected static final String CLIENT_SECRET = "test-client-secret-value";
     protected static final FakeAtlassian ATLASSIAN = new FakeAtlassian();
     private static final String KEY = key();
+    protected static final String OLD_KEY = key();
 
     private static String key() {
         var bytes = new byte[32];
@@ -26,6 +27,7 @@ public abstract class JiraIntegrationTestSupport extends ApiIntegrationTestSuppo
         registry.add("app.jira.client-secret", () -> CLIENT_SECRET);
         registry.add("app.jira.redirect-uri", () -> "http://localhost:8080/api/integrations/jira/callback");
         registry.add("app.jira.encryption-key", () -> KEY);
+        registry.add("app.jira.previous-encryption-keys.v0", () -> OLD_KEY);
         registry.add("app.jira.auth-base-url", ATLASSIAN::baseUrl);
         registry.add("app.jira.api-base-url", ATLASSIAN::baseUrl);
     }

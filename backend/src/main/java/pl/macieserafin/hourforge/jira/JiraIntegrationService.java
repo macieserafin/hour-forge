@@ -92,6 +92,7 @@ public class JiraIntegrationService {
         var member = activeMember(teamId, userId);
         if (intent == OAuthState.Intent.SITE) {
             if (member.getRole() != TeamRole.OWNER) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+            requireNotArchived(teamId);
         } else if (connections.findByTeamId(teamId).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "The team owner has not connected a Jira site yet");
         }
@@ -164,6 +165,7 @@ public class JiraIntegrationService {
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public void selectSite(UUID userId, UUID teamId, String cloudId) {
         requireOwner(teamId, userId);
+        requireNotArchived(teamId);
         var site = ownerSites(userId).stream().filter(candidate -> candidate.id().equals(cloudId)).findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Site not available to you"));
         useSite(teamId, userId, site);
@@ -179,6 +181,7 @@ public class JiraIntegrationService {
     @Transactional
     public void disconnectSite(UUID userId, UUID teamId) {
         requireOwner(teamId, userId);
+        requireNotArchived(teamId);
         connections.findByTeamId(teamId).ifPresent(connection -> {
             removeConnection(connection, teamId);
             cache.clear();
@@ -225,6 +228,12 @@ public class JiraIntegrationService {
     private TeamMember activeMember(UUID teamId, UUID userId) {
         return members.findByTeamIdAndUserId(teamId, userId).filter(member -> member.getLeftAt() == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    }
+
+    /** The site of an archived team is frozen together with its time entries. */
+    private void requireNotArchived(UUID teamId) {
+        var team = teams.findById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (team.isArchived()) throw new ResponseStatusException(HttpStatus.CONFLICT, "The team is archived");
     }
 
     private void requireOwner(UUID teamId, UUID userId) {

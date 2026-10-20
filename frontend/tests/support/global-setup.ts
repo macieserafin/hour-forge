@@ -5,6 +5,8 @@ import { createWriteStream } from 'node:fs'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { randomBytes } from 'node:crypto'
+import { startFakeAtlassian, type FakeAtlassian } from './fake-atlassian'
 
 const exec = promisify(execFile)
 const backendPath = fileURLToPath(new URL('../../../backend', import.meta.url))
@@ -14,6 +16,7 @@ export default async function globalSetup() {
   const mailContainer = `hour-forge-e2e-mail-${process.pid}`
   const backendPort = process.env.E2E_BACKEND_PORT ?? '18086'
   let backend: ChildProcess | undefined
+  let atlassian: FakeAtlassian | undefined
   let started = false
   let mailStarted = false
   const directory = await mkdtemp(join(tmpdir(), 'hour-forge-e2e-'))
@@ -29,6 +32,7 @@ export default async function globalSetup() {
       if (!stopped) { backend.kill('SIGKILL'); await exited }
     }
     output.end()
+    await atlassian?.close()
     if (mailStarted) await exec('docker', ['rm', '-f', mailContainer])
     if (started) await exec('docker', ['rm', '-f', container])
   }
@@ -51,6 +55,9 @@ export default async function globalSetup() {
     } else {
       await exec('./mvnw', ['-q', '-DskipTests', 'package'], { cwd: backendPath, maxBuffer: 8 * 1024 * 1024 })
     }
+    // Jira is switched on against a local stand-in for Atlassian, so scenarios can follow the whole consent flow.
+    const redirectUri = `http://127.0.0.1:${backendPort}/api/integrations/jira/callback`
+    atlassian = await startFakeAtlassian(redirectUri)
     backend = spawn('java', ['-jar', 'target/hour-forge-0.0.1-SNAPSHOT.jar', `--server.port=${backendPort}`], {
       cwd: backendPath,
       env: { ...process.env, DB_URL: `jdbc:postgresql://127.0.0.1:${databasePort}/hourforge_e2e`,
@@ -58,7 +65,10 @@ export default async function globalSetup() {
         SESSION_COOKIE_SECURE: 'false', SPRING_MAIL_HOST: '127.0.0.1', SPRING_MAIL_PORT: smtpPort, MAIL_STARTTLS: 'false', FRONTEND_URL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:5186',
         // Every scenario registers its accounts from 127.0.0.1; limits are verified by backend tests.
         APP_RATELIMIT_REGISTRATION_MAX: '100000', APP_RATELIMIT_TEAMCREATION_MAX: '100000',
-        APP_RATELIMIT_INVITATIONCREATION_MAX: '100000', APP_RATELIMIT_PROJECTCREATION_MAX: '100000' },
+        APP_RATELIMIT_INVITATIONCREATION_MAX: '100000', APP_RATELIMIT_PROJECTCREATION_MAX: '100000',
+        JIRA_INTEGRATION_ENABLED: 'true', JIRA_CLIENT_ID: 'e2e-client', JIRA_CLIENT_SECRET: 'e2e-client-secret-only',
+        JIRA_REDIRECT_URI: redirectUri, JIRA_TOKEN_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
+        APP_JIRA_AUTHBASEURL: atlassian.url, APP_JIRA_APIBASEURL: atlassian.url },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     backend.stdout!.pipe(output, { end: false })

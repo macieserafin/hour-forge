@@ -54,7 +54,9 @@ public class JiraTokenService {
                 .orElseThrow(JiraTokenService::notConnected);
         var now = clock.instant();
         if (row.getAccessTokenExpiresAt().isAfter(now.plus(REFRESH_MARGIN))) {
-            return decrypt(row.getEncryptedAccessToken(), row);
+            var access = decrypt(row.getEncryptedAccessToken(), row);
+            rewrapIfOutdated(row, access);
+            return access;
         }
         if (row.getEncryptedRefreshToken() == null) {
             authorizations.deleteAll(rows.stream().filter(candidate -> sameGrant(candidate, row, null)).toList());
@@ -74,6 +76,15 @@ public class JiraTokenService {
         } catch (JiraAtlassianClient.UpstreamException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Jira is not reachable");
         }
+    }
+
+    /** After a key rotation, values written with an older key are rewritten with the active one when they are next used. */
+    private void rewrapIfOutdated(JiraUserAuthorization row, String access) {
+        var refreshStored = row.getEncryptedRefreshToken();
+        if (!cipher.needsRewrap(row.getEncryptedAccessToken()) && (refreshStored == null || !cipher.needsRewrap(refreshStored))) return;
+        var context = context(row);
+        var refresh = refreshStored == null ? null : cipher.encrypt(decrypt(refreshStored, row), context);
+        row.update(cipher.encrypt(access, context), refresh, row.getAccessTokenExpiresAt(), row.getGrantedScopes(), cipher.activeVersion());
     }
 
     /** Drops one person's grant for a site, for example after Atlassian stopped accepting it. */
