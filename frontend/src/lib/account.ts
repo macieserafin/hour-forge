@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { changePassword, signOutEverywhere, updateProfile } from './api'
+import { changePassword, resendMyVerification, signOutEverywhere, updateProfile } from './api'
 import { sessionOptions } from './auth'
 import { useAuthError } from './teams'
 
@@ -13,6 +13,11 @@ export function useUpdateProfile() {
 export function useChangePassword() {
   const handleError = useAuthError()
   return useMutation({ mutationFn: changePassword, retry: false, gcTime: 0, onError: handleError })
+}
+
+export function useResendMyVerification() {
+  const handleError = useAuthError()
+  return useMutation({ mutationFn: resendMyVerification, retry: false, onError: handleError })
 }
 
 export function useSignOutEverywhere() {

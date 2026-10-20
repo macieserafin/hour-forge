@@ -28,12 +28,15 @@ public class AuthController {
     public MeResponse me(@AuthenticationPrincipal AppUserPrincipal principal) {
         var user = users.findById(principal.getUserId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-        return new MeResponse(user.getId(), user.getEmail(), user.getDisplayName());
+        return MeResponse.of(user);
     }
 
     public record CsrfResponse(String token, String headerName, String parameterName) {
     }
 
-    public record MeResponse(UUID id, String email, String displayName) {
+    public record MeResponse(UUID id, String email, String displayName, boolean emailVerified) {
+        public static MeResponse of(pl.macieserafin.hourforge.user.User user) {
+            return new MeResponse(user.getId(), user.getEmail(), user.getDisplayName(), user.isEmailVerified());
+        }
     }
 }

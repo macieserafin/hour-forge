@@ -9,14 +9,16 @@ import pl.macieserafin.hourforge.security.RateLimiter;
 
 @SpringBootTest
 @ActiveProfiles("test")
-@Import(TestData.class)
+@Import({TestData.class, TestMailConfig.class})
 public abstract class IntegrationTestSupport {
     @Autowired protected TestData fixtures;
+    @Autowired protected RecordingEmailSender mail;
     @Autowired private RateLimiter rateLimiter;
 
-    // Rate limits live in a context-wide bean; each test starts with empty counters.
+    // Rate limits and recorded mail live in context-wide beans; each test starts empty.
     @BeforeEach
     void resetRateLimits() {
         rateLimiter.clear();
+        mail.clear();
     }
 }

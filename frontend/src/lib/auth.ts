@@ -1,5 +1,5 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getUser, login, logout, register } from './api'
+import { confirmEmail, getUser, login, logout, register, resendVerification } from './api'
 
 export const sessionOptions = queryOptions({
   queryKey: ['session'],
@@ -12,6 +12,16 @@ export function useSession() {
 
 export function useRegister() {
   return useMutation({ mutationFn: register, retry: false, gcTime: 0 })
+}
+
+export function useConfirmEmail() {
+  const client = useQueryClient()
+  return useMutation({ mutationFn: confirmEmail, retry: false, gcTime: 0,
+    onSuccess: () => client.invalidateQueries({ queryKey: sessionOptions.queryKey }) })
+}
+
+export function useResendVerification() {
+  return useMutation({ mutationFn: resendVerification, retry: false, gcTime: 0 })
 }
 
 export function useLogin() {

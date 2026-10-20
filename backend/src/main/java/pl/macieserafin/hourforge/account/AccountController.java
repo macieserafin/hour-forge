@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pl.macieserafin.hourforge.auth.AuthController.MeResponse;
+import pl.macieserafin.hourforge.auth.EmailVerificationService;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
 
 import java.util.List;
@@ -25,16 +26,24 @@ import java.util.List;
 @RequestMapping("/api/account")
 public class AccountController {
     private final AccountService account;
+    private final EmailVerificationService verification;
 
-    public AccountController(AccountService account) {
+    public AccountController(AccountService account, EmailVerificationService verification) {
         this.account = account;
+        this.verification = verification;
     }
 
     @PatchMapping("/profile")
     public MeResponse updateProfile(@AuthenticationPrincipal AppUserPrincipal principal,
                                     @Valid @RequestBody ProfileRequest request) {
         var user = account.updateDisplayName(principal.getUserId(), request.displayName());
-        return new MeResponse(user.getId(), user.getEmail(), user.getDisplayName());
+        return MeResponse.of(user);
+    }
+
+    @PostMapping("/email-verification/resend")
+    public ResponseEntity<Void> resendEmailVerification(@AuthenticationPrincipal AppUserPrincipal principal) {
+        verification.resendFor(principal.getUserId());
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/password")
@@ -44,7 +53,7 @@ public class AccountController {
         int version = account.changePassword(principal.getUserId(), request);
         // Keep this device signed in: a fresh session id and a principal carrying the new version.
         httpRequest.changeSessionId();
-        var refreshed = new AppUserPrincipal(principal.getUserId(), principal.getUsername(), "", version);
+        var refreshed = new AppUserPrincipal(principal.getUserId(), principal.getUsername(), "", version, principal.isEmailVerified());
         Authentication authentication = UsernamePasswordAuthenticationToken.authenticated(refreshed, null, List.of());
         var context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authentication);

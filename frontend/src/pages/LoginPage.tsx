@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowRight, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail } from 'lucide-react'
 import { AuthLayout } from '../components/AuthLayout'
-import { useLogin } from '../lib/auth'
+import { useLogin, useResendVerification } from '../lib/auth'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { registrationUrl, safeReturnTo } from '../lib/navigation'
 
@@ -12,6 +12,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const login = useLogin()
+  const resend = useResendVerification()
   const [search] = useSearchParams()
   const isInvitation = safeReturnTo(search.get('returnTo')).startsWith('/invite/')
 
@@ -49,6 +50,11 @@ export function LoginPage() {
             </div>
           </div>
           {login.isError && <p className="form-error" role="alert" id="login-error">{login.error.message}</p>}
+          {login.isError && (login.error as { code?: string }).code === 'EMAIL_NOT_VERIFIED' && <div className="field-hint">
+            <button type="button" className="text-link" disabled={resend.isPending} onClick={() => resend.mutate(email)}>Wyślij link potwierdzający ponownie</button>
+            {resend.isSuccess && <p role="status">Jeśli konto czeka na potwierdzenie, wysłaliśmy nowy link.</p>}
+            {resend.isError && <p className="form-error" role="alert">{resend.error.message}</p>}
+          </div>}
           <button className="button-primary login-submit" type="submit" disabled={login.isPending} aria-busy={login.isPending}>
             {login.isPending ? <><LoaderCircle size={17} className="spin" />Logowanie…</> : <>Zaloguj się<ArrowRight size={17} /></>}
           </button>

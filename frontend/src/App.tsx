@@ -6,6 +6,7 @@ import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { InvitePage } from './pages/InvitePage'
+import { VerifyEmailPage } from './pages/VerifyEmailPage'
 import { loginUrl, safeReturnTo } from './lib/navigation'
 
 export function App() {
@@ -38,6 +39,7 @@ export function App() {
     <Route path="/teams" element={user ? <DashboardPage user={user} section="teams" /> : signIn} />
     <Route path="/projects" element={user ? <DashboardPage user={user} section="projects" /> : signIn} />
     <Route path="/time" element={user ? <DashboardPage user={user} section="time" /> : signIn} />
+    <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
     <Route path="/account" element={user ? <DashboardPage user={user} section="account" /> : signIn} />
     <Route path="/invite/:token" element={user ? <InvitePage user={user} /> : signIn} />
     <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />

@@ -2,7 +2,17 @@ import { useState, type FormEvent } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { Modal } from '../components/Modal'
 import type { User } from '../lib/api'
-import { passwordChangeError, useChangePassword, useSignOutEverywhere, useUpdateProfile } from '../lib/account'
+import { passwordChangeError, useChangePassword, useResendMyVerification, useSignOutEverywhere, useUpdateProfile } from '../lib/account'
+
+function EmailConfirmation() {
+  const resend = useResendMyVerification()
+  return <div>
+    <button className="button-secondary" type="button" disabled={resend.isPending} onClick={() => resend.mutate()}>
+      {resend.isPending && <LoaderCircle size={16} className="spin" />}Wyślij link potwierdzający</button>
+    {resend.isSuccess && <p className="project-notice" role="status">Wysłaliśmy link potwierdzający na Twój adres.</p>}
+    {resend.isError && <p className="form-error" role="alert">{resend.error.message}</p>}
+  </div>
+}
 
 function ProfileSection({ user }: { user: User }) {
   const save = useUpdateProfile()
@@ -18,7 +28,8 @@ function ProfileSection({ user }: { user: User }) {
   }
   return <section className="overview-panel account-section" aria-labelledby="account-profile-title">
     <h2 id="account-profile-title">Profil</h2>
-    <p className="field-hint">Adres e-mail: <strong>{user.email}</strong></p>
+    <p className="field-hint">Adres e-mail: <strong>{user.email}</strong> · {user.emailVerified ? 'potwierdzony' : 'niepotwierdzony'}</p>
+    {!user.emailVerified && <EmailConfirmation />}
     <form onSubmit={submit} onInput={() => { setValidation(''); setSaved(false); if (save.isError) save.reset() }}>
       <fieldset disabled={save.isPending}>
         <div className="field-group"><label htmlFor="account-name">Nazwa wyświetlana</label>

@@ -2,6 +2,7 @@ export interface User {
   id: string
   email: string
   displayName: string
+  emailVerified: boolean
 }
 
 export interface Team {
@@ -179,7 +180,7 @@ interface CsrfToken {
 }
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(public readonly status: number, message: string, public readonly code?: string) {
     super(message)
     this.name = 'ApiError'
   }
@@ -223,9 +224,31 @@ export async function login({ email, password }: { email: string; password: stri
   })
   if (response.status === 429) throw new ApiError(429, tooManyRequestsMessage(response))
   if (response.status === 401) throw new ApiError(401, 'Nieprawidłowy adres e-mail lub hasło.')
-  if (response.status === 403) throw new ApiError(403, 'Sesja formularza wygasła. Spróbuj zalogować się ponownie.')
+  if (response.status === 403) {
+    const body = await response.json().catch(() => null) as { code?: string } | null
+    if (body?.code === 'EMAIL_NOT_VERIFIED') {
+      throw new ApiError(403, 'Potwierdź adres e-mail, aby się zalogować. Link wysłaliśmy po rejestracji.', 'EMAIL_NOT_VERIFIED')
+    }
+    throw new ApiError(403, 'Sesja formularza wygasła. Spróbuj zalogować się ponownie.')
+  }
   if (!response.ok) throw new ApiError(response.status, 'Logowanie jest chwilowo niedostępne. Spróbuj ponownie.')
 }
+
+async function publicPost(path: string, body: unknown, messages: Record<number, string>, fallback: string) {
+  const csrf = await getCsrf()
+  const response = await request(path, { method: 'POST', headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
+    body: JSON.stringify(body) })
+  if (!response.ok) {
+    throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
+      : { 403: 'Sesja formularza wygasła. Spróbuj ponownie.', ...messages }[response.status] ?? fallback)
+  }
+}
+
+export const confirmEmail = (token: string) => publicPost('/api/auth/email-verification/confirm', { token },
+  { 400: 'Link jest nieprawidłowy albo wygasł. Poproś o nowy link.' }, 'Nie udało się potwierdzić adresu. Spróbuj ponownie.')
+
+export const resendVerification = (email: string) => publicPost('/api/auth/email-verification/resend', { email: email.trim() },
+  {}, 'Nie udało się wysłać linku. Spróbuj ponownie później.')
 
 export interface RegistrationInput {
   displayName: string
@@ -279,6 +302,12 @@ export async function updateProfile(displayName: string): Promise<User> {
 export async function changePassword(input: { currentPassword: string; newPassword: string }): Promise<void> {
   await accountRequest('/api/account/password', 'POST', input,
     { 400: 'Obecne hasło jest nieprawidłowe.' }, 'Nie udało się zmienić hasła. Spróbuj ponownie.')
+}
+
+export async function resendMyVerification(): Promise<void> {
+  await accountRequest('/api/account/email-verification/resend', 'POST', {},
+    { 409: 'Ten adres jest już potwierdzony.', 503: 'Wysyłanie e-maili nie jest skonfigurowane na tym serwerze.' },
+    'Nie udało się wysłać linku. Spróbuj ponownie później.')
 }
 
 export async function signOutEverywhere(): Promise<void> {

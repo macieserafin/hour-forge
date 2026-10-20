@@ -15,11 +15,14 @@ public class RegistrationService {
     private final UserRepository users;
     private final UserCredentialRepository credentials;
     private final PasswordEncoder encoder;
+    private final EmailVerificationService verification;
 
-    public RegistrationService(UserRepository users, UserCredentialRepository credentials, PasswordEncoder encoder) {
+    public RegistrationService(UserRepository users, UserCredentialRepository credentials, PasswordEncoder encoder,
+                               EmailVerificationService verification) {
         this.users = users;
         this.credentials = credentials;
         this.encoder = encoder;
+        this.verification = verification;
     }
 
     @Transactional
@@ -44,5 +47,6 @@ public class RegistrationService {
             throw exception;
         }
         credentials.saveAndFlush(new UserCredential(user, hash));
+        verification.sendConfirmation(user);
     }
 }

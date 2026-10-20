@@ -23,9 +23,10 @@ class RegistrationServiceTest {
     @Mock UserRepository users;
     @Mock UserCredentialRepository credentials;
     @Mock PasswordEncoder encoder;
+    @Mock EmailVerificationService verification;
     private RegistrationService service;
 
-    @BeforeEach void setup() { service = new RegistrationService(users, credentials, encoder); }
+    @BeforeEach void setup() { service = new RegistrationService(users, credentials, encoder, verification); }
 
     @Test void normalizesIdentityAndPersistsOnlyTheEncodedPasswordWithoutTrimmingIt() {
         var request = new RegistrationRequest("  New User  ", "  New@Example.test  ", " password 2026! ");
@@ -38,6 +39,7 @@ class RegistrationServiceTest {
         assertThat(saved.getValue().getUser().getEmail()).isEqualTo("new@example.test");
         assertThat(saved.getValue().getUser().getDisplayName()).isEqualTo("New User");
         assertThat(request.toString()).doesNotContain(request.password());
+        verify(verification).sendConfirmation(saved.getValue().getUser());
     }
 
     @ParameterizedTest
