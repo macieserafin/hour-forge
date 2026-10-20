@@ -3,6 +3,7 @@ package pl.macieserafin.hourforge.timeentry;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -98,12 +99,30 @@ public class TimeEntryService {
         var content = result.getContent().stream().map(entry -> new TimeEntryHistoryItem(
                 entry.getId(), entry.getTeam().getId(), entry.getProject().getId(), entry.getProject().getName(),
                 entry.getEntryType(), entry.getWorkDate(), entry.getDurationSeconds(), entry.getDescription(),
-                entry.getStartedAt(), entry.getEndedAt())).toList();
+                entry.getStartedAt(), entry.getEndedAt(), entry.getJiraIssueId(), entry.getJiraIssueKey())).toList();
         return new TimeEntryHistoryResponse(content, page, size, result.getTotalElements(), result.getTotalPages());
+    }
+
+    public record LinkContext(UUID teamId, IssueLink current) {
+    }
+
+    /** What the caller needs before resolving a new link: the entry's team and the link it has now. */
+    @Transactional(readOnly = true)
+    public LinkContext linkContext(UUID userId, UUID entryId) {
+        var entry = entries.findByIdAndUserId(entryId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        var current = entry.getJiraIssueId() == null ? null
+                : new IssueLink(entry.getJiraConnectionId(), entry.getJiraIssueId(), entry.getJiraIssueKey());
+        return new LinkContext(entry.getTeam().getId(), current);
     }
 
     @Transactional
     public TimeEntryResponse start(UUID userId, StartTimerRequest request) {
+        return start(userId, request, null);
+    }
+
+    @Transactional
+    public TimeEntryResponse start(UUID userId, StartTimerRequest request, IssueLink link) {
         var user = lockUser(userId);
         var project = projectForTimer(userId, request.teamId(), request.projectId());
         if (activeEntry(userId).isPresent()) {
@@ -113,7 +132,8 @@ public class TimeEntryService {
         var workDate = now.atZone(ZoneId.of(project.getTeam().getTimezone())).toLocalDate();
         var entry = new TimeEntry(user, project.getTeam(), project, EntryType.TIMER, workDate,
                 now, null, null, request.description());
-        return response(entries.saveAndFlush(entry));
+        entry.setJiraIssue(link);
+        return response(save(entry, link));
     }
 
     @Transactional
@@ -201,17 +221,29 @@ public class TimeEntryService {
 
     @Transactional
     public TimeEntryResponse createManual(UUID userId, ManualTimeEntryRequest request) {
+        return createManual(userId, request, null);
+    }
+
+    @Transactional
+    public TimeEntryResponse createManual(UUID userId, ManualTimeEntryRequest request, IssueLink link) {
         var user = lockUser(userId);
         var project = projectForManualEntry(userId, request.teamId(), request.projectId());
         requireManualDuration(request.durationSeconds());
         requireWorkDateInWindow(request.workDate(), project.getTeam().getTimezone());
         var entry = new TimeEntry(user, project.getTeam(), project, EntryType.MANUAL, request.workDate(),
                 null, null, request.durationSeconds(), request.description());
-        return response(entries.saveAndFlush(entry));
+        entry.setJiraIssue(link);
+        return response(save(entry, link));
     }
 
     @Transactional
     public TimeEntryResponse update(UUID userId, UUID entryId, UpdateTimeEntryRequest request) {
+        return update(userId, entryId, request, null);
+    }
+
+    /** A null link removes the entry's link to Jira. */
+    @Transactional
+    public TimeEntryResponse update(UUID userId, UUID entryId, UpdateTimeEntryRequest request, IssueLink link) {
         var entry = editableEntry(userId, entryId);
         var project = projects.findByIdAndTeamId(request.projectId(), entry.getTeam().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
@@ -233,13 +265,24 @@ public class TimeEntryService {
         entry.setWorkDate(request.workDate());
         entry.setDurationSeconds(durationSeconds);
         entry.setDescription(request.description());
-        return response(entries.saveAndFlush(entry));
+        entry.setJiraIssue(link);
+        return response(save(entry, link));
     }
 
     @Transactional
     public void delete(UUID userId, UUID entryId) {
         entries.delete(editableEntry(userId, entryId));
         entries.flush();
+    }
+
+    private TimeEntry save(TimeEntry entry, IssueLink link) {
+        try {
+            return entries.saveAndFlush(entry);
+        } catch (DataIntegrityViolationException exception) {
+            // Only a link can fail here: its site was disconnected after it was checked.
+            if (link != null) throw new ResponseStatusException(HttpStatus.CONFLICT, "The Jira site of this team changed; choose the issue again");
+            throw exception;
+        }
     }
 
     private void requireManualDuration(int durationSeconds) {
@@ -310,6 +353,6 @@ public class TimeEntryService {
         return new TimeEntryResponse(entry.getId(), entry.getUser().getId(), entry.getTeam().getId(),
                 entry.getProject().getId(), entry.getEntryType(), entry.getWorkDate(), entry.getStartedAt(),
                 entry.getEndedAt(), entry.getDurationSeconds(), entry.getDescription(), entry.getCreatedAt(), entry.getUpdatedAt(),
-                entry.getPausedAt(), entry.getPausedDurationMicros() / 1_000_000.0);
+                entry.getPausedAt(), entry.getPausedDurationMicros() / 1_000_000.0, entry.getJiraIssueId(), entry.getJiraIssueKey());
     }
 }

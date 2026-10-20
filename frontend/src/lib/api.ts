@@ -89,12 +89,16 @@ export interface TimeEntry {
   updatedAt: string
   pausedAt: string | null
   pausedDurationSeconds: number
+  jiraIssueId?: string | null
+  jiraIssueKey?: string | null
 }
 
 export interface StartTimerInput {
   teamId: string
   projectId: string
   description: string | null
+  /** The Jira issue to link; null or absent means no link (when editing: remove it). */
+  jiraIssueId?: string | null
 }
 
 export interface DashboardSummary {
@@ -132,6 +136,8 @@ export interface TimeEntryHistoryItem {
   description: string | null
   startedAt: string | null
   endedAt: string | null
+  jiraIssueId?: string | null
+  jiraIssueKey?: string | null
 }
 
 export interface TimeEntryHistory {
@@ -615,6 +621,7 @@ export interface ReportProject {
 }
 
 export interface ReportEntry {
+  jiraIssueKey?: string | null
   id: string
   userId: string
   displayName: string

@@ -15,15 +15,18 @@ import pl.macieserafin.hourforge.security.AppUserPrincipal;
 @RequestMapping("/api/timer")
 public class TimerController {
     private final TimeEntryService entries;
+    private final IssueLinks links;
 
-    public TimerController(TimeEntryService entries) {
+    public TimerController(TimeEntryService entries, IssueLinks links) {
         this.entries = entries;
+        this.links = links;
     }
 
     @PostMapping("/start")
     public ResponseEntity<TimeEntryResponse> start(@AuthenticationPrincipal AppUserPrincipal principal,
                                                   @Valid @RequestBody StartTimerRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(entries.start(principal.getUserId(), request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(entries.start(principal.getUserId(), request,
+                links.forNewEntry(principal.getUserId(), request.teamId(), request.jiraIssueId())));
     }
 
     @PostMapping("/stop")

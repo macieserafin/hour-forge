@@ -65,6 +65,15 @@ public class TimeEntry {
     @Column(name = "description", columnDefinition = "text")
     private String description;
 
+    @Column(name = "jira_connection_id")
+    private UUID jiraConnectionId;
+
+    @Column(name = "jira_issue_id")
+    private String jiraIssueId;
+
+    @Column(name = "jira_issue_key")
+    private String jiraIssueKey;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -90,6 +99,30 @@ public class TimeEntry {
 
     public UUID getId() {
         return id;
+    }
+
+    public UUID getJiraConnectionId() {
+        return jiraConnectionId;
+    }
+
+    public String getJiraIssueId() {
+        return jiraIssueId;
+    }
+
+    public String getJiraIssueKey() {
+        return jiraIssueKey;
+    }
+
+    public void setJiraIssue(IssueLink link) {
+        if (link == null) {
+            jiraConnectionId = null;
+            jiraIssueId = null;
+            jiraIssueKey = null;
+        } else {
+            jiraConnectionId = link.connectionId();
+            jiraIssueId = link.issueId();
+            jiraIssueKey = link.issueKey();
+        }
     }
 
     public User getUser() {

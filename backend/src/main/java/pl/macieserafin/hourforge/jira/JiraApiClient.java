@@ -25,6 +25,7 @@ import org.springframework.web.client.RestClientResponseException;
 @ConditionalOnProperty(name = "app.jira.enabled", havingValue = "true")
 public class JiraApiClient {
     private static final Logger log = LoggerFactory.getLogger(JiraApiClient.class);
+    private static final Pattern ISSUE_ID = Pattern.compile("[0-9]{1,20}");
     private static final Pattern CLOUD_ID = Pattern.compile("[A-Za-z0-9-]{1,64}");
 
     public record Issue(String id, String key, String summary, String status, String issueType, String projectKey) {
@@ -82,6 +83,16 @@ public class JiraApiClient {
         }
         var next = response == null ? null : text(response.get("nextPageToken"));
         return new SearchResult(List.copyOf(issues), next == null || next.isBlank() ? null : next);
+    }
+
+    public Issue issue(String cloudId, String accessToken, String issueId) {
+        if (issueId == null || !ISSUE_ID.matcher(issueId).matches()) throw new IllegalArgumentException("Invalid issue id");
+        var base = site(cloudId);
+        var response = call(() -> client.get().uri(base + "/rest/api/3/issue/" + issueId + "?fields=summary,status,issuetype,project")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken).accept(MediaType.APPLICATION_JSON)
+                .retrieve().body(new ParameterizedTypeReference<Map<String, Object>>() { }));
+        if (response == null) throw new ApiException(0, 0);
+        return issue(response);
     }
 
     private String site(String cloudId) {

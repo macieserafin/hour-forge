@@ -45,6 +45,21 @@ class JiraDisabledIT extends ApiIntegrationTestSupport {
     }
 
     @Test
+    void anEntryCannotBeLinkedToAnIssueWhenSwitchedOff() throws Exception {
+        var person = fixtures.user("worker@example.com", "Worker");
+        var team = fixtures.team("Studio", "UTC");
+        fixtures.member(team, person, TeamRole.MEMBER, Instant.now());
+        var project = fixtures.project(team, "Website", null);
+        var principal = new AppUserPrincipal(person.getId(), person.getEmail(), "unused");
+        var body = "{\"teamId\":\"" + team.getId() + "\",\"projectId\":\"" + project.getId() + "\",\"durationSeconds\":60,\"jiraIssueId\":\"10001\"}";
+        mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isConflict());
+        mvc.perform(post("/api/time-entries").with(user(principal)).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(body.replace(",\"jiraIssueId\":\"10001\"", "")))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.jiraIssueKey").doesNotExist());
+    }
+
+    @Test
     void noJiraBeansExistWhenSwitchedOff() {
         assertThat(context.getBeansOfType(TokenCipher.class)).isEmpty();
         assertThat(context.getBeansOfType(JiraAtlassianClient.class)).isEmpty();

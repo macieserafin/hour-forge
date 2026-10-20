@@ -24,7 +24,8 @@ public final class ReportResponse {
     public record Entry(UUID id, UUID userId, String displayName, UUID projectId, String projectName,
                         Instant projectArchivedAt, EntryType entryType, LocalDate workDate,
                         Instant startedAt, Instant endedAt, Integer durationSeconds, String description,
-                        Instant pausedAt, long pausedDurationMicros, Instant createdAt, Instant updatedAt) {}
+                        Instant pausedAt, long pausedDurationMicros, Instant createdAt, Instant updatedAt,
+                        String jiraIssueKey) {}
     public record ActiveTimer(Entry entry, long elapsedSeconds) {}
     public record Active(Context context, Instant asOf, Page<ActiveTimer> data) {}
 }

@@ -82,7 +82,7 @@ it('a member can leave after confirmation and loses the team view without losing
   expect(screen.queryByRole('button', { name: /Usuń z zespołu:/ })).not.toBeInTheDocument()
   await userEvent.click(modal.getByRole('button', { name: 'Potwierdź opuszczenie' }))
   expect(await screen.findByText(`Opuszczono zespół ${team.name}. Historia Twojej pracy została zachowana.`)).toBeVisible()
-  expect(screen.getByRole('region', { name: 'Wybrany zespół' })).toHaveTextContent(another.name)
+  expect(await screen.findByRole('region', { name: 'Wybrany zespół' })).toHaveTextContent(another.name)
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })
 

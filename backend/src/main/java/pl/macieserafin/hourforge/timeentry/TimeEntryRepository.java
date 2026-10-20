@@ -29,6 +29,11 @@ public interface TimeEntryRepository extends JpaRepository<TimeEntry, UUID>, Jpa
     @Query("delete from TimeEntry entry where entry.team.id = :teamId")
     int deleteAllByTeamId(UUID teamId);
 
+    /** The site stops being used: its links go, the time stays. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update TimeEntry entry set entry.jiraConnectionId = null, entry.jiraIssueId = null, entry.jiraIssueKey = null where entry.jiraConnectionId = :connectionId")
+    int clearJiraLinks(UUID connectionId);
+
     Optional<TimeEntry> findByUserIdAndEntryTypeAndEndedAtIsNull(UUID userId, EntryType entryType);
 
     Optional<TimeEntry> findByIdAndUserId(UUID id, UUID userId);

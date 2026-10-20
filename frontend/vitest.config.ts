@@ -8,6 +8,8 @@ export default defineConfig({
     setupFiles: ['./tests/support/setup.ts'],
     include: ['tests/unit/**/*.test.{ts,tsx}', 'tests/integration/**/*.test.{ts,tsx}'],
     restoreMocks: true,
+    // Many files run in parallel workers; typing-heavy tests need headroom on a busy machine.
+    testTimeout: 15_000,
     coverage: { provider: 'v8', include: ['src/**/*.{ts,tsx}'], exclude: ['src/main.tsx'], reporter: ['text', 'html', 'lcov'] },
   },
 })

@@ -23,9 +23,11 @@ import java.util.UUID;
 @RequestMapping("/api/time-entries")
 public class TimeEntryController {
     private final TimeEntryService entries;
+    private final IssueLinks links;
 
-    public TimeEntryController(TimeEntryService entries) {
+    public TimeEntryController(TimeEntryService entries, IssueLinks links) {
         this.entries = entries;
+        this.links = links;
     }
 
     @GetMapping
@@ -44,7 +46,7 @@ public class TimeEntryController {
     @PatchMapping("/{id}")
     public TimeEntryResponse update(@AuthenticationPrincipal AppUserPrincipal principal, @PathVariable UUID id,
                                    @Valid @RequestBody UpdateTimeEntryRequest request) {
-        return entries.update(principal.getUserId(), id, request);
+        return entries.update(principal.getUserId(), id, request, links.forUpdate(principal.getUserId(), id, request.jiraIssueId()));
     }
 
     @DeleteMapping("/{id}")
@@ -56,6 +58,7 @@ public class TimeEntryController {
     @PostMapping
     public ResponseEntity<TimeEntryResponse> create(@AuthenticationPrincipal AppUserPrincipal principal,
                                                    @Valid @RequestBody ManualTimeEntryRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(entries.createManual(principal.getUserId(), request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(entries.createManual(principal.getUserId(), request,
+                links.forNewEntry(principal.getUserId(), request.teamId(), request.jiraIssueId())));
     }
 }

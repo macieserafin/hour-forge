@@ -73,6 +73,28 @@ public class JiraIssueService {
         }
     }
 
+    public record Found(UUID connectionId, JiraApiClient.Issue issue) {
+    }
+
+    /** One issue by id, as the person: used to check a link before it is saved. */
+    public Found find(UUID userId, UUID teamId, String issueId) {
+        var connection = connection(userId, teamId);
+        var cooldownKey = userId + ":" + connection.getCloudId();
+        var until = cooldowns.get(cooldownKey);
+        var now = clock.instant();
+        if (until != null && until.isAfter(now)) throw new TooManyRequestsException(Duration.between(now, until));
+        var accessToken = tokens.accessToken(userId, connection.getCloudId());
+        try {
+            var issue = api.issue(connection.getCloudId(), accessToken, issueId);
+            if (issue.id().isBlank() || issue.key().isBlank()) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Jira is not reachable");
+            return new Found(connection.getId(), issue);
+        } catch (JiraApiClient.ApiException exception) {
+            // An issue the person cannot see looks the same as one that does not exist.
+            if (exception.status() == 403 || exception.status() == 400) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Jira issue not found");
+            throw translate(exception, userId, connection.getCloudId(), cooldownKey);
+        }
+    }
+
     private RuntimeException translate(JiraApiClient.ApiException exception, UUID userId, String cloudId, String cooldownKey) {
         switch (exception.status()) {
             case 429 -> {

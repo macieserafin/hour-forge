@@ -19,6 +19,7 @@ import pl.macieserafin.hourforge.team.TeamMember;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
 import pl.macieserafin.hourforge.team.TeamRole;
+import pl.macieserafin.hourforge.timeentry.TimeEntryRepository;
 import pl.macieserafin.hourforge.user.UserRepository;
 
 /** Connecting a team to a Jira Cloud site and each member's own Jira account to it. */
@@ -49,11 +50,12 @@ public class JiraIntegrationService {
     private final TeamMemberRepository members;
     private final UserRepository users;
     private final JiraSearchCache cache;
+    private final TimeEntryRepository entries;
     private final Clock clock;
 
     public JiraIntegrationService(JiraAtlassianClient atlassian, JiraTokenService tokens, JiraConnectionRepository connections,
                                   JiraUserAuthorizationRepository authorizations, OAuthStateRepository states, TeamRepository teams,
-                                  TeamMemberRepository members, UserRepository users, JiraSearchCache cache, Clock clock) {
+                                  TeamMemberRepository members, UserRepository users, JiraSearchCache cache, TimeEntryRepository entries, Clock clock) {
         this.atlassian = atlassian;
         this.tokens = tokens;
         this.connections = connections;
@@ -63,6 +65,7 @@ public class JiraIntegrationService {
         this.members = members;
         this.users = users;
         this.cache = cache;
+        this.entries = entries;
         this.clock = clock;
     }
 
@@ -177,8 +180,7 @@ public class JiraIntegrationService {
     public void disconnectSite(UUID userId, UUID teamId) {
         requireOwner(teamId, userId);
         connections.findByTeamId(teamId).ifPresent(connection -> {
-            connections.deleteAllByTeamId(teamId);
-            releaseSite(connection.getCloudId());
+            removeConnection(connection, teamId);
             cache.clear();
         });
     }
@@ -196,16 +198,19 @@ public class JiraIntegrationService {
     private void useSite(UUID teamId, UUID ownerId, JiraAtlassianClient.Site site) {
         var existing = connections.findByTeamId(teamId);
         if (existing.isPresent() && existing.get().getCloudId().equals(site.id())) return;
-        existing.ifPresent(connection -> {
-            connections.deleteAllByTeamId(teamId);
-            releaseSite(connection.getCloudId());
-        });
+        existing.ifPresent(connection -> removeConnection(connection, teamId));
         connections.save(new JiraConnection(teams.getReferenceById(teamId), site.id(), site.url(), site.name(),
                 users.getReferenceById(ownerId)));
         // Keep only the grant for the chosen site (and sites other teams use); the rest was offered, not chosen.
         authorizations.findAllByUserIdOrderByUpdatedAtDesc(ownerId).stream()
                 .filter(row -> !row.getCloudId().equals(site.id()) && !siteInUse(row.getCloudId()))
                 .forEach(authorizations::delete);
+    }
+
+    private void removeConnection(JiraConnection connection, UUID teamId) {
+        entries.clearJiraLinks(connection.getId());
+        connections.deleteAllByTeamId(teamId);
+        releaseSite(connection.getCloudId());
     }
 
     /** Nobody uses a site any more: the members' grants for it are no longer needed. */

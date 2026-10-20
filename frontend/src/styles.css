@@ -471,3 +471,5 @@ fieldset:disabled { opacity: .65; }
 .jira-issue-summary { overflow-wrap: anywhere; }
 .jira-issue-meta { grid-column: 2; font-size: 12px; color: var(--muted); }
 .jira-hint { margin: 0 0 14px; }
+.jira-key { display: inline-block; margin-top: 6px; padding: 1px 8px; border: 1px solid var(--border); border-radius: 99px; background: #faf9fe; font-size: 12px; font-weight: 550; color: #6250b9; text-decoration: none; }
+a.jira-key:hover, a.jira-key:focus-visible { border-color: var(--accent); text-decoration: underline; }

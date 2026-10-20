@@ -31,7 +31,7 @@ function SiteChooser({ userId, team, onChosen }: { userId: string; team: Team; o
 function DisconnectSiteModal({ userId, team, onClose }: { userId: string; team: Team; onClose: () => void }) {
   const disconnect = useDisconnectJiraSite(userId, team.id)
   return <Modal title="Odłącz witrynę Jira" busy={disconnect.isPending} onClose={onClose}>
-    <p className="dialog-description">Zespół <strong>{team.name}</strong> przestanie korzystać z Jiry, a połączenia kont wszystkich członków z tą witryną zostaną usunięte. Zapisany czas pracy nie zmieni się.</p>
+    <p className="dialog-description">Zespół <strong>{team.name}</strong> przestanie korzystać z Jiry, a połączenia kont wszystkich członków z tą witryną zostaną usunięte. Zapisany czas pracy nie zmieni się, ale jego powiązania z zadaniami Jira zostaną usunięte.</p>
     {disconnect.isError && <p className="form-error" role="alert">{disconnect.error.message}</p>}
     <footer className="dialog-actions"><button className="button-secondary" disabled={disconnect.isPending} onClick={onClose}>Anuluj</button>
       <button className="button-primary" disabled={disconnect.isPending} onClick={() => disconnect.mutate(undefined, { onSuccess: onClose })}>{disconnect.isPending ? <LoaderCircle size={16} className="spin" /> : <Unplug size={16} />}Odłącz witrynę</button></footer>

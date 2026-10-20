@@ -36,6 +36,8 @@ public final class FakeAtlassian {
     public final AtomicInteger searchCalls = new AtomicInteger();
     /** When not 0, the search answers with this status (429 also sends Retry-After). */
     public volatile int searchFailure = 0;
+    public final AtomicInteger issueCalls = new AtomicInteger();
+    public volatile int issueFailure = 0;
     public volatile List<Issue> issues = List.of(new Issue("10001", "PROJ-1", "First task"), new Issue("10002", "PROJ-2", "Second task"));
     public volatile List<Site> sites = List.of(new Site("cloud-1", "https://team.atlassian.net", "Team site"));
 
@@ -66,6 +68,8 @@ public final class FakeAtlassian {
         refreshDelayMillis = 0;
         tokenEndpointFailure = 0;
         searchFailure = 0;
+        issueFailure = 0;
+        issueCalls.set(0);
         searchCalls.set(0);
         searchBodies.clear();
         issues = List.of(new Issue("10001", "PROJ-1", "First task"), new Issue("10002", "PROJ-2", "Second task"));
@@ -112,7 +116,12 @@ public final class FakeAtlassian {
 
     private void search(HttpExchange exchange) throws IOException {
         var body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-        requests.add("POST " + exchange.getRequestURI().getPath());
+        var path = exchange.getRequestURI().getPath();
+        if (path.contains("/rest/api/3/issue/")) {
+            issue(exchange, path);
+            return;
+        }
+        requests.add("POST " + path);
         searchCalls.incrementAndGet();
         searchBodies.add(body);
         var header = exchange.getRequestHeaders().getFirst("Authorization");
@@ -138,6 +147,29 @@ public final class FakeAtlassian {
         json.append("]");
         if (offset + size < issues.size()) json.append(",\"nextPageToken\":\"page-").append(offset + size).append("\"");
         respond(exchange, 200, json.append("}").toString());
+    }
+
+    private void issue(HttpExchange exchange, String path) throws IOException {
+        requests.add("GET " + path);
+        issueCalls.incrementAndGet();
+        var header = exchange.getRequestHeaders().getFirst("Authorization");
+        if (header == null || !liveAccessTokens.contains(header.replace("Bearer ", ""))) {
+            respond(exchange, 401, "{}");
+            return;
+        }
+        if (issueFailure != 0) {
+            if (issueFailure == 429) exchange.getResponseHeaders().add("Retry-After", "3");
+            respond(exchange, issueFailure, "{}");
+            return;
+        }
+        var id = path.substring(path.lastIndexOf('/') + 1);
+        var found = issues.stream().filter(candidate -> candidate.id().equals(id)).findFirst();
+        if (found.isEmpty()) {
+            respond(exchange, 404, "{}");
+            return;
+        }
+        respond(exchange, 200, "{\"id\":\"" + found.get().id() + "\",\"key\":\"" + found.get().key() + "\",\"fields\":{\"summary\":\""
+                + found.get().summary() + "\",\"status\":{\"name\":\"To Do\"},\"issuetype\":{\"name\":\"Task\"},\"project\":{\"key\":\"PROJ\"}}}");
     }
 
     private void resources(HttpExchange exchange) throws IOException {

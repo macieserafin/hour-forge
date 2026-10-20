@@ -1,3 +1,4 @@
+import { JiraKeyLink } from '../components/JiraKeyLink'
 import { useState, type FormEvent } from 'react'
 import { ChevronLeft, ChevronRight, History, LoaderCircle, RefreshCw } from 'lucide-react'
 import type { TimeEntryHistoryFilters, TimeEntryHistoryItem } from '../lib/api'
@@ -85,7 +86,7 @@ export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false, c
             <thead><tr><th scope="col">Data pracy</th><th scope="col">Projekt i opis pracy</th><th scope="col">Rodzaj</th><th scope="col">Czas</th>{!readOnly && <th scope="col">Akcje</th>}</tr></thead>
             <tbody>{history.data.content.map(entry => <tr key={entry.id}>
               <td>{entry.workDate ? <time dateTime={entry.workDate}>{dateLabel(entry.workDate)}</time> : 'Bez daty'}</td>
-              <td><strong className="history-project-name">{entry.projectName}</strong><p className="history-description">{entry.description || 'Bez opisu'}</p></td>
+              <td><strong className="history-project-name">{entry.projectName}</strong><p className="history-description">{entry.description || 'Bez opisu'}</p><JiraKeyLink userId={userId} teamId={entry.teamId} issueKey={entry.jiraIssueKey} /></td>
               <td><span className="history-entry-type">{entry.entryType === 'TIMER' ? 'Timer' : 'Wpis ręczny'}</span></td>
               <td className="history-duration">{formatDuration(entry.durationSeconds)}</td>
               {!readOnly && <td><div className="history-actions">

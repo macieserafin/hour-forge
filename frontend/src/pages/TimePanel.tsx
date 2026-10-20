@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Clock3, LoaderCircle, Pause, Plus, Play, Square, Trash2 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { JiraIssuePicker, type JiraIssueLink } from '../components/JiraIssuePicker'
 import { Modal } from '../components/Modal'
 import { TimeEntryHistory } from './TimeEntryHistory'
 import type { Project, Team, TimeEntry } from '../lib/api'
@@ -22,6 +23,7 @@ function ManualTimeModal({ userId, team, projects, projectId, onClose, onSaved }
   const [minutes, setMinutes] = useState('0')
   const [seconds, setSeconds] = useState('0')
   const [description, setDescription] = useState('')
+  const [issue, setIssue] = useState<JiraIssueLink | null>(null)
   const [validation, setValidation] = useState('')
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -35,7 +37,7 @@ function ManualTimeModal({ userId, team, projects, projectId, onClose, onSaved }
     }
     if (duration > MAX_MANUAL_DURATION_SECONDS) { setValidation(maxDurationMessage); return }
     setValidation('')
-    save.mutate({ teamId: team.id, projectId: selected, workDate: undated ? null : date, durationSeconds: duration, description: description.trim() || null }, { onSuccess: onSaved })
+    save.mutate({ teamId: team.id, projectId: selected, workDate: undated ? null : date, durationSeconds: duration, description: description.trim() || null, jiraIssueId: issue?.id ?? null }, { onSuccess: onSaved })
   }
   return <Modal title="Dodaj wpis ręczny" busy={save.isPending} onClose={onClose}>
     <p className="dialog-description">Zespół: <strong>{team.name}</strong>. Dodaj czas pracy bez uruchamiania timera.</p>
@@ -51,6 +53,7 @@ function ManualTimeModal({ userId, team, projects, projectId, onClose, onSaved }
           <div><label htmlFor="manual-seconds">Sekundy</label><input className="text-input" id="manual-seconds" type="number" min={0} max={59} step={1} value={seconds} onChange={event => setSeconds(event.target.value)} /></div>
         </div></div>
         <div className="field-group"><label htmlFor="manual-description">Opis pracy <span className="optional-label">(opcjonalnie)</span></label><textarea className="text-input project-description-input" id="manual-description" rows={3} maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></div>
+        <JiraIssuePicker userId={userId} teamId={team.id} value={issue} onChange={setIssue} />
       </fieldset>
       {(validation || save.isError) && <p className="form-error" role="alert">{validation || save.error?.message}</p>}
       <footer className="dialog-actions"><button type="button" className="button-secondary" disabled={save.isPending} onClick={onClose}>Anuluj</button><button type="submit" className="button-primary" disabled={save.isPending}>{save.isPending && <LoaderCircle size={16} className="spin" />}{save.isPending ? 'Zapisywanie…' : 'Zapisz wpis'}</button></footer>
@@ -114,6 +117,7 @@ function TeamTimeEntry({ userId, team, start, canStart, onSaved, onStarted }: {
   // The remembered project is only a preselection: it applies if still in the active list, and the server rechecks on start.
   const [projectId, setProjectId] = useState(() => readLastProject(userId, team.id) ?? '')
   const [description, setDescription] = useState('')
+  const [issue, setIssue] = useState<JiraIssueLink | null>(null)
   const [manual, setManual] = useState(false)
   const manualProjects = useProjects(userId, team.id, true, manual)
   const [validation, setValidation] = useState('')
@@ -122,8 +126,8 @@ function TeamTimeEntry({ userId, team, start, canStart, onSaved, onStarted }: {
     event.preventDefault()
     if (!selected) { setValidation('Wybierz projekt.'); return }
     setValidation('')
-    start.mutate({ teamId: team.id, projectId: selected.id, description: description.trim() || null }, {
-      onSuccess: () => { saveLastProject(userId, team.id, selected.id); setDescription(''); onStarted() },
+    start.mutate({ teamId: team.id, projectId: selected.id, description: description.trim() || null, jiraIssueId: issue?.id ?? null }, {
+      onSuccess: () => { saveLastProject(userId, team.id, selected.id); setDescription(''); setIssue(null); onStarted() },
     })
   }
   return <section className="time-entry-section" aria-label="Rejestrowanie czasu w zespole">
@@ -135,6 +139,7 @@ function TeamTimeEntry({ userId, team, start, canStart, onSaved, onStarted }: {
         <fieldset disabled={start.isPending}>
           <div className="field-group"><label htmlFor="time-project">Projekt</label><select className="text-input" id="time-project" required value={selected?.id ?? ''} onChange={event => { setProjectId(event.target.value); setValidation(''); start.reset() }}><option value="" disabled>Wybierz projekt</option>{projects.data.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></div>
           <div className="field-group"><label htmlFor="time-description">Opis pracy <span className="optional-label">(opcjonalnie)</span></label><textarea className="text-input timer-description" id="time-description" rows={3} maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></div>
+          <JiraIssuePicker userId={userId} teamId={team.id} value={issue} onChange={setIssue} />
         </fieldset>
         {validation && <p className="form-error" role="alert">{validation}</p>}
         <div className="time-entry-actions"><button type="submit" className="button-primary" disabled={!canStart || start.isPending || projects.isFetching}>{start.isPending ? <LoaderCircle size={16} className="spin" /> : <Play size={16} />}{start.isPending ? 'Uruchamianie…' : 'Uruchom timer'}</button></div>
