@@ -263,4 +263,33 @@ class JiraLinkIT extends JiraIntegrationTestSupport {
                 .andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.not(containsString("PROJ-1"))));
         assertThat(UUID.randomUUID()).isNotNull();
     }
+
+    private String startTimer(String jiraIssueId) throws Exception {
+        var body = send(post("/api/timer/start"), memberPrincipal, "{\"teamId\":\"" + team.getId() + "\",\"projectId\":\"" + project.getId() + "\"" + (jiraIssueId == null ? "" : ",\"jiraIssueId\":\"" + jiraIssueId + "\"") + "}")
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        return JsonPath.read(body, "$.id");
+    }
+
+    @Test
+    void aRunningTimerCanGetChangeKeepAndLoseItsJiraLink() throws Exception {
+        var id = startTimer(null);
+        var base = "{\"entryId\":\"" + id + "\",\"projectId\":\"" + project.getId() + "\"";
+        send(post("/api/timer/update"), memberPrincipal, base + ",\"jiraIssueId\":\"10001\"}").andExpect(status().isOk()).andExpect(jsonPath("$.jiraIssueKey").value("PROJ-1"));
+        int calls = ATLASSIAN.issueCalls.get();
+        send(post("/api/timer/update"), memberPrincipal, base + ",\"description\":\"Note\",\"jiraIssueId\":\"10001\"}").andExpect(jsonPath("$.jiraIssueKey").value("PROJ-1"));
+        assertThat(ATLASSIAN.issueCalls.get()).isEqualTo(calls);
+        send(post("/api/timer/update"), memberPrincipal, base + ",\"jiraIssueId\":\"10002\"}").andExpect(jsonPath("$.jiraIssueKey").value("PROJ-2"));
+        send(post("/api/timer/update"), memberPrincipal, base + "}").andExpect(jsonPath("$.jiraIssueKey").doesNotExist());
+        send(post("/api/timer/update"), memberPrincipal, base + ",\"jiraIssueId\":\"99999\"}").andExpect(status().isNotFound());
+    }
+
+    @Test
+    void switchingCarriesTheNewTimersJiraLink() throws Exception {
+        var id = startTimer("10001");
+        jdbc.update("update time_entries set started_at = now() - interval '5 minutes' where id = ?::uuid", id);
+        entityManager.clear();
+        var body = "{\"stop\":{\"entryId\":\"" + id + "\"},\"start\":{\"teamId\":\"" + team.getId() + "\",\"projectId\":\"" + project.getId() + "\",\"jiraIssueId\":\"10002\"}}";
+        send(post("/api/timer/switch"), memberPrincipal, body).andExpect(status().isOk())
+                .andExpect(jsonPath("$.stopped.jiraIssueKey").value("PROJ-1")).andExpect(jsonPath("$.started.jiraIssueKey").value("PROJ-2"));
+    }
 }

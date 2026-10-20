@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, changeTimerState, createManualTimeEntry, deleteTimeEntry, discardTimer, getActiveTimer, getTimeEntryHistory, startTimer, stopTimer, updateTimeEntry, type TimeEntryHistoryFilters } from './api'
+import { ApiError, changeTimerState, createManualTimeEntry, deleteTimeEntry, discardTimer, getActiveTimer, getTimeEntryHistory, startTimer, stopTimer, updateTimeEntry, type TimeEntry, type TimeEntryHistoryFilters, switchTimer, updateTimer } from './api'
 import { teamsKey, useAuthError } from './teams'
 import { dashboardKey } from './dashboard'
 
@@ -69,6 +69,26 @@ export function useChangeTimerState(userId: string) {
   const callbacks = useTimeCallbacks(userId)
   return useMutation({ mutationFn: changeTimerState, retry: false, ...callbacks,
     onSuccess: entry => client.setQueryData(activeTimerKey(userId), entry) })
+}
+
+export function useUpdateTimer(userId: string) {
+  const client = useQueryClient()
+  const callbacks = useTimeCallbacks(userId)
+  return useMutation({ mutationFn: updateTimer, retry: false, ...callbacks,
+    onSuccess: entry => client.setQueryData(activeTimerKey(userId), entry) })
+}
+
+export function useSwitchTimer(userId: string) {
+  const client = useQueryClient()
+  const callbacks = useTimeCallbacks(userId, true)
+  return useMutation({ mutationFn: switchTimer, retry: false, ...callbacks,
+    onSuccess: result => client.setQueryData(activeTimerKey(userId), result.started) })
+}
+
+/** Whole seconds of work on a running timer: pauses are not counted, and a paused timer stands still. */
+export function timerElapsedSeconds(entry: TimeEntry, now: number) {
+  const end = entry.pausedAt ? Date.parse(entry.pausedAt) : Math.max(now, Date.parse(entry.updatedAt))
+  return Math.max(0, Math.floor((end - Date.parse(entry.startedAt!)) / 1000 - entry.pausedDurationSeconds))
 }
 
 export function useDiscardTimer(userId: string) {

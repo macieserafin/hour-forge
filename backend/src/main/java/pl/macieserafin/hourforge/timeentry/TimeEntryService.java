@@ -140,6 +140,11 @@ public class TimeEntryService {
     public TimeEntryResponse stop(UUID userId, StopTimerRequest request) {
         lockUser(userId);
         var entry = unfinishedTimer(userId, request.entryId());
+        return response(entries.saveAndFlush(finish(entry, request.description())));
+    }
+
+    /** Ends a timer at this moment. Ownership is sufficient: leaving a team must not prevent stopping one's own timer. */
+    private TimeEntry finish(TimeEntry entry, String description) {
         var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         var effectiveEnd = entry.getPausedAt() == null ? now : entry.getPausedAt();
         long seconds = Duration.between(entry.getStartedAt(), effectiveEnd)
@@ -147,14 +152,40 @@ public class TimeEntryService {
         if (seconds < 1 || seconds > Integer.MAX_VALUE) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Timer duration must fit a positive number of whole seconds");
         }
-        // Ownership is sufficient: leaving a team must not prevent stopping one's own timer.
         completePause(entry, now);
         entry.setEndedAt(now);
         entry.setDurationSeconds((int) seconds);
-        if (request.description() != null) {
-            entry.setDescription(request.description().isBlank() ? null : request.description());
+        if (description != null) {
+            entry.setDescription(description.isBlank() ? null : description);
         }
-        return response(entries.saveAndFlush(entry));
+        return entry;
+    }
+
+    /** Changes the project, note or Jira link of the running timer. A null link removes the existing one. */
+    @Transactional
+    public TimeEntryResponse updateTimer(UUID userId, UpdateTimerRequest request, IssueLink link) {
+        lockUser(userId);
+        var entry = unfinishedTimer(userId, request.entryId());
+        if (!entry.getProject().getId().equals(request.projectId())) {
+            entry.setProject(projectForTimer(userId, entry.getTeam().getId(), request.projectId()));
+        }
+        updateDescription(entry, request.description());
+        entry.setJiraIssue(link);
+        return response(save(entry, link));
+    }
+
+    /** Stops the running timer and starts the next one in a single transaction. */
+    @Transactional
+    public SwitchTimerResponse switchTimer(UUID userId, StopTimerRequest stop, StartTimerRequest start, IssueLink link) {
+        var user = lockUser(userId);
+        var running = unfinishedTimer(userId, stop.entryId());
+        var project = projectForTimer(userId, start.teamId(), start.projectId());
+        var stopped = entries.saveAndFlush(finish(running, stop.description()));
+        var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        var workDate = now.atZone(ZoneId.of(project.getTeam().getTimezone())).toLocalDate();
+        var next = new TimeEntry(user, project.getTeam(), project, EntryType.TIMER, workDate, now, null, null, start.description());
+        next.setJiraIssue(link);
+        return new SwitchTimerResponse(response(stopped), response(save(next, link)));
     }
 
     @Transactional

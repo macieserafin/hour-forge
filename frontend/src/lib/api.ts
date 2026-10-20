@@ -480,6 +480,8 @@ async function timeRequest(path: string, body?: unknown, signal?: AbortSignal): 
       409: path.endsWith('/pause') || path.endsWith('/resume') ? 'Stan timera uległ zmianie. Sprawdź aktualny stan i spróbuj ponownie.'
         : path.endsWith('/start') ? 'Nie można uruchomić timera. Sprawdź aktywny timer i status projektu.'
         : path.endsWith('/stop') ? 'Nie można zatrzymać tego timera. Mógł już zostać zatrzymany lub nie upłynęła jeszcze pełna sekunda.'
+        : path.endsWith('/update') ? 'Nie można zmienić tego timera. Mógł już zostać zatrzymany, a projekt musi być aktywny i należeć do tego samego zespołu.'
+        : path.endsWith('/switch') ? 'Nie można przełączyć timera. Bieżący timer musi działać co najmniej sekundę, a nowy projekt musi być aktywny.'
         : path.endsWith('/discard') ? 'Nie można odrzucić tego timera. Mógł już zostać zatrzymany lub odrzucony.'
         : 'Zespół jest zarchiwizowany i nie można dodać do niego czasu.',
     }
@@ -491,6 +493,20 @@ async function timeRequest(path: string, body?: unknown, signal?: AbortSignal): 
 export const getActiveTimer = (signal?: AbortSignal) => timeRequest('/api/timer/active', undefined, signal)
 export const startTimer = (body: StartTimerInput) => timeRequest('/api/timer/start', body) as Promise<TimeEntry>
 export const stopTimer = (body: { entryId: string; description: string | null }) => timeRequest('/api/timer/stop', body) as Promise<TimeEntry>
+export interface UpdateTimerInput {
+  entryId: string
+  projectId: string
+  description: string | null
+  jiraIssueId: string | null
+}
+
+export interface SwitchTimerInput {
+  stop: { entryId: string; description: string | null }
+  start: StartTimerInput
+}
+
+export const updateTimer = (body: UpdateTimerInput) => timeRequest('/api/timer/update', body) as Promise<TimeEntry>
+export const switchTimer = (body: SwitchTimerInput) => timeRequest('/api/timer/switch', body) as unknown as Promise<{ stopped: TimeEntry; started: TimeEntry }>
 export const discardTimer = async (body: { entryId: string }) => { await timeRequest('/api/timer/discard', body) }
 export const changeTimerState =({ action, ...body }: { action: 'pause' | 'resume'; entryId: string; description: string | null }) =>
   timeRequest(`/api/timer/${action}`, body) as Promise<TimeEntry>

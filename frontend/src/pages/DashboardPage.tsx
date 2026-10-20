@@ -10,6 +10,7 @@ import { TimePanel } from './TimePanel'
 import { PersonalDashboard } from './PersonalDashboard'
 import { AccountPanel } from './AccountPanel'
 import { IntegrationsPanel } from './IntegrationsPanel'
+import { TimerWatcher } from '../components/TimerWatcher'
 import { usePreferences } from '../lib/preferences'
 import { setTimeFormat } from '../lib/time'
 
@@ -62,6 +63,7 @@ export function DashboardPage({ user, section = 'dashboard' }: { user: User; sec
   const sidebarProps: SidebarProps = { user, isLoggingOut: logout.isPending, onLogout: () => logout.mutate(), onNavigate: () => menu.current?.close() }
 
   return <div className="app-layout">
+    <TimerWatcher userId={user.id} />
     <a className="skip-link" href="#main">Przejdź do treści</a>
     <aside className="sidebar desktop-sidebar"><Sidebar {...sidebarProps} /></aside>
     <dialog className="mobile-menu" ref={menu} aria-label="Menu nawigacyjne" onClick={event => { if (event.target === event.currentTarget) menu.current?.close() }}>

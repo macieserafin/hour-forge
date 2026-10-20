@@ -5,6 +5,7 @@ import { JiraIssuePicker, type JiraIssueLink } from '../components/JiraIssuePick
 import { Modal } from '../components/Modal'
 import { pickTeam, usePreferences } from '../lib/preferences'
 import { TimeEntryHistory } from './TimeEntryHistory'
+import { ChangeTimerModal, SwitchTimerModal } from './TimerChange'
 import type { Project, Team, TimeEntry } from '../lib/api'
 import { useProject, useProjects } from '../lib/projects'
 import { useTeams } from '../lib/teams'
@@ -80,6 +81,7 @@ function RunningTimer({ userId, entry, teams, stop, state, discard, onStopped, o
   const [now, setNow] = useState(Date.now)
   const [description, setDescriptionState] = useState(() => readTimerDraft(userId, entry.id) ?? entry.description ?? '')
   const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const [changing, setChanging] = useState<'change' | 'switch' | null>(null)
   const [longDismissed, setLongDismissed] = useState(() => isLongTimerDismissed(userId, entry.id))
   const setDescription = (value: string) => { setDescriptionState(value); saveTimerDraft(userId, entry.id, value) }
   useEffect(() => {
@@ -105,8 +107,10 @@ function RunningTimer({ userId, entry, teams, stop, state, discard, onStopped, o
     </div>}
     <form onSubmit={event => { event.preventDefault(); stop.mutate({ entryId: entry.id, description: description.trim() }, { onSuccess: stopped => { clearTimerLocalState(userId, entry.id); onStopped(stopped) } }) }}>
       <div className="field-group"><label htmlFor="stop-description">Opis wykonanej pracy <span className="optional-label">(opcjonalnie)</span></label><textarea className="text-input timer-description" id="stop-description" rows={2} maxLength={2000} disabled={busy} value={description} onChange={event => setDescription(event.target.value)} /></div>
-      <div className="timer-stop-row"><p className="field-hint">{!team ? 'Po utracie dostępu do zespołu możesz zakończyć timer, ale nie możesz go wznowić.' : paused ? 'Czas przerwy nie jest wliczany do pracy.' : 'Zamknięcie strony nie zatrzymuje timera.'}</p><div className="timer-controls"><button type="button" className="button-secondary" disabled={busy} onClick={() => { discard.reset(); setConfirmDiscard(true) }}><Trash2 size={16} />Odrzuć timer</button><button type="button" className="button-secondary" disabled={busy || (paused && !team) || (!paused && elapsed < 1)} onClick={() => { stop.reset(); state.mutate({ action: paused ? 'resume' : 'pause', entryId: entry.id, description: description.trim() }) }}>{state.isPending ? <LoaderCircle size={16} className="spin" /> : paused ? <Play size={16} /> : <Pause size={16} />}{state.isPending ? 'Zapisywanie…' : paused ? 'Wznów pracę' : 'Wstrzymaj timer'}</button><button type="submit" className="button-primary timer-stop" disabled={busy || elapsed < 1}>{stop.isPending ? <LoaderCircle size={16} className="spin" /> : <Square size={15} />}{stop.isPending ? 'Kończenie…' : 'Zakończ pracę'}</button></div></div>
+      <div className="timer-stop-row"><p className="field-hint">{!team ? 'Po utracie dostępu do zespołu możesz zakończyć timer, ale nie możesz go wznowić.' : paused ? 'Czas przerwy nie jest wliczany do pracy.' : 'Zamknięcie strony nie zatrzymuje timera.'}</p><div className="timer-controls"><button type="button" className="button-secondary" disabled={busy || !team} onClick={() => setChanging('change')}>Zmień projekt lub zadanie</button><button type="button" className="button-secondary" disabled={busy || paused || elapsed < 1} onClick={() => setChanging('switch')}>Przełącz zadanie</button><button type="button" className="button-secondary" disabled={busy} onClick={() => { discard.reset(); setConfirmDiscard(true) }}><Trash2 size={16} />Odrzuć timer</button><button type="button" className="button-secondary" disabled={busy || (paused && !team) || (!paused && elapsed < 1)} onClick={() => { stop.reset(); state.mutate({ action: paused ? 'resume' : 'pause', entryId: entry.id, description: description.trim() }) }}>{state.isPending ? <LoaderCircle size={16} className="spin" /> : paused ? <Play size={16} /> : <Pause size={16} />}{state.isPending ? 'Zapisywanie…' : paused ? 'Wznów pracę' : 'Wstrzymaj timer'}</button><button type="submit" className="button-primary timer-stop" disabled={busy || elapsed < 1}>{stop.isPending ? <LoaderCircle size={16} className="spin" /> : <Square size={15} />}{stop.isPending ? 'Kończenie…' : 'Zakończ pracę'}</button></div></div>
     </form>
+    {changing === 'change' && team && <ChangeTimerModal userId={userId} entry={entry} team={team} description={description} onClose={() => setChanging(null)} onChanged={changed => { setDescription(changed.description ?? ''); setChanging(null) }} />}
+    {changing === 'switch' && <SwitchTimerModal userId={userId} entry={entry} teams={teams} description={description} onClose={() => setChanging(null)} onSwitched={stopped => { clearTimerLocalState(userId, entry.id); setChanging(null); onStopped(stopped) }} />}
     {confirmDiscard && <DiscardTimerModal userId={userId} entry={entry} discard={discard} onClose={() => setConfirmDiscard(false)} onDiscarded={onDiscarded} />}
   </section>
 }

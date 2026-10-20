@@ -29,6 +29,17 @@ public class TimerController {
                 links.forNewEntry(principal.getUserId(), request.teamId(), request.jiraIssueId())));
     }
 
+    @PostMapping("/update")
+    public TimeEntryResponse update(@AuthenticationPrincipal AppUserPrincipal principal, @Valid @RequestBody UpdateTimerRequest request) {
+        return entries.updateTimer(principal.getUserId(), request, links.forUpdate(principal.getUserId(), request.entryId(), request.jiraIssueId()));
+    }
+
+    @PostMapping("/switch")
+    public SwitchTimerResponse switchTimer(@AuthenticationPrincipal AppUserPrincipal principal, @Valid @RequestBody SwitchTimerRequest request) {
+        var link = links.forNewEntry(principal.getUserId(), request.start().teamId(), request.start().jiraIssueId());
+        return entries.switchTimer(principal.getUserId(), request.stop(), request.start(), link);
+    }
+
     @PostMapping("/stop")
     public TimeEntryResponse stop(@AuthenticationPrincipal AppUserPrincipal principal,
                                   @Valid @RequestBody StopTimerRequest request) {
