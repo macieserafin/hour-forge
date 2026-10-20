@@ -259,6 +259,32 @@ export async function logout(): Promise<void> {
   }
 }
 
+async function accountRequest(path: string, method: 'PATCH' | 'POST', body: unknown, messages: Record<number, string>, fallback: string) {
+  const csrf = await getCsrf()
+  const response = await request(path, { method, headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
+    body: JSON.stringify(body) })
+  if (!response.ok) {
+    throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
+      : { 401: 'Sesja wygasła. Zaloguj się ponownie.', 403: 'Sesja formularza wygasła. Spróbuj ponownie.', ...messages }[response.status] ?? fallback)
+  }
+  return response
+}
+
+export async function updateProfile(displayName: string): Promise<User> {
+  const response = await accountRequest('/api/account/profile', 'PATCH', { displayName: displayName.trim() },
+    { 400: 'Wpisz nazwę wyświetlaną (maksymalnie 255 znaków).' }, 'Nie udało się zapisać nazwy. Spróbuj ponownie.')
+  return response.json() as Promise<User>
+}
+
+export async function changePassword(input: { currentPassword: string; newPassword: string }): Promise<void> {
+  await accountRequest('/api/account/password', 'POST', input,
+    { 400: 'Obecne hasło jest nieprawidłowe.' }, 'Nie udało się zmienić hasła. Spróbuj ponownie.')
+}
+
+export async function signOutEverywhere(): Promise<void> {
+  await accountRequest('/api/account/sign-out-everywhere', 'POST', {}, {}, 'Nie udało się wylogować ze wszystkich urządzeń. Spróbuj ponownie.')
+}
+
 async function teamRequest<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const csrf = body === undefined ? null : await getCsrf()
   const response = await request(path, {

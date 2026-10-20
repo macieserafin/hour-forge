@@ -27,6 +27,9 @@ public class UserCredential {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
+    @Column(name = "session_version", nullable = false)
+    private int sessionVersion;
+
     protected UserCredential() {
     }
 
@@ -45,5 +48,18 @@ public class UserCredential {
 
     public String getPasswordHash() {
         return passwordHash;
+    }
+
+    public int getSessionVersion() {
+        return sessionVersion;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
+    /** Invalidates every session issued before this call. */
+    public int invalidateSessions() {
+        return ++sessionVersion;
     }
 }

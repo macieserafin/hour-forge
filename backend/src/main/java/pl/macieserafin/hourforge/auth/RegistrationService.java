@@ -1,6 +1,5 @@
 package pl.macieserafin.hourforge.auth;
 
-import java.nio.charset.StandardCharsets;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -25,12 +24,8 @@ public class RegistrationService {
 
     @Transactional
     public void register(RegistrationRequest request) {
-        // Validate here so rejected password values cannot appear in Bean Validation error logs.
         var password = request.password();
-        if (password == null || password.isBlank() || password.codePointCount(0, password.length()) < 12
-                || password.getBytes(StandardCharsets.UTF_8).length > 72) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must contain at least 12 characters and at most 72 UTF-8 bytes");
-        }
+        PasswordPolicy.require(password);
         if (users.findByEmailIgnoreCase(request.email()).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered");
         }

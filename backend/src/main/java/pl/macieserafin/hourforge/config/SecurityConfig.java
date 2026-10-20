@@ -17,7 +17,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
+import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.security.LoginAttemptService;
+import pl.macieserafin.hourforge.security.SessionVersionFilter;
 import pl.macieserafin.hourforge.security.RateLimitProperties;
 import pl.macieserafin.hourforge.security.TooManyRequestsException;
 
@@ -35,7 +38,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, LoginAttemptService loginAttempts) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, LoginAttemptService loginAttempts,
+                                            UserCredentialRepository credentials) throws Exception {
         return http
                 .headers(headers -> headers.referrerPolicy(policy -> policy.policy(
                         org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
@@ -50,6 +54,7 @@ public class SecurityConfig {
                                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)))
                 // After CSRF validation, before credentials are checked: a blocked login never reaches BCrypt.
                 .addFilterBefore(new LoginRateLimitFilter(loginAttempts), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new SessionVersionFilter(credentials), AuthorizationFilter.class)
                 .formLogin(form -> form
                         .loginPage(LOGIN_URL)
                         .loginProcessingUrl(LOGIN_URL)

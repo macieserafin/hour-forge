@@ -21,6 +21,6 @@ public class DatabaseUserDetailsService implements UserDetailsService {
         var credential = credentials.findByUserEmailIgnoreCase(email.strip())
                 .orElseThrow(() -> new UsernameNotFoundException("Invalid credentials"));
         var user = credential.getUser();
-        return new AppUserPrincipal(user.getId(), user.getEmail(), credential.getPasswordHash());
+        return new AppUserPrincipal(user.getId(), user.getEmail(), credential.getPasswordHash(), credential.getSessionVersion());
     }
 }
