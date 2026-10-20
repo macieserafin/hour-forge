@@ -48,11 +48,12 @@ public class JiraIntegrationService {
     private final TeamRepository teams;
     private final TeamMemberRepository members;
     private final UserRepository users;
+    private final JiraSearchCache cache;
     private final Clock clock;
 
     public JiraIntegrationService(JiraAtlassianClient atlassian, JiraTokenService tokens, JiraConnectionRepository connections,
                                   JiraUserAuthorizationRepository authorizations, OAuthStateRepository states, TeamRepository teams,
-                                  TeamMemberRepository members, UserRepository users, Clock clock) {
+                                  TeamMemberRepository members, UserRepository users, JiraSearchCache cache, Clock clock) {
         this.atlassian = atlassian;
         this.tokens = tokens;
         this.connections = connections;
@@ -61,6 +62,7 @@ public class JiraIntegrationService {
         this.teams = teams;
         this.members = members;
         this.users = users;
+        this.cache = cache;
         this.clock = clock;
     }
 
@@ -168,6 +170,7 @@ public class JiraIntegrationService {
     public void disconnectUser(UUID userId, UUID teamId) {
         activeMember(teamId, userId);
         connections.findByTeamId(teamId).ifPresent(connection -> authorizations.deleteByUserIdAndCloudId(userId, connection.getCloudId()));
+        cache.evictUser(userId);
     }
 
     @Transactional
@@ -176,6 +179,7 @@ public class JiraIntegrationService {
         connections.findByTeamId(teamId).ifPresent(connection -> {
             connections.deleteAllByTeamId(teamId);
             releaseSite(connection.getCloudId());
+            cache.clear();
         });
     }
 

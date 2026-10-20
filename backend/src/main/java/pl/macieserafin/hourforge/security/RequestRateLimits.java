@@ -27,6 +27,8 @@ public class RequestRateLimits {
 
     public void jiraAuthorize(UUID userId) { acquire("jira-authorize:" + userId, limits.jiraAuthorize()); }
 
+    public void jiraSearch(UUID userId) { acquire("jira-search:" + userId, limits.jiraSearch()); }
+
     private void acquire(String key, RateLimitProperties.Limit limit) {
         limiter.tryAcquire(key, limit).ifPresent(retryAfter -> { throw new TooManyRequestsException(retryAfter); });
     }

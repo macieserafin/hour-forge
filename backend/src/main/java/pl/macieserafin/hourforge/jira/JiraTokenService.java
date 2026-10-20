@@ -76,6 +76,12 @@ public class JiraTokenService {
         }
     }
 
+    /** Drops one person's grant for a site, for example after Atlassian stopped accepting it. */
+    @Transactional
+    public void forget(UUID userId, String cloudId) {
+        authorizations.deleteByUserIdAndCloudId(userId, cloudId);
+    }
+
     private boolean sameGrant(JiraUserAuthorization candidate, JiraUserAuthorization row, String refreshToken) {
         if (candidate == row) return true;
         if (refreshToken == null || candidate.getEncryptedRefreshToken() == null) return false;

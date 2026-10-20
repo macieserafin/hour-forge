@@ -29,6 +29,14 @@ public final class FakeAtlassian {
     public volatile long expiresInSeconds = 3600;
     public volatile long refreshDelayMillis = 0;
     public volatile int tokenEndpointFailure = 0;
+    public record Issue(String id, String key, String summary) {
+    }
+
+    private final List<String> searchBodies = new CopyOnWriteArrayList<>();
+    public final AtomicInteger searchCalls = new AtomicInteger();
+    /** When not 0, the search answers with this status (429 also sends Retry-After). */
+    public volatile int searchFailure = 0;
+    public volatile List<Issue> issues = List.of(new Issue("10001", "PROJ-1", "First task"), new Issue("10002", "PROJ-2", "Second task"));
     public volatile List<Site> sites = List.of(new Site("cloud-1", "https://team.atlassian.net", "Team site"));
 
     public FakeAtlassian() {
@@ -37,6 +45,7 @@ public final class FakeAtlassian {
         } catch (IOException exception) {
             throw new IllegalStateException(exception);
         }
+        server.createContext("/ex/jira/", this::search);
         server.createContext("/oauth/token/accessible-resources", this::resources);
         server.createContext("/oauth/token", this::token);
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
@@ -56,7 +65,15 @@ public final class FakeAtlassian {
         expiresInSeconds = 3600;
         refreshDelayMillis = 0;
         tokenEndpointFailure = 0;
+        searchFailure = 0;
+        searchCalls.set(0);
+        searchBodies.clear();
+        issues = List.of(new Issue("10001", "PROJ-1", "First task"), new Issue("10002", "PROJ-2", "Second task"));
         sites = List.of(new Site("cloud-1", "https://team.atlassian.net", "Team site"));
+    }
+
+    public List<String> searchBodies() {
+        return searchBodies;
     }
 
     public List<String> requests() {
@@ -91,6 +108,36 @@ public final class FakeAtlassian {
         } else {
             respond(exchange, 403, "{\"error\":\"invalid_grant\"}");
         }
+    }
+
+    private void search(HttpExchange exchange) throws IOException {
+        var body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        requests.add("POST " + exchange.getRequestURI().getPath());
+        searchCalls.incrementAndGet();
+        searchBodies.add(body);
+        var header = exchange.getRequestHeaders().getFirst("Authorization");
+        if (header == null || !liveAccessTokens.contains(header.replace("Bearer ", ""))) {
+            respond(exchange, 401, "{\"message\":\"Unauthorized\"}");
+            return;
+        }
+        if (searchFailure == 429) exchange.getResponseHeaders().add("Retry-After", "3");
+        if (searchFailure != 0) {
+            respond(exchange, searchFailure, "{}");
+            return;
+        }
+        int offset = body.contains("\"nextPageToken\":\"page-") ? Integer.parseInt(body.replaceAll("(?s).*\"nextPageToken\":\"page-([0-9]+)\".*", "$1")) : 0;
+        int size = Integer.parseInt(body.replaceAll("(?s).*\"maxResults\":([0-9]+).*", "$1"));
+        var page = issues.subList(Math.min(offset, issues.size()), Math.min(offset + size, issues.size()));
+        var json = new StringBuilder("{\"issues\":[");
+        for (var issue : page) {
+            if (json.charAt(json.length() - 1) != '[') json.append(',');
+            json.append("{\"id\":\"").append(issue.id()).append("\",\"key\":\"").append(issue.key())
+                    .append("\",\"fields\":{\"summary\":\"").append(issue.summary())
+                    .append("\",\"status\":{\"name\":\"To Do\"},\"issuetype\":{\"name\":\"Task\"},\"project\":{\"key\":\"PROJ\"}}}");
+        }
+        json.append("]");
+        if (offset + size < issues.size()) json.append(",\"nextPageToken\":\"page-").append(offset + size).append("\"");
+        respond(exchange, 200, json.append("}").toString());
     }
 
     private void resources(HttpExchange exchange) throws IOException {
