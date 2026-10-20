@@ -99,7 +99,8 @@ public class TimeEntryService {
         var content = result.getContent().stream().map(entry -> new TimeEntryHistoryItem(
                 entry.getId(), entry.getTeam().getId(), entry.getProject().getId(), entry.getProject().getName(),
                 entry.getEntryType(), entry.getWorkDate(), entry.getDurationSeconds(), entry.getDescription(),
-                entry.getStartedAt(), entry.getEndedAt(), entry.getJiraIssueId(), entry.getJiraIssueKey())).toList();
+                entry.getStartedAt(), entry.getEndedAt(), entry.getJiraIssueId(), entry.getJiraIssueKey(),
+                entry.getLastEditedAt())).toList();
         return new TimeEntryHistoryResponse(content, page, size, result.getTotalElements(), result.getTotalPages());
     }
 
@@ -292,12 +293,44 @@ public class TimeEntryService {
         if (!java.util.Objects.equals(entry.getWorkDate(), request.workDate())) {
             requireWorkDateInWindow(request.workDate(), entry.getTeam().getTimezone());
         }
+        boolean changed = !project.getId().equals(entry.getProject().getId()) || !java.util.Objects.equals(entry.getWorkDate(), request.workDate())
+                || !entry.getDurationSeconds().equals(durationSeconds) || !java.util.Objects.equals(entry.getDescription(), request.description())
+                || !java.util.Objects.equals(entry.getJiraIssueId(), link == null ? null : link.issueId());
         entry.setProject(project);
         entry.setWorkDate(request.workDate());
         entry.setDurationSeconds(durationSeconds);
         entry.setDescription(request.description());
         entry.setJiraIssue(link);
+        // Saving without any change is not an edit.
+        if (changed) entry.setLastEditedAt(clock.instant().truncatedTo(ChronoUnit.MICROS));
         return response(save(entry, link));
+    }
+
+    static final int MAX_COPIED_ENTRIES = 100;
+
+    /** Copies a whole day of one's own work to another day, e.g. "repeat yesterday". Nothing is copied unless all of it can be. */
+    @Transactional
+    public CopyDayResponse copyDay(UUID userId, CopyDayRequest request) {
+        var user = lockUser(userId);
+        var team = teams.findLockedById(request.teamId()).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        members.findByTeamIdAndUserId(request.teamId(), userId).filter(member -> member.getLeftAt() == null)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (team.isArchived()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived teams cannot receive new time entries");
+        if (request.fromDate().equals(request.toDate())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a different day to copy to");
+        requireWorkDateInWindow(request.toDate(), team.getTimezone());
+        var source = entries.findDayOf(userId, request.teamId(), request.fromDate());
+        if (source.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "There is nothing to copy from that day");
+        if (source.size() > MAX_COPIED_ENTRIES) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Too many entries to copy at once");
+        long total = 0;
+        for (var original : source) {
+            var copy = new TimeEntry(user, team, original.getProject(), EntryType.MANUAL, request.toDate(), null, null, original.getDurationSeconds(), original.getDescription());
+            // The link was checked when it was made; a link to a disconnected site was already removed with the site.
+            if (original.getJiraIssueId() != null) copy.setJiraIssue(new IssueLink(original.getJiraConnectionId(), original.getJiraIssueId(), original.getJiraIssueKey()));
+            entries.save(copy);
+            total += original.getDurationSeconds();
+        }
+        entries.flush();
+        return new CopyDayResponse(source.size(), total);
     }
 
     @Transactional

@@ -178,7 +178,7 @@ public class ReportService {
                 e.getProject().getId(), e.getProject().getName(), e.getProject().getArchivedAt(),
                 e.getEntryType(), e.getWorkDate(), e.getStartedAt(), e.getEndedAt(), e.getDurationSeconds(),
                 e.getDescription(), e.getPausedAt(), e.getPausedDurationMicros(), e.getCreatedAt(), e.getUpdatedAt(),
-                e.getJiraIssueKey());
+                e.getJiraIssueKey(), e.getLastEditedAt());
     }
 
     private long elapsed(TimeEntry entry, Instant now) {

@@ -49,6 +49,11 @@ public class TimeEntryController {
         return entries.update(principal.getUserId(), id, request, links.forUpdate(principal.getUserId(), id, request.jiraIssueId()));
     }
 
+    @PostMapping("/copy-day")
+    public CopyDayResponse copyDay(@AuthenticationPrincipal AppUserPrincipal principal, @Valid @RequestBody CopyDayRequest request) {
+        return entries.copyDay(principal.getUserId(), request);
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@AuthenticationPrincipal AppUserPrincipal principal, @PathVariable UUID id) {
         entries.delete(principal.getUserId(), id);

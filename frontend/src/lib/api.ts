@@ -138,6 +138,7 @@ export interface TimeEntryHistoryItem {
   endedAt: string | null
   jiraIssueId?: string | null
   jiraIssueKey?: string | null
+  editedAt?: string | null
 }
 
 export interface TimeEntryHistory {
@@ -638,6 +639,7 @@ export interface ReportProject {
 
 export interface ReportEntry {
   jiraIssueKey?: string | null
+  editedAt?: string | null
   id: string
   userId: string
   displayName: string
@@ -863,3 +865,62 @@ export async function savePreferences(input: Preferences): Promise<Preferences> 
   }
   return response.json() as Promise<Preferences>
 }
+
+export interface CopyDayResult {
+  copied: number
+  totalSeconds: number
+}
+
+export async function copyDay(input: { teamId: string; fromDate: string; toDate: string }): Promise<CopyDayResult> {
+  const csrf = await getCsrf()
+  const response = await request('/api/time-entries/copy-day', { method: 'POST',
+    headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token }, body: JSON.stringify(input) })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: 'Nie można skopiować tego dnia: wybierz inny dzień docelowy z ostatnich 2 lat (nie z przyszłości), a wpisów może być najwyżej 100.',
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Sesja formularza wygasła. Spróbuj ponownie.',
+      404: 'Nie ma wpisów do skopiowania albo nie masz już dostępu do zespołu.',
+      409: 'Zespół jest zarchiwizowany i nie można dodać do niego czasu.',
+    }
+    throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response) : messages[response.status] ?? 'Nie udało się skopiować wpisów. Spróbuj ponownie.')
+  }
+  return response.json() as Promise<CopyDayResult>
+}
+
+export interface EntryTemplate {
+  id: string
+  name: string
+  projectId: string
+  description: string | null
+  jiraIssueId: string | null
+  jiraIssueKey: string | null
+}
+
+export interface TemplateInput {
+  name: string
+  projectId: string
+  description: string | null
+  jiraIssueId: string | null
+}
+
+async function templateRequest<T>(teamId: string, method: string, suffix = '', body?: unknown, signal?: AbortSignal): Promise<T> {
+  const csrf = method === 'GET' ? null : await getCsrf()
+  const response = await request(`/api/teams/${encodeURIComponent(teamId)}/templates${suffix}`, { method, signal,
+    headers: csrf ? { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token } : undefined, body: body === undefined ? undefined : JSON.stringify(body) })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: 'Sprawdź nazwę szablonu (najwyżej 80 znaków) i opis (najwyżej 2000 znaków).',
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Sesja formularza wygasła. Spróbuj ponownie.',
+      404: 'Nie znaleziono szablonu, projektu lub zadania Jira albo nie masz już dostępu.',
+      409: 'Szablon o takiej nazwie już istnieje, masz ich za dużo (najwyżej 30 w zespole), projekt jest archiwalny albo zespół jest zarchiwizowany.',
+    }
+    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wykonać operacji na szablonie. Spróbuj ponownie.')
+  }
+  return (response.status === 204 ? null : await response.json()) as T
+}
+
+export const getTemplates = (teamId: string, signal?: AbortSignal) => templateRequest<EntryTemplate[]>(teamId, 'GET', '', undefined, signal)
+export const createTemplate = (teamId: string, input: TemplateInput) => templateRequest<EntryTemplate>(teamId, 'POST', '', input)
+export const deleteTemplate = (teamId: string, templateId: string) => templateRequest<null>(teamId, 'DELETE', `/${encodeURIComponent(templateId)}`)

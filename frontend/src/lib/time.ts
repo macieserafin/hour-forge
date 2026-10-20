@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, changeTimerState, createManualTimeEntry, deleteTimeEntry, discardTimer, getActiveTimer, getTimeEntryHistory, startTimer, stopTimer, updateTimeEntry, type TimeEntry, type TimeEntryHistoryFilters, switchTimer, updateTimer } from './api'
+import { ApiError, changeTimerState, createManualTimeEntry, deleteTimeEntry, discardTimer, getActiveTimer, getTimeEntryHistory, startTimer, stopTimer, updateTimeEntry, type TimeEntry, type TimeEntryHistoryFilters, switchTimer, updateTimer, copyDay } from './api'
 import { teamsKey, useAuthError } from './teams'
 import { dashboardKey } from './dashboard'
 
@@ -89,6 +89,19 @@ export function useSwitchTimer(userId: string) {
 export function timerElapsedSeconds(entry: TimeEntry, now: number) {
   const end = entry.pausedAt ? Date.parse(entry.pausedAt) : Math.max(now, Date.parse(entry.updatedAt))
   return Math.max(0, Math.floor((end - Date.parse(entry.startedAt!)) / 1000 - entry.pausedDurationSeconds))
+}
+
+export function useCopyDay(userId: string) {
+  const client = useQueryClient()
+  const onError = useAuthError()
+  return useMutation({ mutationFn: copyDay, onError, retry: false,
+    onSettled: () => Promise.all([client.invalidateQueries({ queryKey: historyKey(userId) }), client.invalidateQueries({ queryKey: dashboardKey(userId) })]) })
+}
+
+/** An ISO date (YYYY-MM-DD) a number of days later, or earlier when negative. */
+export function addDays(isoDate: string, days: number) {
+  const [year, month, day] = isoDate.split('-').map(Number) as [number, number, number]
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
 }
 
 export function useDiscardTimer(userId: string) {

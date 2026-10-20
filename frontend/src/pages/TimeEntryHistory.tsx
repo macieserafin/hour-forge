@@ -1,4 +1,5 @@
 import { JiraKeyLink } from '../components/JiraKeyLink'
+import { RepeatDayModal } from './RepeatDayModal'
 import { useState, type FormEvent } from 'react'
 import { ChevronLeft, ChevronRight, History, LoaderCircle, RefreshCw } from 'lucide-react'
 import type { TimeEntryHistoryFilters, TimeEntryHistoryItem } from '../lib/api'
@@ -9,14 +10,16 @@ import { formatDuration, useTimeEntryHistory } from '../lib/time'
 const emptyFilters: TimeEntryHistoryFilters = { projectId: '', from: '', to: '', q: '' }
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
 
-export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false, canWorkAgain = false, onWorkAgain }: {
+export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false, canWorkAgain = false, onWorkAgain, onCopy }: {
   userId: string; teamId: string; timezone: string; readOnly?: boolean; canWorkAgain?: boolean; onWorkAgain?: (entry: TimeEntryHistoryItem) => void
+  onCopy?: (entry: TimeEntryHistoryItem) => void
 }) {
   const projects = useProjects(userId, teamId, true)
   const [draft, setDraft] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
   const [page, setPage] = useState(0)
   const [validation, setValidation] = useState('')
+  const [repeating, setRepeating] = useState(false)
   const [action, setAction] = useState<{ type: 'edit' | 'delete'; entry: TimeEntryHistoryItem } | null>(null)
   const history = useTimeEntryHistory(userId, teamId, filters, page)
   const hasFilters = !!(filters.projectId || filters.from || filters.to || filters.undated || filters.q?.trim())
@@ -42,9 +45,12 @@ export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false, c
   return <section className="time-history" aria-labelledby="time-history-heading">
     <header className="teams-toolbar">
       <div><h2 id="time-history-heading">Historia czasu</h2><p>Twoje zapisane wpisy w wybranym zespole. Aktywny timer pojawi się tutaj po zakończeniu.</p></div>
-      <button type="button" className="button-secondary" disabled={history.isFetching} onClick={() => void history.refetch()}>
-        <RefreshCw size={15} className={history.isFetching ? 'spin' : ''} />Odśwież historię
-      </button>
+      <div className="history-toolbar-actions">
+        {!readOnly && <button type="button" className="button-secondary" onClick={() => setRepeating(true)}>Powtórz wczorajszy dzień</button>}
+        <button type="button" className="button-secondary" disabled={history.isFetching} onClick={() => void history.refetch()}>
+          <RefreshCw size={15} className={history.isFetching ? 'spin' : ''} />Odśwież historię
+        </button>
+      </div>
     </header>
 
     <form className="history-filters" aria-label="Filtry historii czasu" onSubmit={apply} onInput={() => setValidation('')}>
@@ -86,13 +92,14 @@ export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false, c
             <thead><tr><th scope="col">Data pracy</th><th scope="col">Projekt i opis pracy</th><th scope="col">Rodzaj</th><th scope="col">Czas</th>{!readOnly && <th scope="col">Akcje</th>}</tr></thead>
             <tbody>{history.data.content.map(entry => <tr key={entry.id}>
               <td>{entry.workDate ? <time dateTime={entry.workDate}>{dateLabel(entry.workDate)}</time> : 'Bez daty'}</td>
-              <td><strong className="history-project-name">{entry.projectName}</strong><p className="history-description">{entry.description || 'Bez opisu'}</p><JiraKeyLink userId={userId} teamId={entry.teamId} issueKey={entry.jiraIssueKey} /></td>
+              <td><strong className="history-project-name">{entry.projectName}</strong><p className="history-description">{entry.description || 'Bez opisu'}</p><JiraKeyLink userId={userId} teamId={entry.teamId} issueKey={entry.jiraIssueKey} />{entry.editedAt && <span className="edited-mark" title={`Ostatnio zmieniony ${new Date(entry.editedAt).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })}`}>edytowano</span>}</td>
               <td><span className="history-entry-type">{entry.entryType === 'TIMER' ? 'Timer' : 'Wpis ręczny'}</span></td>
               <td className="history-duration">{formatDuration(entry.durationSeconds)}</td>
               {!readOnly && <td><div className="history-actions">
                 <button className="text-link" disabled={!canWorkAgain || !projects.data?.some(project => project.id === entry.projectId && !project.archivedAt)}
                   aria-label={`Pracuj ponownie nad: ${entry.projectName}${entry.description ? ` — ${entry.description}` : ''}`}
                   onClick={() => onWorkAgain?.(entry)}>Pracuj ponownie</button>
+                {onCopy && <button className="text-link" aria-label={`Kopiuj wpis: ${entry.projectName}${entry.description ? ` — ${entry.description}` : ''}`} onClick={() => onCopy(entry)}>Kopiuj</button>}
                 <button className="text-link" disabled={!projects.data || projects.isError} onClick={() => setAction({ type: 'edit', entry })}>Edytuj</button>
                 <button className="text-link" onClick={() => setAction({ type: 'delete', entry })}>Usuń</button></div></td>}
             </tr>)}</tbody>
@@ -104,6 +111,7 @@ export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false, c
             <button className="button-secondary" disabled={page + 1 >= history.data.totalPages || history.isFetching} onClick={() => setPage(page + 1)}>Następna<ChevronRight size={16} /></button></div>
         </nav>}
       </>}
+    {repeating && <RepeatDayModal userId={userId} teamId={teamId} timezone={timezone} onClose={() => setRepeating(false)} />}
     {action?.type === 'edit' && projects.data && <EditTimeEntry userId={userId} entry={action.entry} projects={projects.data} timezone={timezone} onClose={() => setAction(null)} />}
     {action?.type === 'delete' && <DeleteTimeEntry userId={userId} entry={action.entry} onClose={() => setAction(null)} onDeleted={() => {
       setAction(null)

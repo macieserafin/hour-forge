@@ -256,7 +256,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
                 <tbody>{data.data.content.map(entry => <tr key={entry.id}>
                   <td data-label="Data pracy">{entry.workDate ? <time dateTime={entry.workDate}>{dateLabel(entry.workDate)}</time> : 'Bez daty'}</td>
                   <td data-label="Osoba">{entry.displayName}</td>
-                  <td data-label="Projekt i opis pracy"><strong className="history-project-name">{entry.projectName}</strong>{entry.projectArchivedAt && <span className="report-meta">Projekt archiwalny</span>}<p className="history-description">{entry.description || 'Bez opisu'}</p><JiraKeyLink userId={userId} teamId={team.id} issueKey={entry.jiraIssueKey} /></td>
+                  <td data-label="Projekt i opis pracy"><strong className="history-project-name">{entry.projectName}</strong>{entry.projectArchivedAt && <span className="report-meta">Projekt archiwalny</span>}<p className="history-description">{entry.description || 'Bez opisu'}</p><JiraKeyLink userId={userId} teamId={team.id} issueKey={entry.jiraIssueKey} />{entry.editedAt && <span className="edited-mark" title={`Ostatnio zmieniony ${new Date(entry.editedAt).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })}`}>edytowano</span>}</td>
                   <td data-label="Rodzaj"><span className="history-entry-type">{entry.entryType === 'TIMER' ? 'Timer' : 'Wpis ręczny'}</span></td>
                   <td data-label="Czas" className="history-duration">{formatDuration(entry.durationSeconds)}</td>
                 </tr>)}</tbody>

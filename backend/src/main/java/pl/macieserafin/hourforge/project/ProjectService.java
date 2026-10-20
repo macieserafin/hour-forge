@@ -23,14 +23,17 @@ public class ProjectService {
     private final TeamRepository teams;
     private final UserRepository users;
     private final TimeEntryRepository entries;
+    private final pl.macieserafin.hourforge.entrytemplate.EntryTemplateRepository entryTemplates;
 
     public ProjectService(ProjectRepository projects, TeamMemberRepository members, TeamRepository teams,
-                          UserRepository users, TimeEntryRepository entries) {
+                          UserRepository users, TimeEntryRepository entries,
+                          pl.macieserafin.hourforge.entrytemplate.EntryTemplateRepository entryTemplates) {
         this.projects = projects;
         this.members = members;
         this.teams = teams;
         this.users = users;
         this.entries = entries;
+        this.entryTemplates = entryTemplates;
     }
 
     @Transactional(readOnly = true)
@@ -98,6 +101,8 @@ public class ProjectService {
         if (entries.existsByProjectId(projectId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only empty projects can be deleted");
         }
+        // Templates that point at the empty project are of no use any more.
+        entryTemplates.deleteAllByProjectId(projectId);
         projects.delete(project);
         projects.flush();
     }

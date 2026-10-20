@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.team.TeamMember;
+import pl.macieserafin.hourforge.entrytemplate.EntryTemplateRepository;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
 import pl.macieserafin.hourforge.team.TeamRole;
@@ -51,11 +52,12 @@ public class JiraIntegrationService {
     private final UserRepository users;
     private final JiraSearchCache cache;
     private final TimeEntryRepository entries;
+    private final EntryTemplateRepository entryTemplates;
     private final Clock clock;
 
     public JiraIntegrationService(JiraAtlassianClient atlassian, JiraTokenService tokens, JiraConnectionRepository connections,
                                   JiraUserAuthorizationRepository authorizations, OAuthStateRepository states, TeamRepository teams,
-                                  TeamMemberRepository members, UserRepository users, JiraSearchCache cache, TimeEntryRepository entries, Clock clock) {
+                                  TeamMemberRepository members, UserRepository users, JiraSearchCache cache, TimeEntryRepository entries, EntryTemplateRepository entryTemplates, Clock clock) {
         this.atlassian = atlassian;
         this.tokens = tokens;
         this.connections = connections;
@@ -66,6 +68,7 @@ public class JiraIntegrationService {
         this.users = users;
         this.cache = cache;
         this.entries = entries;
+        this.entryTemplates = entryTemplates;
         this.clock = clock;
     }
 
@@ -212,6 +215,7 @@ public class JiraIntegrationService {
 
     private void removeConnection(JiraConnection connection, UUID teamId) {
         entries.clearJiraLinks(connection.getId());
+        entryTemplates.clearJiraLinks(connection.getId());
         connections.deleteAllByTeamId(teamId);
         releaseSite(connection.getCloudId());
     }

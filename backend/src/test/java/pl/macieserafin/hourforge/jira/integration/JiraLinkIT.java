@@ -292,4 +292,33 @@ class JiraLinkIT extends JiraIntegrationTestSupport {
         send(post("/api/timer/switch"), memberPrincipal, body).andExpect(status().isOk())
                 .andExpect(jsonPath("$.stopped.jiraIssueKey").value("PROJ-1")).andExpect(jsonPath("$.started.jiraIssueKey").value("PROJ-2"));
     }
+
+    @Test
+    void templatesKeepAVerifiedJiraLinkAndLoseItWhenTheSiteIsDisconnected() throws Exception {
+        var url = "/api/teams/" + team.getId() + "/templates";
+        var base = "{\"name\":\"Linked\",\"projectId\":\"" + project.getId() + "\"";
+        var json = send(post(url), memberPrincipal, base + ",\"jiraIssueId\":\"10001\"}").andExpect(status().isCreated())
+                .andExpect(jsonPath("$.jiraIssueKey").value("PROJ-1")).andReturn().getResponse().getContentAsString();
+        var id = JsonPath.<String>read(json, "$.id");
+        send(post(url), memberPrincipal, base.replace("Linked", "Bad") + ",\"jiraIssueId\":\"99999\"}").andExpect(status().isNotFound());
+        int calls = ATLASSIAN.issueCalls.get();
+        send(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(url + "/" + id), memberPrincipal, base + ",\"description\":\"Note\",\"jiraIssueId\":\"10001\"}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.jiraIssueKey").value("PROJ-1"));
+        assertThat(ATLASSIAN.issueCalls.get()).isEqualTo(calls);
+
+        mvc.perform(delete("/api/integrations/jira/site").param("teamId", team.getId().toString()).with(user(ownerPrincipal)).with(csrf())).andExpect(status().isNoContent());
+        entityManager.clear();
+        assertThat(jdbc.queryForMap("select name, jira_issue_key from entry_templates where id = ?::uuid", id)).containsEntry("name", "Linked").containsEntry("jira_issue_key", null);
+    }
+
+    @Test
+    void copyingADayKeepsTheJiraLinksWithoutAskingJiraAgain() throws Exception {
+        createManual(memberPrincipal, "10001");
+        int calls = ATLASSIAN.issueCalls.get();
+        send(post("/api/time-entries/copy-day"), memberPrincipal, "{\"teamId\":\"" + team.getId() + "\",\"fromDate\":\"" + LocalDate.now() + "\",\"toDate\":\"" + LocalDate.now().minusDays(1) + "\"}")
+                .andExpect(status().isOk()).andExpect(jsonPath("$.copied").value(1));
+        assertThat(ATLASSIAN.issueCalls.get()).isEqualTo(calls);
+        entityManager.flush();
+        assertThat(jdbc.queryForObject("select count(*) from time_entries where user_id = ? and jira_issue_key = 'PROJ-1'", Integer.class, member.getId())).isEqualTo(2);
+    }
 }

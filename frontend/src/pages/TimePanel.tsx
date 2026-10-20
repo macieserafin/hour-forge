@@ -2,30 +2,33 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Clock3, LoaderCircle, Pause, Plus, Play, Square, Trash2 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { JiraIssuePicker, type JiraIssueLink } from '../components/JiraIssuePicker'
+import { TemplatePicker } from '../components/TemplatePicker'
 import { Modal } from '../components/Modal'
 import { pickTeam, usePreferences } from '../lib/preferences'
 import { TimeEntryHistory } from './TimeEntryHistory'
 import { ChangeTimerModal, SwitchTimerModal } from './TimerChange'
-import type { Project, Team, TimeEntry } from '../lib/api'
+import type { Project, Team, TimeEntry, TimeEntryHistoryItem } from '../lib/api'
 import { useProject, useProjects } from '../lib/projects'
 import { useTeams } from '../lib/teams'
 import { LONG_TIMER_SECONDS, MAX_MANUAL_DURATION_SECONDS, clearTimerLocalState, dismissLongTimer, formatClock, formatDuration, isLongTimerDismissed, maxDurationMessage, readLastProject, readTimerDraft, saveLastProject, saveTimerDraft, teamToday, useActiveTimer, useChangeTimerState, useDiscardTimer, useManualTimeEntry, useStartTimer, useStopTimer, workDateRange, workDateRangeMessage } from '../lib/time'
 
 const dateLabel = (date: string | null) => date === null ? 'Bez daty' : new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
 
-function ManualTimeModal({ userId, team, projects, projectId, onClose, onSaved }: {
-  userId: string; team: Team; projects: Project[]; projectId: string; onClose: () => void; onSaved: (entry: TimeEntry) => void
+interface ManualInitial { projectId: string; description: string | null; durationSeconds: number; jiraIssueId: string | null; jiraIssueKey: string | null }
+
+function ManualTimeModal({ userId, team, projects, projectId, initial, onClose, onSaved }: {
+  userId: string; team: Team; projects: Project[]; projectId: string; initial?: ManualInitial; onClose: () => void; onSaved: (entry: TimeEntry) => void
 }) {
   const save = useManualTimeEntry(userId)
-  const [selected, setSelected] = useState(projectId)
+  const [selected, setSelected] = useState(initial?.projectId ?? projectId)
   const [date, setDate] = useState(() => teamToday(team.timezone))
   const [undated, setUndated] = useState(false)
   const range = workDateRange(team.timezone)
-  const [hours, setHours] = useState('0')
-  const [minutes, setMinutes] = useState('0')
-  const [seconds, setSeconds] = useState('0')
-  const [description, setDescription] = useState('')
-  const [issue, setIssue] = useState<JiraIssueLink | null>(null)
+  const [hours, setHours] = useState(String(Math.floor((initial?.durationSeconds ?? 0) / 3600)))
+  const [minutes, setMinutes] = useState(String(Math.floor((initial?.durationSeconds ?? 0) / 60) % 60))
+  const [seconds, setSeconds] = useState(String((initial?.durationSeconds ?? 0) % 60))
+  const [description, setDescription] = useState(initial?.description ?? '')
+  const [issue, setIssue] = useState<JiraIssueLink | null>(initial?.jiraIssueId && initial.jiraIssueKey ? { id: initial.jiraIssueId, key: initial.jiraIssueKey, summary: '' } : null)
   const [validation, setValidation] = useState('')
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -41,8 +44,8 @@ function ManualTimeModal({ userId, team, projects, projectId, onClose, onSaved }
     setValidation('')
     save.mutate({ teamId: team.id, projectId: selected, workDate: undated ? null : date, durationSeconds: duration, description: description.trim() || null, jiraIssueId: issue?.id ?? null }, { onSuccess: onSaved })
   }
-  return <Modal title="Dodaj wpis ręczny" busy={save.isPending} onClose={onClose}>
-    <p className="dialog-description">Zespół: <strong>{team.name}</strong>. Dodaj czas pracy bez uruchamiania timera.</p>
+  return <Modal title={initial ? 'Kopiuj wpis' : 'Dodaj wpis ręczny'} busy={save.isPending} onClose={onClose}>
+    <p className="dialog-description">Zespół: <strong>{team.name}</strong>. {initial ? 'Poprawiony wpis zapisze się jako nowy, na wybraną datę.' : 'Dodaj czas pracy bez uruchamiania timera.'}</p>
     <form onSubmit={submit} onInput={() => setValidation('')}>
       <fieldset disabled={save.isPending}>
         <div className="field-group"><label htmlFor="manual-project">Projekt</label><select className="text-input" id="manual-project" value={selected} required onChange={event => setSelected(event.target.value)}><option value="" disabled>Wybierz projekt</option>{projects.map(project => <option key={project.id} value={project.id}>{project.name}{project.archivedAt ? ' (archiwalny)' : ''}</option>)}</select></div>
@@ -56,6 +59,8 @@ function ManualTimeModal({ userId, team, projects, projectId, onClose, onSaved }
         </div></div>
         <div className="field-group"><label htmlFor="manual-description">Opis pracy <span className="optional-label">(opcjonalnie)</span></label><textarea className="text-input project-description-input" id="manual-description" rows={3} maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></div>
         <JiraIssuePicker userId={userId} teamId={team.id} value={issue} onChange={setIssue} />
+        <TemplatePicker userId={userId} teamId={team.id} current={{ projectId: selected, description, issue }}
+          onApply={template => { setSelected(template.projectId); setDescription(template.description ?? ''); setIssue(template.jiraIssueId && template.jiraIssueKey ? { id: template.jiraIssueId, key: template.jiraIssueKey, summary: '' } : null) }} />
       </fieldset>
       {(validation || save.isError) && <p className="form-error" role="alert">{validation || save.error?.message}</p>}
       <footer className="dialog-actions"><button type="button" className="button-secondary" disabled={save.isPending} onClick={onClose}>Anuluj</button><button type="submit" className="button-primary" disabled={save.isPending}>{save.isPending && <LoaderCircle size={16} className="spin" />}{save.isPending ? 'Zapisywanie…' : 'Zapisz wpis'}</button></footer>
@@ -145,6 +150,8 @@ function TeamTimeEntry({ userId, team, start, canStart, onSaved, onStarted }: {
           <div className="field-group"><label htmlFor="time-project">Projekt</label><select className="text-input" id="time-project" required value={selected?.id ?? ''} onChange={event => { setProjectId(event.target.value); setValidation(''); start.reset() }}><option value="" disabled>Wybierz projekt</option>{projects.data.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></div>
           <div className="field-group"><label htmlFor="time-description">Opis pracy <span className="optional-label">(opcjonalnie)</span></label><textarea className="text-input timer-description" id="time-description" rows={3} maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></div>
           <JiraIssuePicker userId={userId} teamId={team.id} value={issue} onChange={setIssue} />
+          <TemplatePicker userId={userId} teamId={team.id} current={{ projectId, description, issue }}
+            onApply={template => { setProjectId(template.projectId); setDescription(template.description ?? ''); setIssue(template.jiraIssueId && template.jiraIssueKey ? { id: template.jiraIssueId, key: template.jiraIssueKey, summary: '' } : null); setValidation('') }} />
         </fieldset>
         {validation && <p className="form-error" role="alert">{validation}</p>}
         <div className="time-entry-actions"><button type="submit" className="button-primary" disabled={!canStart || start.isPending || projects.isFetching}>{start.isPending ? <LoaderCircle size={16} className="spin" /> : <Play size={16} />}{start.isPending ? 'Uruchamianie…' : 'Uruchom timer'}</button></div>
@@ -156,6 +163,14 @@ function TeamTimeEntry({ userId, team, start, canStart, onSaved, onStarted }: {
   </section>
 }
 
+/** Opens the manual entry form filled with an earlier entry, for today. */
+function CopyEntryModal({ userId, team, item, onClose, onSaved }: { userId: string; team: Team; item: TimeEntryHistoryItem; onClose: () => void; onSaved: (entry: TimeEntry) => void }) {
+  const projects = useProjects(userId, team.id, true)
+  if (projects.isPending || projects.isError) return <Modal title="Kopiuj wpis" busy={false} onClose={onClose}>{projects.isError ? <div role="alert">{projects.error.message}</div> : <p role="status">Ładowanie projektów…</p>}</Modal>
+  return <ManualTimeModal userId={userId} team={team} projects={projects.data} projectId={item.projectId} onClose={onClose} onSaved={onSaved}
+    initial={{ projectId: item.projectId, description: item.description, durationSeconds: item.durationSeconds, jiraIssueId: item.jiraIssueId ?? null, jiraIssueKey: item.jiraIssueKey ?? null }} />
+}
+
 export function TimePanel({ userId }: { userId: string }) {
   const teams = useTeams(userId)
   const active = useActiveTimer(userId)
@@ -164,6 +179,7 @@ export function TimePanel({ userId }: { userId: string }) {
   const state = useChangeTimerState(userId)
   const discard = useDiscardTimer(userId)
   const [saved, setSaved] = useState<TimeEntry | null>(null)
+  const [copying, setCopying] = useState<TimeEntryHistoryItem | null>(null)
   const [search, setSearch] = useSearchParams()
   const selectedId = search.get('team')
   const defaultTeamId = usePreferences(userId).data?.defaultTeamId
@@ -187,9 +203,11 @@ export function TimePanel({ userId }: { userId: string }) {
         {selected ? <>{selected.archivedAt ? <p className="project-notice" role="status">Zespół {selected.name} jest zarchiwizowany. Historia pozostaje dostępna, ale nie można dodawać ani zmieniać wpisów czasu.</p> : <TeamTimeEntry key={selected.id} userId={userId} team={selected} start={start} canStart={active.isSuccess && !active.isFetching && !active.data && !stop.isPending && !state.isPending} onSaved={setSaved} onStarted={() => { setSaved(null); stop.reset(); state.reset() }} />}
           <TimeEntryHistory key={`${userId}:${selected.id}`} userId={userId} teamId={selected.id} timezone={selected.timezone} readOnly={!!selected.archivedAt}
             canWorkAgain={active.isSuccess && !active.isFetching && !active.data && !start.isPending && !stop.isPending && !state.isPending && !discard.isPending}
+            onCopy={selected.archivedAt ? undefined : setCopying}
             onWorkAgain={item => start.mutate({ teamId: selected.id, projectId: item.projectId, description: item.description }, {
               onSuccess: () => { saveLastProject(userId, selected.id, item.projectId); setSaved(null); stop.reset(); state.reset() },
-            })} /></> : <p className="form-error" role="alert">Ten zespół nie istnieje lub nie masz do niego dostępu. Wybierz inny zespół.</p>}
+            })} />
+          {copying && <CopyEntryModal userId={userId} team={selected} item={copying} onClose={() => setCopying(null)} onSaved={entry => { setSaved(entry); setCopying(null) }} />}</> : <p className="form-error" role="alert">Ten zespół nie istnieje lub nie masz do niego dostępu. Wybierz inny zespół.</p>}
       </>}
   </div>
 }

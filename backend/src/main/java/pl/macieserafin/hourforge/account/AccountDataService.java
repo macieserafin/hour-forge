@@ -8,6 +8,7 @@ import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.auth.AccountMailService;
 import pl.macieserafin.hourforge.auth.EmailTokenRepository;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
+import pl.macieserafin.hourforge.entrytemplate.EntryTemplateRepository;
 import pl.macieserafin.hourforge.invitation.TeamInviteRepository;
 import pl.macieserafin.hourforge.jira.JiraUserAuthorizationRepository;
 import pl.macieserafin.hourforge.jira.OAuthStateRepository;
@@ -42,6 +43,7 @@ public class AccountDataService {
     private final JiraUserAuthorizationRepository jiraAuthorizations;
     private final OAuthStateRepository oauthStates;
     private final UserPreferencesRepository preferenceRows;
+    private final EntryTemplateRepository entryTemplates;
     private final PreferencesService preferences;
     private final PasswordEncoder encoder;
     private final PasswordChangeAttempts attempts;
@@ -53,7 +55,7 @@ public class AccountDataService {
     public AccountDataService(UserRepository users, UserCredentialRepository credentials, TeamMemberRepository members,
                               TeamRepository teams, TimeEntryRepository entries, TeamInviteRepository invites,
                               EmailTokenRepository tokens, JiraUserAuthorizationRepository jiraAuthorizations,
-                              OAuthStateRepository oauthStates, UserPreferencesRepository preferenceRows,
+                              OAuthStateRepository oauthStates, UserPreferencesRepository preferenceRows, EntryTemplateRepository entryTemplates,
                               PreferencesService preferences, PasswordEncoder encoder, PasswordChangeAttempts attempts,
                               AccountMailService mail, RateLimiter limiter, RateLimitProperties limits, Clock clock) {
         this.users = users;
@@ -66,6 +68,7 @@ public class AccountDataService {
         this.jiraAuthorizations = jiraAuthorizations;
         this.oauthStates = oauthStates;
         this.preferenceRows = preferenceRows;
+        this.entryTemplates = entryTemplates;
         this.preferences = preferences;
         this.encoder = encoder;
         this.attempts = attempts;
@@ -127,6 +130,7 @@ public class AccountDataService {
         jiraAuthorizations.deleteAllByUserId(userId);
         oauthStates.deleteAllByUserId(userId);
         preferenceRows.deleteByUserId(userId);
+        entryTemplates.deleteAllByUserId(userId);
         var user = credential.getUser();
         var oldEmail = user.getEmail();
         credentials.delete(credential);

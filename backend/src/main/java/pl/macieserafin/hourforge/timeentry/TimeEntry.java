@@ -65,6 +65,9 @@ public class TimeEntry {
     @Column(name = "description", columnDefinition = "text")
     private String description;
 
+    @Column(name = "last_edited_at")
+    private Instant lastEditedAt;
+
     @Column(name = "long_timer_reminded_at")
     private Instant longTimerRemindedAt;
 
@@ -102,6 +105,14 @@ public class TimeEntry {
 
     public UUID getId() {
         return id;
+    }
+
+    public Instant getLastEditedAt() {
+        return lastEditedAt;
+    }
+
+    public void setLastEditedAt(Instant lastEditedAt) {
+        this.lastEditedAt = lastEditedAt;
     }
 
     public Instant getLongTimerRemindedAt() {

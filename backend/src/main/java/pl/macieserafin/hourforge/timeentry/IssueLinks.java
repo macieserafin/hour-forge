@@ -27,6 +27,13 @@ public class IssueLinks {
         return available.resolve(userId, teamId, issueId);
     }
 
+    /** Like {@link #forNewEntry}, but a link that is already there is kept when the same issue is sent again. */
+    public IssueLink keepOrResolve(UUID userId, UUID teamId, String issueId, IssueLink current) {
+        if (issueId == null) return null;
+        if (current != null && current.issueId().equals(issueId)) return current;
+        return forNewEntry(userId, teamId, issueId);
+    }
+
     /** Keeps the existing link when the same issue is sent again, so editing a note never needs Jira. */
     public IssueLink forUpdate(UUID userId, UUID entryId, String issueId) {
         if (issueId == null) return null;
