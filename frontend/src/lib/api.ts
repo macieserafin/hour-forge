@@ -11,6 +11,7 @@ export interface Team {
   createdAt: string
   role: 'OWNER' | 'MEMBER'
   archivedAt: string | null
+  activeTimersVisible: boolean
 }
 
 export interface TeamSummary {
@@ -408,7 +409,7 @@ async function teamManagementRequest<T>(path: string, method: 'GET' | 'PATCH' | 
 }
 
 const teamPath = (teamId: string) => `/api/teams/${encodeURIComponent(teamId)}`
-export const updateTeam = ({ teamId, ...body }: { teamId: string; name: string; timezone: string }) => teamManagementRequest<Team>(teamPath(teamId), 'PATCH', body)
+export const updateTeam = ({ teamId, ...body }: { teamId: string; name: string; timezone: string; activeTimersVisible?: boolean }) => teamManagementRequest<Team>(teamPath(teamId), 'PATCH', body)
 export const transferOwnership = (teamId: string, userId: string) => teamManagementRequest<null>(`${teamPath(teamId)}/transfer-ownership`, 'POST', { userId })
 export const archiveTeam = (teamId: string) => teamManagementRequest<Team>(`${teamPath(teamId)}/archive`, 'POST')
 export const getTeamSummary = (teamId: string, signal?: AbortSignal) => teamManagementRequest<TeamSummary>(`${teamPath(teamId)}/summary`, 'GET', undefined, signal)
@@ -650,7 +651,7 @@ async function reportRequest<T>(teamId: string, endpoint: string, params: URLSea
     const messages: Record<number, string> = {
       400: 'Sprawdź zakres dat (najwyżej 366 dni) i filtry raportu.',
       401: 'Sesja wygasła. Zaloguj się ponownie.',
-      403: 'Widok zespołu jest dostępny wyłącznie dla jego właściciela.',
+      403: 'Widok zespołu jest dostępny wyłącznie dla jego właściciela, a podgląd aktywnych timerów można wyłączyć w ustawieniach zespołu.',
       404: 'Zespół lub wybrane dane są niedostępne. Sprawdź swoje uprawnienia i filtry.',
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wczytać raportu zespołu. Spróbuj ponownie.')
@@ -661,10 +662,26 @@ async function reportRequest<T>(teamId: string, endpoint: string, params: URLSea
 export const getReportSummary = (teamId: string, filters: ReportFilters, signal?: AbortSignal) =>
   reportRequest<ReportSummary>(teamId, 'summary', reportParams(filters), signal)
 
-export function getReportBreakdown(teamId: string, filters: ReportFilters, groupBy: 'MEMBER' | 'PROJECT', page: number, signal?: AbortSignal) {
+export type ReportGroup = 'MEMBER' | 'PROJECT' | 'DAY' | 'MEMBER_PROJECT'
+
+export interface ReportActiveTimer {
+  entry: ReportEntry
+  elapsedSeconds: number
+}
+
+export interface ReportActive {
+  context: ReportContext
+  asOf: string
+  data: ReportPage<ReportActiveTimer>
+}
+
+export const getReportActive = (teamId: string, page: number, signal?: AbortSignal) =>
+  reportRequest<ReportActive>(teamId, 'active-timers', new URLSearchParams({ page: String(page), size: '20' }), signal)
+
+export function getReportBreakdown(teamId: string, filters: ReportFilters, groupBy: ReportGroup, page: number, signal?: AbortSignal) {
   const params = reportParams(filters, page)
   params.set('groupBy', groupBy)
-  return reportRequest<ReportResult<ReportBucket> & { groupBy: 'MEMBER' | 'PROJECT' }>(teamId, 'breakdown', params, signal)
+  return reportRequest<ReportResult<ReportBucket> & { groupBy: ReportGroup }>(teamId, 'breakdown', params, signal)
 }
 
 export function getReportEntries(teamId: string, filters: ReportFilters, sort: ReportSort, page: number, signal?: AbortSignal) {

@@ -31,6 +31,9 @@ public class Team {
     @Column(name = "archived_at")
     private Instant archivedAt;
 
+    @Column(name = "active_timers_visible", nullable = false)
+    private boolean activeTimersVisible = true;
+
     protected Team() {
     }
 
@@ -65,6 +68,14 @@ public class Team {
 
     public void setArchivedAt(Instant archivedAt) {
         this.archivedAt = archivedAt;
+    }
+
+    public boolean isActiveTimersVisible() {
+        return activeTimersVisible;
+    }
+
+    public void setActiveTimersVisible(boolean activeTimersVisible) {
+        this.activeTimersVisible = activeTimersVisible;
     }
 
     public void setName(String name) {

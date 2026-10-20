@@ -32,7 +32,7 @@ it('applies a quick range and the description search to every report request', a
   await waitFor(() => {
     const requests = fetcher.mock.calls.map(([path]) => new URL(String(path), window.location.origin))
       .filter(url => url.pathname.includes('/reports/') && url.searchParams.get('q') === 'faktura')
-    expect(requests.map(url => url.pathname.split('/').at(-1)).sort()).toEqual(['breakdown', 'breakdown', 'entries', 'summary'])
+    expect(requests.map(url => url.pathname.split('/').at(-1)).sort()).toEqual(['breakdown', 'breakdown', 'breakdown', 'breakdown', 'entries', 'summary'])
     expect(requests.every(url => url.searchParams.get('from') === lastWeek.from && url.searchParams.get('to') === lastWeek.to)).toBe(true)
   })
 })

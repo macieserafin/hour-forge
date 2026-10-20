@@ -44,6 +44,8 @@ public class TeamManagementService {
         // Stored work dates keep their original team-local meaning; the zone applies to new entries only.
         team.setName(request.name());
         team.setTimezone(request.timezone());
+        // Absent means unchanged, so older clients that only send name and zone do not reset the setting.
+        if (request.activeTimersVisible() != null) team.setActiveTimersVisible(request.activeTimersVisible());
         return TeamResponse.of(teams.saveAndFlush(team), TeamRole.OWNER);
     }
 

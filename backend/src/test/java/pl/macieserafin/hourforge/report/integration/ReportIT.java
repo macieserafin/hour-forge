@@ -117,6 +117,19 @@ class ReportIT extends ApiIntegrationTestSupport {
     }
 
     @Test
+    void theLiveViewIsHiddenWhenTheTeamTurnsItOffWhileOtherReportsKeepWorking() throws Exception {
+        dataset();
+        mvc.perform(request("active-timers")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(1))).andExpect(jsonPath("$.data.content[0].entry.displayName").value("Owner"));
+        team.setActiveTimersVisible(false);
+        mvc.perform(request("active-timers")).andExpect(status().isForbidden());
+        mvc.perform(request("summary")).andExpect(status().isOk());
+        mvc.perform(request("entries")).andExpect(status().isOk());
+        team.setActiveTimersVisible(true);
+        mvc.perform(request("active-timers")).andExpect(status().isOk());
+    }
+
+    @Test
     void descriptionSearchIsLimitedTo200Characters() throws Exception {
         for (String endpoint : List.of("summary", "breakdown", "entries")) {
             mvc.perform(request(endpoint).param("q", "x".repeat(200))).andExpect(status().isOk());

@@ -24,7 +24,22 @@ it('edits the team name and time zone from the settings', async () => {
   await userEvent.selectOptions(modal.getByLabelText('Strefa czasowa'), 'UTC')
   await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
   expect(await screen.findByText('Zapisano ustawienia zespołu Nowa nazwa.')).toBeVisible()
-  expect(sent).toEqual({ name: 'Nowa nazwa', timezone: 'UTC' })
+  expect(sent).toEqual({ name: 'Nowa nazwa', timezone: 'UTC', activeTimersVisible: true })
+})
+
+it('turns the live view off for the whole team from the settings', async () => {
+  let current = { ...team }
+  let sent: unknown = null
+  mockApi({ 'GET /api/teams': () => json([current]),
+    'PATCH /api/teams/team': (_url, options) => { sent = JSON.parse(String(options.body)); current = { ...current, ...(sent as object) }; return json(current) } })
+  panel()
+  const modal = await openSettings()
+  const toggle = modal.getByLabelText('Pokaż właścicielowi, kto teraz pracuje')
+  expect(toggle).toBeChecked()
+  await userEvent.click(toggle)
+  await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
+  await screen.findByText(/Zapisano ustawienia zespołu/)
+  expect(sent).toEqual({ name: team.name, timezone: team.timezone, activeTimersVisible: false })
 })
 
 it('archives a team only after showing the irreversible effects', async () => {

@@ -18,6 +18,7 @@ export function TeamSettingsModal({ userId, team, onClose, onSaved, onArchived, 
   const summary = useTeamSummary(userId, team.id, view === 'delete')
   const [name, setName] = useState(team.name)
   const [timezone, setTimezone] = useState(team.timezone)
+  const [liveView, setLiveView] = useState(team.activeTimersVisible)
   const [confirmation, setConfirmation] = useState('')
   const [validation, setValidation] = useState('')
   const busy = update.isPending || archive.isPending || remove.isPending
@@ -28,7 +29,7 @@ export function TeamSettingsModal({ userId, team, onClose, onSaved, onArchived, 
     event.preventDefault()
     if (!name.trim()) { setValidation('Wpisz nazwę zespołu.'); return }
     setValidation('')
-    update.mutate({ teamId: team.id, name: name.trim(), timezone }, { onSuccess: onSaved })
+    update.mutate({ teamId: team.id, name: name.trim(), timezone, activeTimersVisible: liveView }, { onSuccess: onSaved })
   }
 
   const title = view === 'archive' ? 'Zarchiwizuj zespół' : view === 'delete' ? 'Usuń zespół' : 'Ustawienia zespołu'
@@ -39,6 +40,8 @@ export function TeamSettingsModal({ userId, team, onClose, onSaved, onArchived, 
           <div className="field-group"><label htmlFor="settings-name">Nazwa zespołu</label><input className="text-input" id="settings-name" value={name} maxLength={255} required onChange={event => { setName(event.target.value); setValidation('') }} /></div>
           <div className="field-group"><label htmlFor="settings-timezone">Strefa czasowa</label><select className="text-input" id="settings-timezone" value={timezone} onChange={event => setTimezone(event.target.value)}>{timezones.map(zone => <option key={zone}>{zone}</option>)}</select>
             <p className="field-hint">Nowa strefa dotyczy nowych wpisów i bieżących dat. Zapisane daty pracy się nie zmieniają.</p></div>
+          <div className="field-group"><label><input type="checkbox" checked={liveView} onChange={event => setLiveView(event.target.checked)} /> Pokaż właścicielowi, kto teraz pracuje</label>
+            <p className="field-hint">Podgląd aktywnych timerów w raporcie zespołu: osoba, projekt i czas. Wyłączenie ukrywa go także przed właścicielem.</p></div>
         </fieldset>
         {archived && <p className="field-hint">Zespół jest zarchiwizowany, więc jego ustawień nie można zmieniać.</p>}
         {(validation || update.isError) && <p className="form-error" role="alert">{validation || update.error?.message}</p>}

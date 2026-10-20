@@ -8,8 +8,13 @@ import java.time.ZoneId;
 
 public record CreateTeamRequest(
         @NotBlank @Size(max = 255) String name,
-        @NotBlank @Size(max = 255) String timezone
+        @NotBlank @Size(max = 255) String timezone,
+        Boolean activeTimersVisible
 ) {
+    public CreateTeamRequest(String name, String timezone) {
+        this(name, timezone, null);
+    }
+
     public CreateTeamRequest {
         name = name == null ? null : name.strip();
         timezone = timezone == null ? null : timezone.strip();

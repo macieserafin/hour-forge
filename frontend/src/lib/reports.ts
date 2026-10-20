@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, getReportBreakdown, getReportEntries, getReportMembers, getReportProjects, getReportSummary,
-  type ReportFilters, type ReportResult, type ReportSort } from './api'
+import { ApiError, getReportActive, getReportBreakdown, getReportEntries, getReportMembers, getReportProjects, getReportSummary,
+  type ReportFilters, type ReportGroup, type ReportResult, type ReportSort } from './api'
 import { dashboardKey } from './dashboard'
 import { teamsKey, useAuthError } from './teams'
 
@@ -36,10 +36,19 @@ export function useReportSummary(userId: string, teamId: string, filters: Report
   return query
 }
 
-export function useReportBreakdown(userId: string, teamId: string, filters: ReportFilters, groupBy: 'MEMBER' | 'PROJECT', page: number) {
+export function useReportBreakdown(userId: string, teamId: string, filters: ReportFilters, groupBy: ReportGroup, page: number) {
   const query = useQuery({ queryKey: [...reportsKey(userId, teamId), 'breakdown', filters, groupBy, page],
     queryFn: ({ signal }) => getReportBreakdown(teamId, filters, groupBy, page, signal), retry,
     refetchInterval: 60_000, refetchOnWindowFocus: 'always' })
+  useReportError(userId, query.error)
+  return query
+}
+
+/** The live view polls faster than the reports: a running timer is what the owner wants to see change. */
+export function useReportActive(userId: string, teamId: string, page: number, enabled: boolean) {
+  const query = useQuery({ queryKey: [...reportsKey(userId, teamId), 'active', page], enabled,
+    queryFn: ({ signal }) => getReportActive(teamId, page, signal), retry,
+    refetchInterval: 15_000, refetchOnWindowFocus: 'always' })
   useReportError(userId, query.error)
   return query
 }

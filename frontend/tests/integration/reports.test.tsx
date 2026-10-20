@@ -24,7 +24,7 @@ it('requests undated totals, breakdowns and entries without a date range', async
   await userEvent.click(screen.getByRole('button', { name: 'Filtruj raport' }))
   await waitFor(() => {
     const urls = fetcher.mock.calls.map(([path]) => new URL(String(path), window.location.origin)).filter(url => url.searchParams.get('undated') === 'true')
-    expect(urls).toHaveLength(4)
+    expect(urls).toHaveLength(6)
     for (const url of urls) {
       expect(url.searchParams.has('from')).toBe(false)
       expect(url.searchParams.has('to')).toBe(false)
@@ -75,7 +75,7 @@ it('applies the same filters to totals, both breakdowns and entries only after s
   await userEvent.click(screen.getByRole('button', { name: 'Filtruj raport' }))
   await waitFor(() => {
     const calls = fetcher.mock.calls.map(([path]) => new URL(String(path), window.location.origin)).filter(url => url.searchParams.has('userIds'))
-    expect(calls).toHaveLength(4)
+    expect(calls).toHaveLength(6)
     for (const url of calls) {
       expect(Object.fromEntries(url.searchParams)).toMatchObject({ from: '2026-01-01', to: '2026-01-31', userIds: reportMember.userId, projectIds: reportProject.projectId, entryType: 'MANUAL' })
     }

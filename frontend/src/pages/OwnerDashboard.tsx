@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, LoaderCircle, RefreshCw } from 'lucide-react'
-import { ApiError, type ReportBucket, type ReportFilters, type ReportPage, type ReportSort, type Team } from '../lib/api'
-import { MAX_REPORT_DAYS, clearedSearch, filtersFromSearch, filtersToSearch, reportRangeDays, reportRanges, useReportBreakdown, useReportEntries, useReportMembers, useReportProjects, useReportSummary } from '../lib/reports'
+import { ApiError, type ReportBucket, type ReportFilters, type ReportGroup, type ReportPage, type ReportSort, type Team } from '../lib/api'
+import { MAX_REPORT_DAYS, clearedSearch, filtersFromSearch, filtersToSearch, reportRangeDays, reportRanges, useReportActive, useReportBreakdown, useReportEntries, useReportMembers, useReportProjects, useReportSummary } from '../lib/reports'
 import { formatDuration } from '../lib/time'
 
 const dateLabel = (date: string | null) => date === null ? 'Bez daty' : new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
@@ -32,22 +32,68 @@ function Pagination({ data, busy, label, onPage }: { data: ReportPage<unknown>; 
   </nav>
 }
 
-function BreakdownTable({ data, group, busy, onPage }: { data: ReportPage<ReportBucket>; group: 'MEMBER' | 'PROJECT'; busy: boolean; onPage: (page: number) => void }) {
-  const people = group === 'MEMBER'
+const breakdowns: Record<ReportGroup, { title: string; table: string; pages: string; columns: string[] }> = {
+  MEMBER: { title: 'Czas według osób', table: 'Tabela czasu osób', pages: 'Strony czasu osób', columns: ['Osoba'] },
+  PROJECT: { title: 'Czas według projektów', table: 'Tabela czasu projektów', pages: 'Strony czasu projektów', columns: ['Projekt'] },
+  DAY: { title: 'Czas według dni', table: 'Tabela czasu według dni', pages: 'Strony czasu według dni', columns: ['Dzień'] },
+  MEMBER_PROJECT: { title: 'Czas według osób i projektów', table: 'Tabela czasu osób i projektów', pages: 'Strony czasu osób i projektów', columns: ['Osoba', 'Projekt'] },
+}
+
+const archivedNote = (bucket: ReportBucket) => bucket.projectArchivedAt && <span className="report-meta">Projekt archiwalny</span>
+
+function bucketCells(group: ReportGroup, bucket: ReportBucket): ReactNode[] {
+  switch (group) {
+    case 'MEMBER': return [bucket.displayName]
+    case 'PROJECT': return [<>{bucket.projectName}{archivedNote(bucket)}</>]
+    case 'DAY': return [bucket.workDate ? <time dateTime={bucket.workDate}>{dateLabel(bucket.workDate)}</time> : 'Bez daty']
+    case 'MEMBER_PROJECT': return [bucket.displayName, <>{bucket.projectName}{archivedNote(bucket)}</>]
+  }
+}
+
+function BreakdownTable({ data, group, busy, onPage }: { data: ReportPage<ReportBucket>; group: ReportGroup; busy: boolean; onPage: (page: number) => void }) {
+  const labels = breakdowns[group]
   return <>
     {data.content.length === 0 ? <p className="report-empty">Brak zapisanego czasu dla wybranych filtrów.</p>
-      : <div className="team-table-wrap" tabIndex={0} role="region" aria-label={people ? 'Tabela czasu osób' : 'Tabela czasu projektów'}>
+      : <div className="team-table-wrap" tabIndex={0} role="region" aria-label={labels.table}>
         <table className="team-table report-breakdown-table">
-          <caption className="sr-only">{people ? 'Czas według osób' : 'Czas według projektów'}</caption>
-          <thead><tr><th scope="col">{people ? 'Osoba' : 'Projekt'}</th><th scope="col">Czas</th><th scope="col">Wpisy</th></tr></thead>
-          <tbody>{data.content.map(bucket => <tr key={(people ? bucket.userId : bucket.projectId)!}>
-            <td>{people ? bucket.displayName : bucket.projectName}{!people && bucket.projectArchivedAt && <span className="report-meta">Projekt archiwalny</span>}</td>
+          <caption className="sr-only">{labels.title}</caption>
+          <thead><tr>{labels.columns.map(column => <th key={column} scope="col">{column}</th>)}<th scope="col">Czas</th><th scope="col">Wpisy</th></tr></thead>
+          <tbody>{data.content.map(bucket => <tr key={`${bucket.workDate ?? 'none'}|${bucket.userId ?? ''}|${bucket.projectId ?? ''}`}>
+            {bucketCells(group, bucket).map((cell, index) => <td key={index}>{cell}</td>)}
             <td className="history-duration">{formatDuration(bucket.durationSeconds)}</td><td>{bucket.entryCount}</td>
           </tr>)}</tbody>
         </table>
       </div>}
-    <Pagination data={data} busy={busy} label={people ? 'Strony czasu osób' : 'Strony czasu projektów'} onPage={onPage} />
+    <Pagination data={data} busy={busy} label={labels.pages} onPage={onPage} />
   </>
+}
+
+const startedAt = (value: string | null) => value ? new Date(value).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : ''
+
+function ActivePanel({ userId, team }: { userId: string; team: Team }) {
+  const [page, setPage] = useState(0)
+  const visible = team.activeTimersVisible
+  const active = useReportActive(userId, team.id, page, visible)
+  return <section className="report-section report-active" aria-label="Kto teraz pracuje">
+    <h3>Kto teraz pracuje</h3>
+    {!visible ? <p className="report-empty">Podgląd aktywnych timerów jest wyłączony w ustawieniach zespołu.</p>
+      : <ReportState query={active}>{data => <>
+        {data.data.content.length === 0 ? <p className="report-empty">Nikt nie ma teraz uruchomionego timera.</p>
+          : <div className="team-table-wrap" tabIndex={0} role="region" aria-label="Tabela aktywnych timerów">
+            <table className="team-table report-active-table"><caption className="sr-only">Uruchomione timery członków zespołu</caption>
+              <thead><tr><th scope="col">Osoba</th><th scope="col">Projekt</th><th scope="col">Stan</th><th scope="col">Od</th><th scope="col">Czas pracy</th></tr></thead>
+              <tbody>{data.data.content.map(({ entry, elapsedSeconds }) => <tr key={entry.id}>
+                <td data-label="Osoba">{entry.displayName}</td>
+                <td data-label="Projekt">{entry.projectName}{entry.projectArchivedAt && <span className="report-meta">Projekt archiwalny</span>}</td>
+                <td data-label="Stan">{entry.pausedAt ? 'Wstrzymany' : 'Pracuje'}</td>
+                <td data-label="Od">{startedAt(entry.startedAt)}</td>
+                <td data-label="Czas pracy" className="history-duration">{formatDuration(elapsedSeconds)}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>}
+        <Pagination data={data.data} busy={active.isFetching} label="Strony aktywnych timerów" onPage={setPage} />
+      </>}</ReportState>}
+  </section>
 }
 
 export function OwnerDashboard({ userId, team }: { userId: string; team: Team }) {
@@ -59,21 +105,25 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
   const [memberPage, setMemberPage] = useState(0)
   const [projectPage, setProjectPage] = useState(0)
   const [entryPage, setEntryPage] = useState(0)
+  const [dayPage, setDayPage] = useState(0)
+  const [mixedPage, setMixedPage] = useState(0)
   const [sort, setSort] = useState<ReportSort>('WORK_DATE:DESC')
   const summary = useReportSummary(userId, team.id, filters)
   const people = useReportBreakdown(userId, team.id, filters, 'MEMBER', memberPage)
   const projects = useReportBreakdown(userId, team.id, filters, 'PROJECT', projectPage)
+  const days = useReportBreakdown(userId, team.id, filters, 'DAY', dayPage)
+  const mixed = useReportBreakdown(userId, team.id, filters, 'MEMBER_PROJECT', mixedPage)
   const entries = useReportEntries(userId, team.id, filters, sort, entryPage)
   const memberOptions = useReportMembers(userId, team.id)
   const projectOptions = useReportProjects(userId, team.id)
-  const queries = [summary, people, projects, entries, memberOptions, projectOptions]
+  const queries = [summary, people, projects, days, mixed, entries, memberOptions, projectOptions]
   const accessError = queries.map(query => query.error).find(error => error instanceof ApiError && [401, 403, 404].includes(error.status))
   const busy = queries.some(query => query.isFetching)
   // A failed background refresh must never leave previously authorized data visible.
   const members = accessError || memberOptions.isError ? [] : memberOptions.data?.pages.flatMap(page => page.data.content) ?? []
   const options = accessError || projectOptions.isError ? [] : projectOptions.data?.pages.flatMap(page => page.data.content) ?? []
 
-  function resetPages() { setMemberPage(0); setProjectPage(0); setEntryPage(0) }
+  function resetPages() { setMemberPage(0); setProjectPage(0); setEntryPage(0); setDayPage(0); setMixedPage(0) }
   const filtersKey = JSON.stringify(filters)
   useEffect(() => { setDraft(filters); resetPages() }, [filtersKey]) // eslint-disable-line react-hooks/exhaustive-deps
   function validate(next: ReportFilters) {
@@ -109,6 +159,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
         <RefreshCw size={15} className={busy ? 'spin' : ''} />Odśwież raport
       </button>
     </header>
+    <ActivePanel userId={userId} team={team} />
     <div className="report-ranges" role="group" aria-label="Szybkie zakresy dat">
       <button type="button" className="button-secondary" onClick={() => applyRange(ranges.today)}>Dzisiaj</button>
       <button type="button" className="button-secondary" onClick={() => applyRange(ranges.week)}>Ten tydzień</button>
@@ -151,6 +202,8 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
       <div className="report-breakdowns">
         <section className="report-section" aria-label="Czas według osób"><h3>Czas według osób</h3><ReportState query={people}>{data => <BreakdownTable data={data.data} group="MEMBER" busy={people.isFetching} onPage={setMemberPage} />}</ReportState></section>
         <section className="report-section" aria-label="Czas według projektów"><h3>Czas według projektów</h3><ReportState query={projects}>{data => <BreakdownTable data={data.data} group="PROJECT" busy={projects.isFetching} onPage={setProjectPage} />}</ReportState></section>
+        <section className="report-section" aria-label="Czas według dni"><h3>Czas według dni</h3><ReportState query={days}>{data => <BreakdownTable data={data.data} group="DAY" busy={days.isFetching} onPage={setDayPage} />}</ReportState></section>
+        <section className="report-section" aria-label="Czas według osób i projektów"><h3>Osoby i projekty</h3><ReportState query={mixed}>{data => <BreakdownTable data={data.data} group="MEMBER_PROJECT" busy={mixed.isFetching} onPage={setMixedPage} />}</ReportState></section>
       </div>
       <section className="report-section report-history" aria-label="Wpisy zespołu">
         <div className="teams-toolbar"><div><h3>Wpisy zespołu</h3><p>Zakończone wpisy wszystkich osób, wraz z opisami pracy.</p></div>

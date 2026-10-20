@@ -80,6 +80,21 @@ class TeamManagementIT extends ApiIntegrationTestSupport {
         assertThat(teams.findById(team.getId()).orElseThrow().getName()).isEqualTo("Renamed");
     }
 
+    @Test
+    void ownerCanHideTheLiveViewAndClientsThatOmitTheSettingDoNotResetIt() throws Exception {
+        mvc.perform(as(owner, patch(base)).content("{\"name\":\"Team\",\"timezone\":\"UTC\",\"activeTimersVisible\":false}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.activeTimersVisible").value(false));
+        assertThat(teams.findById(team.getId()).orElseThrow().isActiveTimersVisible()).isFalse();
+        mvc.perform(as(owner, patch(base)).content("{\"name\":\"Renamed\",\"timezone\":\"UTC\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.activeTimersVisible").value(false));
+        mvc.perform(as(owner, get("/api/teams"))).andExpect(jsonPath("$[0].activeTimersVisible").value(false));
+        mvc.perform(as(owner, patch(base)).content("{\"name\":\"Renamed\",\"timezone\":\"UTC\",\"activeTimersVisible\":true}"))
+                .andExpect(jsonPath("$.activeTimersVisible").value(true));
+        mvc.perform(as(member, patch(base)).content("{\"name\":\"Hacked\",\"timezone\":\"UTC\",\"activeTimersVisible\":false}"))
+                .andExpect(status().isForbidden());
+        assertThat(teams.findById(team.getId()).orElseThrow().isActiveTimersVisible()).isTrue();
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"update", "transfer", "archive", "summary", "delete"})
     void onlyTheActiveOwnerCanManageTheTeam(String operation) throws Exception {

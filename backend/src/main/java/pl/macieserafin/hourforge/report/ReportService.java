@@ -60,7 +60,11 @@ public class ReportService {
     }
 
     public ReportResponse.Active active(UUID actorId, UUID teamId, ReportFilter filter, int page, int size) {
-        var context = context(owner(actorId, teamId), filter, false);
+        var team = owner(actorId, teamId);
+        if (!team.isActiveTimersVisible()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "The live view is turned off in the team settings");
+        }
+        var context = context(team, filter, false);
         pagination(page, size);
         Instant now = clock.instant();
         var rows = reports.entries(teamId, context.filter(), true, ReportEntrySort.CREATED_AT, true, page, size)
