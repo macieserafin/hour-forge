@@ -780,3 +780,31 @@ export const startJiraAuthorization = (input: { teamId: string; intent: JiraInte
 export const selectJiraSite = (input: { teamId: string; cloudId: string }) => jiraRequest<null>(jiraPath('site'), 'POST', input)
 export const disconnectJiraAccount = (teamId: string) => jiraRequest<null>(jiraPath('connection', teamId), 'DELETE')
 export const disconnectJiraSite = (teamId: string) => jiraRequest<null>(jiraPath('site', teamId), 'DELETE')
+
+export interface JiraIssue {
+  id: string
+  key: string
+  summary: string
+  status: string
+  issueType: string
+  projectKey: string
+}
+
+export interface JiraIssuePage {
+  issues: JiraIssue[]
+  nextPageToken: string | null
+}
+
+export interface JiraIssueFilters {
+  q: string
+  assignee: 'ME' | 'ANYONE'
+  sprint: 'ANY' | 'ACTIVE' | 'CLOSED'
+  includeDone: boolean
+}
+
+export function getJiraIssues(teamId: string, filters: JiraIssueFilters, pageToken: string | null, signal?: AbortSignal) {
+  const params = new URLSearchParams({ teamId, assignee: filters.assignee, sprint: filters.sprint, includeDone: String(filters.includeDone) })
+  if (filters.q.trim()) params.set('q', filters.q.trim())
+  if (pageToken) params.set('pageToken', pageToken)
+  return jiraRequest<JiraIssuePage>(`/api/integrations/jira/issues?${params}`, 'GET', undefined, signal)
+}

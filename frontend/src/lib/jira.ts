@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, disconnectJiraAccount, disconnectJiraSite, getJiraSites, getJiraStatus, selectJiraSite, startJiraAuthorization, type JiraIntent } from './api'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ApiError, disconnectJiraAccount, disconnectJiraSite, getJiraIssues, getJiraSites, getJiraStatus, selectJiraSite, startJiraAuthorization, type JiraIntent, type JiraIssueFilters } from './api'
 import { useAuthError } from './teams'
 
 export const jiraKey = (userId: string, teamId: string) => ['jira', userId, teamId] as const
@@ -35,6 +35,19 @@ export function useJiraStatus(userId: string, teamId: string) {
 export function useJiraSites(userId: string, teamId: string, enabled: boolean) {
   const handleError = useAuthError()
   const query = useQuery({ queryKey: [...jiraKey(userId, teamId), 'sites'], queryFn: ({ signal }) => getJiraSites(teamId, signal), enabled, retry: false, staleTime: 0 })
+  useEffect(() => { if (query.error) handleError(query.error) }, [query.error, handleError])
+  return query
+}
+
+export function useJiraIssues(userId: string, teamId: string, filters: JiraIssueFilters, enabled: boolean) {
+  const handleError = useAuthError()
+  const query = useInfiniteQuery({
+    queryKey: [...jiraKey(userId, teamId), 'issues', filters],
+    queryFn: ({ pageParam, signal }) => getJiraIssues(teamId, filters, pageParam, signal),
+    initialPageParam: null as string | null,
+    getNextPageParam: page => page.nextPageToken,
+    enabled, retry: false, staleTime: 15_000,
+  })
   useEffect(() => { if (query.error) handleError(query.error) }, [query.error, handleError])
   return query
 }
