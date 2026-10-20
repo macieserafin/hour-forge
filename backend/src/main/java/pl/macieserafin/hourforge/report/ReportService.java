@@ -15,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.team.Team;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRole;
+import pl.macieserafin.hourforge.timeentry.DescriptionSearch;
 import pl.macieserafin.hourforge.timeentry.TimeEntry;
 import pl.macieserafin.hourforge.user.UserRepository;
 
@@ -109,6 +110,9 @@ public class ReportService {
         if (from != null && ChronoUnit.DAYS.between(from, to) + 1 > MAX_REPORT_DAYS) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A report can cover at most " + MAX_REPORT_DAYS + " days");
         }
+        if (input.q() != null && input.q().length() > DescriptionSearch.MAX_LENGTH) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Search text can have at most " + DescriptionSearch.MAX_LENGTH + " characters");
+        }
         if (!reports.containsMembers(team.getId(), input.userIds()) || !reports.containsProjects(team.getId(), input.projectIds())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
@@ -118,7 +122,7 @@ public class ReportService {
             to = from.plusDays(6);
         }
         var filter = new ReportFilter(from, to, input.userIds().stream().distinct().sorted().toList(),
-                input.projectIds().stream().distinct().sorted().toList(), input.entryType(), input.undated());
+                input.projectIds().stream().distinct().sorted().toList(), input.entryType(), input.undated(), input.q());
         return new ReportResponse.Context(team.getId(), team.getName(), team.getTimezone(), filter);
     }
 

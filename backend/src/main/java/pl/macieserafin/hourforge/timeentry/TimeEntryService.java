@@ -29,7 +29,6 @@ import java.util.UUID;
 public class TimeEntryService {
     private static final int MAX_MANUAL_DURATION_SECONDS = 24 * 60 * 60;
     private static final int WORK_DATE_YEARS_BACK = 2;
-    private static final int MAX_SEARCH_LENGTH = 200;
 
     private final Clock clock;
     private final TimeEntryRepository entries;
@@ -68,7 +67,7 @@ public class TimeEntryService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
         var search = text == null ? "" : text.strip();
-        if (search.length() > MAX_SEARCH_LENGTH) {
+        if (search.length() > DescriptionSearch.MAX_LENGTH) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Search text is too long");
         }
         if (page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE
@@ -88,10 +87,7 @@ public class TimeEntryService {
             predicates.add(cb.or(cb.equal(root.get("entryType"), EntryType.MANUAL),
                     cb.and(cb.equal(root.get("entryType"), EntryType.TIMER), cb.isNotNull(root.get("endedAt")))));
             if (projectId != null) predicates.add(cb.equal(root.get("project").get("id"), projectId));
-            if (!search.isEmpty()) {
-                var escaped = search.toLowerCase().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
-                predicates.add(cb.like(cb.lower(root.get("description")), "%" + escaped + "%", '\\'));
-            }
+            if (!search.isEmpty()) predicates.add(DescriptionSearch.contains(cb, root.get("description"), search));
             if (undated) predicates.add(cb.isNull(root.get("workDate")));
             if (from != null) predicates.add(cb.greaterThanOrEqualTo(root.get("workDate"), from));
             if (to != null) predicates.add(cb.lessThanOrEqualTo(root.get("workDate"), to));

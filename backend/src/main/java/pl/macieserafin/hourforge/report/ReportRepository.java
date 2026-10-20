@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Repository;
 import pl.macieserafin.hourforge.project.Project;
 import pl.macieserafin.hourforge.team.TeamMember;
+import pl.macieserafin.hourforge.timeentry.DescriptionSearch;
 import pl.macieserafin.hourforge.timeentry.EntryType;
 import pl.macieserafin.hourforge.timeentry.TimeEntry;
 
@@ -34,6 +35,7 @@ public class ReportRepository {
         if (!filter.userIds().isEmpty()) predicates.add(root.get("user").get("id").in(filter.userIds()));
         if (!filter.projectIds().isEmpty()) predicates.add(root.get("project").get("id").in(filter.projectIds()));
         if (filter.entryType() != null) predicates.add(cb.equal(root.get("entryType"), filter.entryType()));
+        if (filter.q() != null) predicates.add(DescriptionSearch.contains(cb, root.get("description"), filter.q()));
         return cb.and(predicates.toArray(Predicate[]::new));
     }
 

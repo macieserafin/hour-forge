@@ -1,7 +1,8 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, LoaderCircle, RefreshCw } from 'lucide-react'
 import { ApiError, type ReportBucket, type ReportFilters, type ReportPage, type ReportSort, type Team } from '../lib/api'
-import { MAX_REPORT_DAYS, reportRangeDays, reportWeek, useReportBreakdown, useReportEntries, useReportMembers, useReportProjects, useReportSummary } from '../lib/reports'
+import { MAX_REPORT_DAYS, clearedSearch, filtersFromSearch, filtersToSearch, reportRangeDays, reportRanges, useReportBreakdown, useReportEntries, useReportMembers, useReportProjects, useReportSummary } from '../lib/reports'
 import { formatDuration } from '../lib/time'
 
 const dateLabel = (date: string | null) => date === null ? 'Bez daty' : new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
@@ -50,7 +51,9 @@ function BreakdownTable({ data, group, busy, onPage }: { data: ReportPage<Report
 }
 
 export function OwnerDashboard({ userId, team }: { userId: string; team: Team }) {
-  const [filters, setFilters] = useState(() => reportWeek(team.timezone))
+  const [search, setSearch] = useSearchParams()
+  // The address is the source of truth, so a report can be bookmarked, shared and reached with the back button.
+  const filters = useMemo(() => filtersFromSearch(search, team.timezone), [search, team.timezone])
   const [draft, setDraft] = useState(filters)
   const [validation, setValidation] = useState('')
   const [memberPage, setMemberPage] = useState(0)
@@ -71,24 +74,33 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
   const options = accessError || projectOptions.isError ? [] : projectOptions.data?.pages.flatMap(page => page.data.content) ?? []
 
   function resetPages() { setMemberPage(0); setProjectPage(0); setEntryPage(0) }
+  const filtersKey = JSON.stringify(filters)
+  useEffect(() => { setDraft(filters); resetPages() }, [filtersKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  function validate(next: ReportFilters) {
+    if (!next.undated && (!next.from || !next.to || next.from > next.to)) {
+      return 'Podaj obie daty. Data „od” nie może być późniejsza niż data „do”.'
+    }
+    if (!next.undated && reportRangeDays(next.from, next.to) > MAX_REPORT_DAYS) return `Raport może obejmować najwyżej ${MAX_REPORT_DAYS} dni.`
+    if ((next.q ?? '').length > 200) return 'Szukany tekst może mieć najwyżej 200 znaków.'
+    return ''
+  }
+  function submitFilters(next: ReportFilters) {
+    const message = validate(next)
+    setValidation(message)
+    if (message) return
+    resetPages()
+    setSearch(filtersToSearch(next, search), { replace: true })
+  }
+  function applyRange(range: { from: string; to: string }) { submitFilters({ ...draft, undated: false, ...range }) }
   function apply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!draft.undated && (!draft.from || !draft.to || draft.from > draft.to)) {
-      setValidation('Podaj obie daty. Data „od” nie może być późniejsza niż data „do”.')
-      return
-    }
-    if (!draft.undated && reportRangeDays(draft.from, draft.to) > MAX_REPORT_DAYS) {
-      setValidation(`Raport może obejmować najwyżej ${MAX_REPORT_DAYS} dni.`)
-      return
-    }
-    setValidation('')
-    setFilters({ ...draft })
-    resetPages()
+    submitFilters(draft)
   }
   function clear() {
-    const week = reportWeek(team.timezone)
-    setFilters(week); setDraft(week); setValidation(''); resetPages()
+    setValidation('')
+    setSearch(clearedSearch(search), { replace: true })
   }
+  const ranges = reportRanges(team.timezone)
 
   return <section className="owner-dashboard" aria-label="Raport zespołu">
     <header className="teams-toolbar">
@@ -97,8 +109,14 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
         <RefreshCw size={15} className={busy ? 'spin' : ''} />Odśwież raport
       </button>
     </header>
+    <div className="report-ranges" role="group" aria-label="Szybkie zakresy dat">
+      <button type="button" className="button-secondary" onClick={() => applyRange(ranges.today)}>Dzisiaj</button>
+      <button type="button" className="button-secondary" onClick={() => applyRange(ranges.week)}>Ten tydzień</button>
+      <button type="button" className="button-secondary" onClick={() => applyRange(ranges.lastWeek)}>Poprzedni tydzień</button>
+      <button type="button" className="button-secondary" onClick={() => applyRange(ranges.month)}>Ten miesiąc</button>
+    </div>
     <form className="report-filters" aria-label="Filtry raportu zespołu" onSubmit={apply} onInput={() => setValidation('')}>
-      <label><input type="checkbox" checked={!!draft.undated} onChange={event => setDraft({ ...draft, undated: event.target.checked, from: event.target.checked ? '' : reportWeek(team.timezone).from, to: event.target.checked ? '' : reportWeek(team.timezone).to })} /> Bez daty</label>
+      <label><input type="checkbox" checked={!!draft.undated} onChange={event => setDraft({ ...draft, undated: event.target.checked, from: event.target.checked ? '' : ranges.week.from, to: event.target.checked ? '' : ranges.week.to })} /> Bez daty</label>
       <div className="field-group"><label htmlFor="report-from">Data od</label><input className="text-input" id="report-from" type="date" required={!draft.undated} disabled={draft.undated} min="0001-01-01" max="9999-12-31" value={draft.from} onChange={event => setDraft({ ...draft, from: event.target.value })} /></div>
       <div className="field-group"><label htmlFor="report-to">Data do</label><input className="text-input" id="report-to" type="date" required={!draft.undated} disabled={draft.undated} min="0001-01-01" max="9999-12-31" value={draft.to} onChange={event => setDraft({ ...draft, to: event.target.value })} /></div>
       <div className="field-group"><label htmlFor="report-person">Osoba</label>
@@ -116,6 +134,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
       <div className="field-group"><label htmlFor="report-type">Rodzaj wpisu</label><select className="text-input" id="report-type" value={draft.entryType} onChange={event => setDraft({ ...draft, entryType: event.target.value as ReportFilters['entryType'] })}>
         <option value="">Wszystkie rodzaje</option><option value="TIMER">Timer</option><option value="MANUAL">Wpis ręczny</option>
       </select></div>
+      <div className="field-group"><label htmlFor="report-search">Szukaj w opisach</label><input className="text-input" id="report-search" type="search" maxLength={200} value={draft.q ?? ''} onChange={event => setDraft({ ...draft, q: event.target.value })} /></div>
       <div className="history-filter-actions"><button className="button-primary" type="submit">Filtruj raport</button><button className="button-secondary" type="button" onClick={clear}>Wyczyść filtry</button></div>
     </form>
     {validation && <p className="form-error" role="alert">{validation}</p>}

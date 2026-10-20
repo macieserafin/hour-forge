@@ -96,6 +96,34 @@ class ReportIT extends ApiIntegrationTestSupport {
         }
     }
 
+    @Test
+    void descriptionSearchAppliesToTotalsGroupsAndEntriesIgnoringCaseAndTakingWildcardsLiterally() throws Exception {
+        dataset();
+        entries.saveAndFlush(new TimeEntry(owner, team, project, EntryType.MANUAL, LocalDate.parse("2026-10-21"),
+                null, null, 45, "Rate 100% done_ok"));
+        mvc.perform(request("summary").param("q", "TIMER")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.totals.durationSeconds").value(240)).andExpect(jsonPath("$.totals.entryCount").value(1))
+                .andExpect(jsonPath("$.context.filter.q").value("TIMER"));
+        mvc.perform(request("summary").param("q", "  detailed ")).andExpect(jsonPath("$.totals.durationSeconds").value(210));
+        mvc.perform(request("summary").param("q", "%")).andExpect(jsonPath("$.totals.durationSeconds").value(45));
+        mvc.perform(request("summary").param("q", "_ok")).andExpect(jsonPath("$.totals.durationSeconds").value(45));
+        mvc.perform(request("summary").param("q", "d_n")).andExpect(jsonPath("$.totals.entryCount").value(0));
+        mvc.perform(request("summary").param("q", "   ")).andExpect(jsonPath("$.totals.durationSeconds").value(495));
+        mvc.perform(request("breakdown").param("q", "timer").param("groupBy", "MEMBER"))
+                .andExpect(jsonPath("$.data.content", hasSize(1))).andExpect(jsonPath("$.data.content[0].displayName").value("Worker"));
+        mvc.perform(request("entries").param("q", "work").param("sort", "DURATION").param("direction", "ASC"))
+                .andExpect(jsonPath("$.data.content[*].description", everyItem(containsStringIgnoringCase("work"))));
+        mvc.perform(request("entries").param("q", "Foreign")).andExpect(jsonPath("$.data.content", hasSize(0)));
+    }
+
+    @Test
+    void descriptionSearchIsLimitedTo200Characters() throws Exception {
+        for (String endpoint : List.of("summary", "breakdown", "entries")) {
+            mvc.perform(request(endpoint).param("q", "x".repeat(200))).andExpect(status().isOk());
+            mvc.perform(request(endpoint).param("q", "x".repeat(201))).andExpect(status().isBadRequest());
+        }
+    }
+
     private MockHttpServletRequestBuilder request(String endpoint) {
         var request = get("/api/teams/" + team.getId() + "/reports/" + endpoint).with(user(principal(owner)));
         return request;

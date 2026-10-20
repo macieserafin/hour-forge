@@ -516,13 +516,14 @@ export interface ReportFilters {
   userId: string
   projectId: string
   entryType: '' | 'TIMER' | 'MANUAL'
+  q?: string
 }
 
 export interface ReportContext {
   teamId: string
   teamName: string
   timezone: string
-  filter: { from: string | null; to: string | null; undated?: boolean; userIds: string[]; projectIds: string[]; entryType: 'TIMER' | 'MANUAL' | null } | null
+  filter: { from: string | null; to: string | null; undated?: boolean; userIds: string[]; projectIds: string[]; entryType: 'TIMER' | 'MANUAL' | null; q?: string | null } | null
 }
 
 export interface ReportPage<T> {
@@ -638,6 +639,7 @@ function reportParams(filters: ReportFilters, page?: number) {
   if (filters.userId) params.set('userIds', filters.userId)
   if (filters.projectId) params.set('projectIds', filters.projectId)
   if (filters.entryType) params.set('entryType', filters.entryType)
+  if (filters.q?.trim()) params.set('q', filters.q.trim())
   if (page !== undefined) { params.set('page', String(page)); params.set('size', '20') }
   return params
 }
