@@ -3,6 +3,7 @@ package pl.macieserafin.hourforge.account;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -11,6 +12,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.logout.CookieClearingLogoutHandler;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,10 +29,12 @@ import java.util.List;
 public class AccountController {
     private final AccountService account;
     private final EmailVerificationService verification;
+    private final AccountDataService data;
 
-    public AccountController(AccountService account, EmailVerificationService verification) {
+    public AccountController(AccountService account, EmailVerificationService verification, AccountDataService data) {
         this.account = account;
         this.verification = verification;
+        this.data = data;
     }
 
     @PatchMapping("/profile")
@@ -59,6 +63,24 @@ public class AccountController {
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);
         new HttpSessionSecurityContextRepository().saveContext(context, httpRequest, response);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/export")
+    public ResponseEntity<AccountExport> export(@AuthenticationPrincipal AppUserPrincipal principal) {
+        var export = data.export(principal.getUserId());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"hourforge-export-" + export.exportedAt().toString().substring(0, 10) + ".json\"")
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(export);
+    }
+
+    @PostMapping("/delete")
+    public ResponseEntity<Void> delete(@AuthenticationPrincipal AppUserPrincipal principal, @RequestBody DeleteAccountRequest request,
+                                       Authentication authentication, HttpServletRequest httpRequest, HttpServletResponse response) {
+        data.deleteAccount(principal.getUserId(), request.currentPassword());
+        new SecurityContextLogoutHandler().logout(httpRequest, response, authentication);
+        new CookieClearingLogoutHandler("JSESSIONID").logout(httpRequest, response, authentication);
         return ResponseEntity.noContent().build();
     }
 

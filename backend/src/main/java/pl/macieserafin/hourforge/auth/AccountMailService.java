@@ -47,6 +47,13 @@ public class AccountMailService {
                         + frontendUrl + "/confirm-email-change/" + token + "\n\nJeśli to nie Ty o to prosiłeś, zignoruj tę wiadomość.\n");
     }
 
+    public void sendAccountDeleted(String oldEmail) {
+        sender.send(oldEmail, "Konto w HourForge zostało usunięte",
+                "Twoje konto w HourForge zostało usunięte. Imię, adres e-mail i hasło zostały usunięte; zapisane godziny pracy "
+                        + "pozostają w raportach zespołów pod nazwą „Użytkownik usunięty”.\n\n"
+                        + "Jeśli to nie Ty, skontaktuj się z administratorem serwisu.\n");
+    }
+
     public void sendEmailChanged(String oldEmail, String newEmail) {
         sender.send(oldEmail, "Adres e-mail konta w HourForge został zmieniony",
                 "Adres e-mail Twojego konta w HourForge zmieniono na " + newEmail + ". Od teraz logujesz się nowym adresem.\n\n"

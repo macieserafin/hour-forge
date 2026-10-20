@@ -27,6 +27,9 @@ public class User {
     @Column(name = "email_verified_at")
     private Instant emailVerifiedAt;
 
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -65,6 +68,18 @@ public class User {
 
     public void setEmailVerifiedAt(Instant emailVerifiedAt) {
         this.emailVerifiedAt = emailVerifiedAt;
+    }
+
+    public Instant getDeletedAt() {
+        return deletedAt;
+    }
+
+    /** Removes the personal data but keeps the row, so entries and history stay attached to a placeholder user. */
+    public void anonymize(String placeholderEmail, String placeholderName, Instant now) {
+        this.email = placeholderEmail;
+        this.displayName = placeholderName;
+        this.emailVerifiedAt = null;
+        this.deletedAt = now;
     }
 
     public void setEmail(String email) {

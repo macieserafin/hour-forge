@@ -21,7 +21,7 @@ class EmailVerificationServiceTest {
     private static final RateLimitProperties.Limit LIMIT = new RateLimitProperties.Limit(1, Duration.ofHours(1), null);
 
     private EmailVerificationService service(boolean required, boolean mailEnabled) {
-        var limits = new RateLimitProperties(LIMIT, LIMIT, LIMIT, LIMIT, LIMIT, LIMIT, LIMIT, LIMIT, LIMIT, LIMIT);
+        var limits = new RateLimitProperties(LIMIT, LIMIT, LIMIT, LIMIT, LIMIT, LIMIT, LIMIT, LIMIT, LIMIT, LIMIT, LIMIT);
         return new EmailVerificationService(mock(UserRepository.class), mock(EmailTokenService.class),
                 mailEnabled ? new RecordingEmailSender() : new DisabledEmailSender(), new EmailVerificationProperties(required),
                 new RateLimiter(Clock.systemUTC()), limits, Clock.systemUTC(), "http://localhost:5173/");

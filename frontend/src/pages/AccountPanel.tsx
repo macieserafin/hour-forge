@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { LoaderCircle } from 'lucide-react'
 import { Modal } from '../components/Modal'
 import type { User } from '../lib/api'
-import { passwordChangeError, useChangePassword, useRequestEmailChange, useResendMyVerification, useSignOutEverywhere, useUpdateProfile } from '../lib/account'
+import { passwordChangeError, useChangePassword, useDeleteAccount, useDownloadAccountData, useRequestEmailChange, useResendMyVerification, useSignOutEverywhere, useUpdateProfile } from '../lib/account'
 import { useAuthOptions } from '../lib/auth'
 
 function EmailConfirmation() {
@@ -129,6 +130,39 @@ function SignOutSection() {
   </section>
 }
 
+function DataSection() {
+  const download = useDownloadAccountData()
+  return <section className="overview-panel account-section" aria-labelledby="account-data-title">
+    <h2 id="account-data-title">Twoje dane</h2>
+    <p className="field-hint">Pobierz kopię swoich danych w formacie JSON: profil, członkostwa w zespołach i wszystkie Twoje wpisy czasu, także z zespołów, które opuściłeś.</p>
+    <button className="button-secondary" type="button" disabled={download.isPending} onClick={() => download.mutate()}>
+      {download.isPending && <LoaderCircle size={16} className="spin" />}{download.isPending ? 'Przygotowywanie…' : 'Pobierz moje dane'}</button>
+    {download.isError && <p className="form-error" role="alert">{download.error.message}</p>}
+  </section>
+}
+
+function DeleteSection() {
+  const remove = useDeleteAccount()
+  const [open, setOpen] = useState(false)
+  const [password, setPassword] = useState('')
+  return <section className="overview-panel account-section" aria-labelledby="account-delete-title">
+    <h2 id="account-delete-title">Usuń konto</h2>
+    <p className="field-hint">Usuniemy Twoje imię, adres e-mail i hasło. Zapisane godziny pozostaną w raportach zespołów pod nazwą „Użytkownik usunięty”. Najpierw przekaż własność lub usuń zespoły, których jesteś właścicielem.</p>
+    <button className="button-secondary" type="button" onClick={() => { remove.reset(); setPassword(''); setOpen(true) }}>Usuń konto</button>
+    {open && <Modal title="Usuń konto" busy={remove.isPending} onClose={() => setOpen(false)}>
+      <form onSubmit={event => { event.preventDefault(); if (password) remove.mutate(password) }}>
+        <p className="dialog-description">Tej operacji nie można cofnąć. Aktywny timer zostanie odrzucony, a Ty opuścisz wszystkie zespoły. Podaj hasło, aby potwierdzić.</p>
+        <div className="field-group"><label htmlFor="account-delete-password">Obecne hasło</label>
+          <input className="text-input" id="account-delete-password" type="password" autoComplete="current-password" disabled={remove.isPending} value={password} onChange={event => setPassword(event.target.value)} /></div>
+        {remove.isError && <p className="form-error" role="alert">{remove.error.message}{remove.error.message.includes('zespoły') && <> <Link className="text-link" to="/teams">Przejdź do zespołów</Link></>}</p>}
+        <footer className="dialog-actions"><button type="button" className="button-secondary" disabled={remove.isPending} onClick={() => setOpen(false)}>Anuluj</button>
+          <button type="submit" className="button-primary button-danger" disabled={remove.isPending || !password}>
+            {remove.isPending && <LoaderCircle size={16} className="spin" />}{remove.isPending ? 'Usuwanie…' : 'Usuń konto na stałe'}</button></footer>
+      </form>
+    </Modal>}
+  </section>
+}
+
 export function AccountPanel({ user }: { user: User }) {
   const options = useAuthOptions()
   return <div className="account-panel">
@@ -136,5 +170,7 @@ export function AccountPanel({ user }: { user: User }) {
     {options.data?.emailEnabled && <EmailChangeSection />}
     <PasswordSection />
     <SignOutSection />
+    <DataSection />
+    <DeleteSection />
   </div>
 }

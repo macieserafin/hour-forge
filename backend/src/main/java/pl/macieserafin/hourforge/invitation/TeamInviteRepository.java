@@ -19,6 +19,10 @@ public interface TeamInviteRepository extends JpaRepository<TeamInvite, UUID> {
     Optional<UUID> findTeamIdByTokenHash(String tokenHash);
 
     @Modifying
+    @Query("update TeamInvite invite set invite.revokedAt = :now where invite.createdBy.id = :userId and invite.revokedAt is null")
+    int revokeActiveCreatedBy(UUID userId, java.time.Instant now);
+
+    @Modifying
     @Query("delete from TeamInvite invite where invite.team.id = :teamId")
     int deleteAllByTeamId(UUID teamId);
 }

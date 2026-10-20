@@ -697,3 +697,19 @@ export const getReportMembers = (teamId: string, page: number, signal?: AbortSig
   reportRequest<ReportResult<ReportMember>>(teamId, 'members', new URLSearchParams({ page: String(page), size: '100' }), signal)
 export const getReportProjects = (teamId: string, page: number, signal?: AbortSignal) =>
   reportRequest<ReportResult<ReportProject>>(teamId, 'projects', new URLSearchParams({ page: String(page), size: '100' }), signal)
+
+export async function downloadAccountData(): Promise<{ blob: Blob; filename: string }> {
+  const response = await request('/api/account/export')
+  if (!response.ok) {
+    throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
+      : response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.' : 'Nie udało się pobrać danych. Spróbuj ponownie.')
+  }
+  const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') ?? '')?.[1]
+  return { blob: await response.blob(), filename: name ?? 'hourforge-export.json' }
+}
+
+export async function deleteAccount(currentPassword: string): Promise<void> {
+  await accountRequest('/api/account/delete', 'POST', { currentPassword },
+    { 400: 'Obecne hasło jest nieprawidłowe.', 409: 'Najpierw przekaż własność lub usuń zespoły, których jesteś właścicielem.' },
+    'Nie udało się usunąć konta. Spróbuj ponownie.')
+}

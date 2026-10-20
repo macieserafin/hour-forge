@@ -13,6 +13,15 @@ import java.util.List;
 public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
     Optional<TeamMember> findByTeamIdAndUserId(UUID teamId, UUID userId);
 
+    @Query("select member.team.id from TeamMember member where member.user.id = :userId and member.leftAt is null order by member.team.id")
+    List<UUID> findActiveTeamIds(UUID userId);
+
+    @Query("select member from TeamMember member join fetch member.team where member.user.id = :userId and member.leftAt is null")
+    List<TeamMember> findActiveByUserId(UUID userId);
+
+    @Query("select member from TeamMember member join fetch member.team where member.user.id = :userId order by member.joinedAt asc, member.id asc")
+    List<TeamMember> findAllByUserId(UUID userId);
+
     long countByTeamIdAndLeftAtIsNull(UUID teamId);
 
     @Modifying
