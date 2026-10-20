@@ -34,6 +34,11 @@ public interface TimeEntryRepository extends JpaRepository<TimeEntry, UUID>, Jpa
     @Query("update TimeEntry entry set entry.jiraConnectionId = null, entry.jiraIssueId = null, entry.jiraIssueKey = null where entry.jiraConnectionId = :connectionId")
     int clearJiraLinks(UUID connectionId);
 
+    /** Running, not paused timers that started early enough to have reached the limit and were not reminded yet. */
+    @Query("select e from TimeEntry e join fetch e.user join fetch e.team join fetch e.project where e.entryType = pl.macieserafin.hourforge.timeentry.EntryType.TIMER"
+            + " and e.endedAt is null and e.pausedAt is null and e.longTimerRemindedAt is null and e.startedAt <= :startedBefore")
+    List<TimeEntry> findDueForLongTimerReminder(java.time.Instant startedBefore);
+
     Optional<TimeEntry> findByUserIdAndEntryTypeAndEndedAtIsNull(UUID userId, EntryType entryType);
 
     Optional<TimeEntry> findByIdAndUserId(UUID id, UUID userId);

@@ -18,6 +18,11 @@ public interface EmailTokenRepository extends JpaRepository<EmailToken, UUID> {
 
     List<EmailToken> findByUserIdAndPurposeAndUsedAtIsNull(UUID userId, EmailTokenPurpose purpose);
 
+    /** One-time tokens that expired or were used before the given moment are of no further use. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("delete from EmailToken t where t.expiresAt < :before or (t.usedAt is not null and t.usedAt < :before)")
+    int deleteSpent(java.time.Instant before);
+
     @Modifying(flushAutomatically = true)
     @Query("delete from EmailToken t where t.user.id = :userId")
     int deleteByUserId(UUID userId);

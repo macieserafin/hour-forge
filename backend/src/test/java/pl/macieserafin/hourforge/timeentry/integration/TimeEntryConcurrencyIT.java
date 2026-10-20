@@ -98,7 +98,7 @@ class TimeEntryConcurrencyIT extends IntegrationTestSupport {
     @Test
     void concurrentStopsFinishExactlyOnce() throws Exception {
         var timer = new TransactionTemplate(transactionManager).execute(status -> entries.saveAndFlush(
-                new TimeEntry(first, team, project, EntryType.TIMER, LocalDate.now(), Instant.now().minusSeconds(10), null, null, null)));
+                new TimeEntry(first, team, project, EntryType.TIMER, LocalDate.now(java.time.ZoneOffset.UTC), Instant.now().minusSeconds(10), null, null, null)));
         var request = new StopTimerRequest(timer.getId(), "Done");
         assertThat(concurrently(() -> outcome(() -> service.stop(first.getId(), request), 200),
                 () -> outcome(() -> service.stop(first.getId(), request), 200)))
@@ -121,7 +121,7 @@ class TimeEntryConcurrencyIT extends IntegrationTestSupport {
     @Test
     void manualWriteAndArchiveBothSucceedAndPreserveHistory() throws Exception {
         var outcomes = concurrently(() -> outcome(() -> service.createManual(first.getId(),
-                        new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(), 60, null)), 201),
+                        new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(java.time.ZoneOffset.UTC), 60, null)), 201),
                 () -> outcome(() -> projectService.archive(first.getId(), team.getId(), project.getId()), 200));
         assertThat(outcomes).containsExactly(201, 200);
         assertThat(projects.findById(project.getId()).orElseThrow().getArchivedAt()).isNotNull();
@@ -134,7 +134,7 @@ class TimeEntryConcurrencyIT extends IntegrationTestSupport {
     void deleteAndNewEntryCannotLoseWorkOrLeaveAnOrphan(boolean manual) throws Exception {
         var outcomes = concurrently(() -> outcome(() -> { projectService.delete(first.getId(), team.getId(), project.getId()); return null; }, 204),
                 () -> manual ? outcome(() -> service.createManual(second.getId(),
-                        new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(), 60, null)), 201)
+                        new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(java.time.ZoneOffset.UTC), 60, null)), 201)
                         : start(second, project));
         assertThat(List.of(List.of(204, 404), List.of(409, 201))).contains(outcomes);
         assertThat(projects.existsById(project.getId())).isEqualTo(outcomes.getLast() == 201);
@@ -145,11 +145,11 @@ class TimeEntryConcurrencyIT extends IntegrationTestSupport {
     void removalAndManualWriteAreSerializedAndFurtherWritesAreRefused() throws Exception {
         var outcomes = concurrently(() -> outcome(() -> { memberships.remove(first.getId(), team.getId(), second.getId()); return null; }, 204),
                 () -> outcome(() -> service.createManual(second.getId(),
-                        new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(), 60, null)), 201));
+                        new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(java.time.ZoneOffset.UTC), 60, null)), 201));
         assertThat(List.of(List.of(204, 201), List.of(204, 404))).contains(outcomes);
         assertThat(members.findByTeamIdAndUserId(team.getId(), second.getId()).orElseThrow().getLeftAt()).isNotNull();
         assertThat(outcome(() -> service.createManual(second.getId(),
-                new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(), 60, null)), 201)).isEqualTo(404);
+                new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(java.time.ZoneOffset.UTC), 60, null)), 201)).isEqualTo(404);
     }
 
     @Test
@@ -182,7 +182,7 @@ class TimeEntryConcurrencyIT extends IntegrationTestSupport {
     @Test
     void finishingAndPausingConcurrentlyNeverLeaveAFinishedTimerPaused() throws Exception {
         var timer = new TransactionTemplate(transactionManager).execute(status -> entries.saveAndFlush(
-                new TimeEntry(first, team, project, EntryType.TIMER, LocalDate.now(), Instant.now().minusSeconds(10), null, null, null)));
+                new TimeEntry(first, team, project, EntryType.TIMER, LocalDate.now(java.time.ZoneOffset.UTC), Instant.now().minusSeconds(10), null, null, null)));
         var outcomes = concurrently(() -> outcome(() -> service.pause(first.getId(), new TimerStateRequest(timer.getId(), null)), 200),
                 () -> outcome(() -> service.stop(first.getId(), new StopTimerRequest(timer.getId(), null)), 200));
         assertThat(List.of(List.of(200, 200), List.of(409, 200))).contains(outcomes);

@@ -17,6 +17,10 @@ public interface UserCredentialRepository extends JpaRepository<UserCredential, 
     @Query("select c from UserCredential c where c.userId = :userId")
     Optional<UserCredential> findLockedByUserId(UUID userId);
 
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("delete from UserCredential c where c.userId = :userId")
+    int deleteByUserId(UUID userId);
+
     @Query("select c.sessionVersion from UserCredential c where c.userId = :userId")
     Optional<Integer> findSessionVersion(UUID userId);
 }

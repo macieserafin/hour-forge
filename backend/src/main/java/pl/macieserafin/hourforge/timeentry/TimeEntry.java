@@ -65,6 +65,9 @@ public class TimeEntry {
     @Column(name = "description", columnDefinition = "text")
     private String description;
 
+    @Column(name = "long_timer_reminded_at")
+    private Instant longTimerRemindedAt;
+
     @Column(name = "jira_connection_id")
     private UUID jiraConnectionId;
 
@@ -99,6 +102,14 @@ public class TimeEntry {
 
     public UUID getId() {
         return id;
+    }
+
+    public Instant getLongTimerRemindedAt() {
+        return longTimerRemindedAt;
+    }
+
+    public void setLongTimerRemindedAt(Instant longTimerRemindedAt) {
+        this.longTimerRemindedAt = longTimerRemindedAt;
     }
 
     public UUID getJiraConnectionId() {

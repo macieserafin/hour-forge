@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.util.Optional;
+import java.time.Instant;
 import java.util.UUID;
 
 public interface TeamInviteRepository extends JpaRepository<TeamInvite, UUID> {
@@ -22,7 +23,11 @@ public interface TeamInviteRepository extends JpaRepository<TeamInvite, UUID> {
     @Query("update TeamInvite invite set invite.revokedAt = :now where invite.createdBy.id = :userId and invite.revokedAt is null")
     int revokeActiveCreatedBy(UUID userId, java.time.Instant now);
 
-    @Modifying
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("delete from TeamInvite invite where invite.expiresAt < :before or (invite.revokedAt is not null and invite.revokedAt < :before)")
+    int deleteStale(Instant before);
+
+    @Modifying(flushAutomatically = true)
     @Query("delete from TeamInvite invite where invite.team.id = :teamId")
     int deleteAllByTeamId(UUID teamId);
 }
