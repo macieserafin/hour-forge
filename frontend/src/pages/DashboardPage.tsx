@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { Clock3, Folder, LayoutDashboard, LoaderCircle, LogOut, Menu, UserRound, Users, X } from 'lucide-react'
+import { Clock3, Folder, LayoutDashboard, LoaderCircle, LogOut, Menu, PlugZap, UserRound, Users, X } from 'lucide-react'
 import { Brand } from '../components/Brand'
 import type { User } from '../lib/api'
 import { useLogout } from '../lib/auth'
@@ -9,6 +9,7 @@ import { ProjectsPanel } from './ProjectsPanel'
 import { TimePanel } from './TimePanel'
 import { PersonalDashboard } from './PersonalDashboard'
 import { AccountPanel } from './AccountPanel'
+import { IntegrationsPanel } from './IntegrationsPanel'
 
 function initials(name: string) {
   return name.trim().split(/\s+/).slice(0, 2).map(part => part.charAt(0)).join('').toLocaleUpperCase('pl-PL') || 'U'
@@ -32,6 +33,7 @@ function Sidebar({ user, isLoggingOut, onLogout, onNavigate }: SidebarProps) {
       <NavLink to={`/time${teamQuery}`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={onNavigate}><Clock3 size={18} />Rejestr czasu</NavLink>
       <NavLink to={`/projects${teamQuery}`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={onNavigate}><Folder size={18} />Projekty</NavLink>
       <NavLink to={`/teams${teamQuery}`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={onNavigate}><Users size={18} />Zespoły</NavLink>
+      <NavLink to={`/integrations${teamQuery}`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={onNavigate}><PlugZap size={18} />Integracje</NavLink>
       <NavLink to="/account" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={onNavigate}><UserRound size={18} />Konto</NavLink>
     </nav>
     <div className="sidebar-bottom">
@@ -43,13 +45,13 @@ function Sidebar({ user, isLoggingOut, onLogout, onNavigate }: SidebarProps) {
   </div>
 }
 
-export function DashboardPage({ user, section = 'dashboard' }: { user: User; section?: 'dashboard' | 'teams' | 'projects' | 'time' | 'account' }) {
+export function DashboardPage({ user, section = 'dashboard' }: { user: User; section?: 'dashboard' | 'teams' | 'projects' | 'time' | 'integrations' | 'account' }) {
   const logout = useLogout()
   const [search] = useSearchParams()
   const menu = useRef<HTMLDialogElement>(null)
   const firstName = user.displayName.trim().split(/\s+/)[0] || user.displayName
   const date = new Date().toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })
-  const sectionTitle = section === 'teams' ? 'Zespoły' : section === 'projects' ? 'Projekty' : section === 'time' ? 'Rejestr czasu' : section === 'account' ? 'Konto' : 'Pulpit'
+  const sectionTitle = section === 'teams' ? 'Zespoły' : section === 'projects' ? 'Projekty' : section === 'time' ? 'Rejestr czasu' : section === 'integrations' ? 'Integracje' : section === 'account' ? 'Konto' : 'Pulpit'
   const sidebarProps: SidebarProps = { user, isLoggingOut: logout.isPending, onLogout: () => logout.mutate(), onNavigate: () => menu.current?.close() }
 
   return <div className="app-layout">
@@ -66,10 +68,10 @@ export function DashboardPage({ user, section = 'dashboard' }: { user: User; sec
       </header>
 
       <main id="main" className="dashboard-content">
-        <div className="page-heading"><div><h1>{section === 'dashboard' ? `Cześć, ${firstName}.` : sectionTitle}</h1><p>{section === 'teams' ? 'Wspólna praca zaczyna się od zespołu.' : section === 'projects' ? 'Projekty i historia pracy Twojego zespołu.' : section === 'time' ? 'Uruchom timer lub dodaj czas wykonanej pracy.' : section === 'account' ? 'Nazwa, hasło i bezpieczeństwo Twojego konta.' : 'To jest Twój pulpit w HourForge.'}</p></div><p className="date-label">{date}</p></div>
+        <div className="page-heading"><div><h1>{section === 'dashboard' ? `Cześć, ${firstName}.` : sectionTitle}</h1><p>{section === 'teams' ? 'Wspólna praca zaczyna się od zespołu.' : section === 'projects' ? 'Projekty i historia pracy Twojego zespołu.' : section === 'time' ? 'Uruchom timer lub dodaj czas wykonanej pracy.' : section === 'integrations' ? 'Połącz zespół z narzędziami, z których już korzystasz.' : section === 'account' ? 'Nazwa, hasło i bezpieczeństwo Twojego konta.' : 'To jest Twój pulpit w HourForge.'}</p></div><p className="date-label">{date}</p></div>
         {logout.isError && <div className="dashboard-error" role="alert">{logout.error.message}<button onClick={() => logout.mutate()}>Spróbuj ponownie</button></div>}
 
-        {section === 'teams' ? <TeamsPanel userId={user.id} /> : section === 'projects' ? <ProjectsPanel userId={user.id} /> : section === 'time' ? <TimePanel userId={user.id} /> : section === 'account' ? <AccountPanel user={user} /> : <div className={`dashboard-overview${search.get('view') === 'team' ? ' team-overview' : ''}`}>
+        {section === 'teams' ? <TeamsPanel userId={user.id} /> : section === 'projects' ? <ProjectsPanel userId={user.id} /> : section === 'time' ? <TimePanel userId={user.id} /> : section === 'integrations' ? <IntegrationsPanel userId={user.id} /> : section === 'account' ? <AccountPanel user={user} /> : <div className={`dashboard-overview${search.get('view') === 'team' ? ' team-overview' : ''}`}>
           <PersonalDashboard userId={user.id} />
           <section className="account-details" aria-labelledby="account-title">
             <h2 id="account-title">Twoje konto</h2>

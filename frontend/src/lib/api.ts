@@ -733,3 +733,50 @@ export async function deleteAccount(currentPassword: string): Promise<void> {
     { 400: 'Obecne hasło jest nieprawidłowe.', 409: 'Najpierw przekaż własność lub usuń zespoły, których jesteś właścicielem.' },
     'Nie udało się usunąć konta. Spróbuj ponownie.')
 }
+
+export interface JiraStatus {
+  available: boolean
+  siteConnected: boolean
+  siteName: string | null
+  siteUrl: string | null
+  userConnected: boolean
+  canManage: boolean
+}
+
+export interface JiraSiteChoice {
+  cloudId: string
+  name: string
+  url: string
+}
+
+export type JiraIntent = 'SITE' | 'MEMBER'
+
+async function jiraRequest<T>(path: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
+  const csrf = method === 'GET' ? null : await getCsrf()
+  const response = await request(path, {
+    method, signal,
+    headers: csrf ? { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token } : undefined,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Tę operację może wykonać tylko właściciel zespołu lub sesja formularza wygasła.',
+      404: 'Nie znaleziono zespołu lub witryny Jira albo nie masz już do nich dostępu.',
+      409: 'Najpierw połącz konto Jira. Właściciel zespołu musi też wybrać witrynę Jira.',
+      502: 'Jira jest teraz niedostępna. Spróbuj ponownie za chwilę.',
+    }
+    throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
+      : messages[response.status] ?? 'Nie udało się wykonać operacji na integracji z Jira. Spróbuj ponownie.')
+  }
+  return (response.status === 204 ? null : await response.json()) as T
+}
+
+const jiraPath = (suffix: string, teamId?: string) => `/api/integrations/jira/${suffix}${teamId ? `?${new URLSearchParams({ teamId })}` : ''}`
+export const getJiraStatus = (teamId: string, signal?: AbortSignal) => jiraRequest<JiraStatus>(jiraPath('status', teamId), 'GET', undefined, signal)
+export const getJiraSites = (teamId: string, signal?: AbortSignal) => jiraRequest<JiraSiteChoice[]>(jiraPath('sites', teamId), 'GET', undefined, signal)
+export const startJiraAuthorization = (input: { teamId: string; intent: JiraIntent }) =>
+  jiraRequest<{ url: string }>(jiraPath('authorize'), 'POST', input)
+export const selectJiraSite = (input: { teamId: string; cloudId: string }) => jiraRequest<null>(jiraPath('site'), 'POST', input)
+export const disconnectJiraAccount = (teamId: string) => jiraRequest<null>(jiraPath('connection', teamId), 'DELETE')
+export const disconnectJiraSite = (teamId: string) => jiraRequest<null>(jiraPath('site', teamId), 'DELETE')

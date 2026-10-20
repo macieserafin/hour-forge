@@ -46,6 +46,7 @@ export function App() {
     <Route path="/confirm-email-change/:token" element={<ConfirmEmailChangePage />} />
     <Route path="/forgot-password" element={user ? <Navigate to="/dashboard" replace /> : <ForgotPasswordPage />} />
     <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+    <Route path="/integrations" element={user ? <DashboardPage user={user} section="integrations" /> : signIn} />
     <Route path="/account" element={user ? <DashboardPage user={user} section="account" /> : signIn} />
     <Route path="/invite/:token" element={user ? <InvitePage user={user} /> : signIn} />
     <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
