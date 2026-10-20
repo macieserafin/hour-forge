@@ -51,8 +51,10 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/options").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/email-verification/confirm",
-                                "/api/auth/email-verification/resend").permitAll()
+                                "/api/auth/email-verification/resend", "/api/auth/password-reset/request",
+                                "/api/auth/password-reset/confirm", "/api/auth/email-change/confirm").permitAll()
                         .anyRequest().authenticated())
                 .requestCache(cache -> cache.disable())
                 .exceptionHandling(exceptions -> exceptions

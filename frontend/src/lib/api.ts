@@ -247,7 +247,30 @@ async function publicPost(path: string, body: unknown, messages: Record<number, 
 export const confirmEmail = (token: string) => publicPost('/api/auth/email-verification/confirm', { token },
   { 400: 'Link jest nieprawidłowy albo wygasł. Poproś o nowy link.' }, 'Nie udało się potwierdzić adresu. Spróbuj ponownie.')
 
-export const resendVerification = (email: string) => publicPost('/api/auth/email-verification/resend', { email: email.trim() },
+export interface AuthOptions {
+  emailEnabled: boolean
+  emailVerificationRequired: boolean
+}
+
+export async function getAuthOptions(signal?: AbortSignal): Promise<AuthOptions> {
+  const response = await request('/api/auth/options', { signal })
+  // Without the answer the screens fall back to the e-mail-free behaviour instead of blocking sign-in.
+  if (!response.ok) return { emailEnabled: false, emailVerificationRequired: false }
+  return response.json() as Promise<AuthOptions>
+}
+
+export const requestPasswordReset = (email: string) => publicPost('/api/auth/password-reset/request', { email: email.trim() },
+  {}, 'Nie udało się wysłać wiadomości. Spróbuj ponownie później.')
+
+export const confirmPasswordReset = (input: { token: string; newPassword: string }) => publicPost('/api/auth/password-reset/confirm', input,
+  { 400: 'Link jest nieprawidłowy albo wygasł, lub hasło nie spełnia wymagań (co najmniej 12 znaków). Poproś o nowy link.' },
+  'Nie udało się ustawić hasła. Spróbuj ponownie.')
+
+export const confirmEmailChange = (token: string) => publicPost('/api/auth/email-change/confirm', { token },
+  { 400: 'Link jest nieprawidłowy albo wygasł. Poproś o nowy link w ustawieniach konta.', 409: 'Ten adres jest już używany przez inne konto.' },
+  'Nie udało się potwierdzić zmiany adresu. Spróbuj ponownie.')
+
+export const resendVerification =(email: string) => publicPost('/api/auth/email-verification/resend', { email: email.trim() },
   {}, 'Nie udało się wysłać linku. Spróbuj ponownie później.')
 
 export interface RegistrationInput {
@@ -302,6 +325,12 @@ export async function updateProfile(displayName: string): Promise<User> {
 export async function changePassword(input: { currentPassword: string; newPassword: string }): Promise<void> {
   await accountRequest('/api/account/password', 'POST', input,
     { 400: 'Obecne hasło jest nieprawidłowe.' }, 'Nie udało się zmienić hasła. Spróbuj ponownie.')
+}
+
+export async function requestEmailChange(input: { newEmail: string; currentPassword: string }): Promise<void> {
+  await accountRequest('/api/account/email', 'POST', { newEmail: input.newEmail.trim(), currentPassword: input.currentPassword },
+    { 400: 'Sprawdź nowy adres i obecne hasło. Nowy adres musi różnić się od obecnego.', 503: 'Wysyłanie e-maili nie jest skonfigurowane na tym serwerze.' },
+    'Nie udało się wysłać linku. Spróbuj ponownie później.')
 }
 
 export async function resendMyVerification(): Promise<void> {

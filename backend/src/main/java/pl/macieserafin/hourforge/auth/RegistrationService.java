@@ -16,23 +16,31 @@ public class RegistrationService {
     private final UserCredentialRepository credentials;
     private final PasswordEncoder encoder;
     private final EmailVerificationService verification;
+    private final AccountMailService accountMail;
 
     public RegistrationService(UserRepository users, UserCredentialRepository credentials, PasswordEncoder encoder,
-                               EmailVerificationService verification) {
+                               EmailVerificationService verification, AccountMailService accountMail) {
         this.users = users;
         this.credentials = credentials;
         this.encoder = encoder;
         this.verification = verification;
+        this.accountMail = accountMail;
     }
 
     @Transactional
     public void register(RegistrationRequest request) {
         var password = request.password();
         PasswordPolicy.require(password);
-        if (users.findByEmailIgnoreCase(request.email()).isPresent()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered");
-        }
+        // Hashed before the lookup, so a taken address costs the same time as a free one.
         String hash = encoder.encode(password);
+        var existing = users.findByEmailIgnoreCase(request.email());
+        if (existing.isPresent()) {
+            // With e-mail the caller gets the usual answer and the owner of the address is told; without it
+            // there is no way to tell the owner, so the caller is told plainly.
+            if (!accountMail.enabled()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered");
+            accountMail.sendRegistrationAttempt(existing.get());
+            return;
+        }
         User user;
         try {
             user = users.saveAndFlush(new User(request.email(), request.displayName()));

@@ -7,6 +7,9 @@ import { RegisterPage } from './pages/RegisterPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { InvitePage } from './pages/InvitePage'
 import { VerifyEmailPage } from './pages/VerifyEmailPage'
+import { ConfirmEmailChangePage } from './pages/ConfirmEmailChangePage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { loginUrl, safeReturnTo } from './lib/navigation'
 
 export function App() {
@@ -40,6 +43,9 @@ export function App() {
     <Route path="/projects" element={user ? <DashboardPage user={user} section="projects" /> : signIn} />
     <Route path="/time" element={user ? <DashboardPage user={user} section="time" /> : signIn} />
     <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
+    <Route path="/confirm-email-change/:token" element={<ConfirmEmailChangePage />} />
+    <Route path="/forgot-password" element={user ? <Navigate to="/dashboard" replace /> : <ForgotPasswordPage />} />
+    <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
     <Route path="/account" element={user ? <DashboardPage user={user} section="account" /> : signIn} />
     <Route path="/invite/:token" element={user ? <InvitePage user={user} /> : signIn} />
     <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />

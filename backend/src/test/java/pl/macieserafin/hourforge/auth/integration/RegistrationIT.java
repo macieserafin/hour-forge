@@ -47,13 +47,19 @@ class RegistrationIT extends ApiIntegrationTestSupport {
         mvc.perform(get("/api/teams").session(session)).andExpect(status().isOk()).andExpect(content().json("[]"));
     }
 
-    @Test void duplicateEmailIsCaseInsensitiveAndPreservesTheExistingPassword() throws Exception {
+    @Test void duplicateEmailLooksLikeSuccessPreservesTheExistingPasswordAndWarnsTheOwner() throws Exception {
         mvc.perform(post("/api/auth/register").with(csrf()).contentType("application/json").content(BODY)).andExpect(status().isCreated());
         var original = credentials.findByUserEmailIgnoreCase("new@example.test").orElseThrow().getPasswordHash();
+        long userCount = users.count();
+        mail.clear();
         mvc.perform(post("/api/auth/register").with(csrf()).contentType("application/json")
                         .content(BODY.replace("New@Example.test", "NEW@EXAMPLE.TEST").replace("Valid-password-2026!", "Different-password!")))
-                .andExpect(status().isConflict());
+                .andExpect(status().isCreated());
         assertThat(credentials.findByUserEmailIgnoreCase("new@example.test").orElseThrow().getPasswordHash()).isEqualTo(original);
+        assertThat(users.count()).isEqualTo(userCount);
+        assertThat(mail.sent()).hasSize(1);
+        assertThat(mail.last().to()).isEqualTo("new@example.test");
+        assertThat(mail.last().body()).contains("/forgot-password").doesNotContain("Different-password!");
     }
 
     @Test void rejectsMissingAndInvalidCsrfWithoutCreatingAnAccount() throws Exception {

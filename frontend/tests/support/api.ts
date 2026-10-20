@@ -15,6 +15,7 @@ type Handler = (url: URL, options: RequestInit) => Response | Promise<Response>
 export function mockApi(overrides: Record<string, Handler> = {}) {
   const handlers: Record<string, Handler> = {
     'GET /api/me': () => json(user),
+    'GET /api/auth/options': () => json({ emailEnabled: false, emailVerificationRequired: false }),
     'GET /api/auth/csrf': () => json({ token: 'csrf', headerName: 'X-CSRF-TOKEN', parameterName: '_csrf' }),
     'GET /api/teams': () => json([team]),
     [`GET /api/teams/${team.id}/members`]: () => json({ content: [{ userId: user.id, displayName: user.displayName,

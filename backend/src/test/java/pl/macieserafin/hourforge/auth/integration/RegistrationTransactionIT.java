@@ -34,6 +34,7 @@ class RegistrationTransactionIT extends IntegrationTestSupport {
 
     @AfterEach void cleanup() {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            jdbc.update("delete from email_tokens where user_id in (select id from users where lower(email) = ?)", email);
             jdbc.update("delete from user_credentials where user_id in (select id from users where lower(email) = ?)", email);
             jdbc.update("delete from users where lower(email) = ?", email);
         });

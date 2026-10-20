@@ -1,0 +1,55 @@
+package pl.macieserafin.hourforge.auth;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import pl.macieserafin.hourforge.mail.EmailSender;
+import pl.macieserafin.hourforge.user.User;
+
+/** Builds and sends the account e-mails that carry one-time links. */
+@Service
+public class AccountMailService {
+    private final EmailTokenService tokens;
+    private final EmailSender sender;
+    private final String frontendUrl;
+
+    public AccountMailService(EmailTokenService tokens, EmailSender sender, @Value("${app.frontend-url}") String frontendUrl) {
+        this.tokens = tokens;
+        this.sender = sender;
+        this.frontendUrl = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
+    }
+
+    public boolean enabled() {
+        return sender.enabled();
+    }
+
+    @Transactional
+    public void sendPasswordReset(User user) {
+        var token = tokens.issue(user, EmailTokenPurpose.RESET_PASSWORD, null);
+        sender.send(user.getEmail(), "Reset hasła w HourForge",
+                "Cześć " + user.getDisplayName() + ",\n\nustaw nowe hasło, otwierając link (ważny 1 godzinę):\n"
+                        + frontendUrl + "/reset-password/" + token + "\n\nJeśli to nie Ty o to prosiłeś, zignoruj tę wiadomość. Hasło się nie zmieni.\n");
+    }
+
+    /** Sent to the owner of an address somebody tried to register again; it reveals nothing to the requester. */
+    public void sendRegistrationAttempt(User existing) {
+        sender.send(existing.getEmail(), "Ktoś próbował założyć konto na Twój adres",
+                "Cześć " + existing.getDisplayName() + ",\n\nktoś próbował zarejestrować w HourForge konto na ten adres e-mail, "
+                        + "ale konto już istnieje. Jeśli to Ty, zaloguj się lub ustaw nowe hasło:\n"
+                        + frontendUrl + "/forgot-password\n\nJeśli to nie Ty, nic nie musisz robić.\n");
+    }
+
+    @Transactional
+    public void sendEmailChange(User user, String newEmail) {
+        var token = tokens.issue(user, EmailTokenPurpose.CHANGE_EMAIL, newEmail);
+        sender.send(newEmail, "Potwierdź nowy adres e-mail w HourForge",
+                "Cześć " + user.getDisplayName() + ",\n\npotwierdź zmianę adresu e-mail konta, otwierając link (ważny 24 godziny):\n"
+                        + frontendUrl + "/confirm-email-change/" + token + "\n\nJeśli to nie Ty o to prosiłeś, zignoruj tę wiadomość.\n");
+    }
+
+    public void sendEmailChanged(String oldEmail, String newEmail) {
+        sender.send(oldEmail, "Adres e-mail konta w HourForge został zmieniony",
+                "Adres e-mail Twojego konta w HourForge zmieniono na " + newEmail + ". Od teraz logujesz się nowym adresem.\n\n"
+                        + "Jeśli to nie Ty, skontaktuj się z administratorem serwisu.\n");
+    }
+}

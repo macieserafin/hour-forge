@@ -139,6 +139,13 @@ class EmailVerificationIT extends ApiIntegrationTestSupport {
     }
 
     @Test
+    void publicOptionsTellTheScreensWhetherMailIsAvailable() throws Exception {
+        mvc.perform(get("/api/auth/options")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.emailEnabled").value(true))
+                .andExpect(jsonPath("$.emailVerificationRequired").value(false));
+    }
+
+    @Test
     void endpointsRequireCsrfButNotAuthentication() throws Exception {
         mvc.perform(post("/api/auth/email-verification/resend").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"" + EMAIL + "\"}")).andExpect(status().isForbidden());

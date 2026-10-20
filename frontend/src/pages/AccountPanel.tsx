@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { Modal } from '../components/Modal'
 import type { User } from '../lib/api'
-import { passwordChangeError, useChangePassword, useResendMyVerification, useSignOutEverywhere, useUpdateProfile } from '../lib/account'
+import { passwordChangeError, useChangePassword, useRequestEmailChange, useResendMyVerification, useSignOutEverywhere, useUpdateProfile } from '../lib/account'
+import { useAuthOptions } from '../lib/auth'
 
 function EmailConfirmation() {
   const resend = useResendMyVerification()
@@ -39,6 +40,37 @@ function ProfileSection({ user }: { user: User }) {
       {saved && <p className="project-notice" role="status">Nazwa wyświetlana została zapisana.</p>}
       <button className="button-primary" type="submit" disabled={save.isPending || name.trim() === user.displayName}>
         {save.isPending && <LoaderCircle size={16} className="spin" />}{save.isPending ? 'Zapisywanie…' : 'Zapisz nazwę'}</button>
+    </form>
+  </section>
+}
+
+function EmailChangeSection() {
+  const change = useRequestEmailChange()
+  const [newEmail, setNewEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [validation, setValidation] = useState('')
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const address = newEmail.trim()
+    if (!address || address.length > 255 || !address.includes('@')) { setValidation('Wpisz poprawny nowy adres e-mail.'); return }
+    if (!password) { setValidation('Podaj obecne hasło.'); return }
+    setValidation('')
+    change.mutate({ newEmail: address, currentPassword: password }, { onSuccess: () => setPassword('') })
+  }
+  return <section className="overview-panel account-section" aria-labelledby="account-email-title">
+    <h2 id="account-email-title">Zmiana adresu e-mail</h2>
+    <p className="field-hint">Wyślemy link potwierdzający na nowy adres. Po potwierdzeniu zalogujesz się nowym adresem, a stare sesje zostaną zakończone.</p>
+    <form onSubmit={submit} onInput={() => { setValidation(''); if (change.isError) change.reset() }}>
+      <fieldset disabled={change.isPending}>
+        <div className="field-group"><label htmlFor="account-new-email">Nowy adres e-mail</label>
+          <input className="text-input" id="account-new-email" type="email" autoComplete="off" maxLength={255} value={newEmail} onChange={event => setNewEmail(event.target.value)} /></div>
+        <div className="field-group"><label htmlFor="account-email-password">Obecne hasło</label>
+          <input className="text-input" id="account-email-password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} /></div>
+      </fieldset>
+      {(validation || change.isError) && <p className="form-error" role="alert">{validation || change.error?.message}</p>}
+      {change.isSuccess && <p className="project-notice" role="status">Jeśli adres jest dostępny, wysłaliśmy na niego link potwierdzający.</p>}
+      <button className="button-primary" type="submit" disabled={change.isPending}>
+        {change.isPending && <LoaderCircle size={16} className="spin" />}{change.isPending ? 'Wysyłanie…' : 'Wyślij link'}</button>
     </form>
   </section>
 }
@@ -98,8 +130,10 @@ function SignOutSection() {
 }
 
 export function AccountPanel({ user }: { user: User }) {
+  const options = useAuthOptions()
   return <div className="account-panel">
     <ProfileSection user={user} />
+    {options.data?.emailEnabled && <EmailChangeSection />}
     <PasswordSection />
     <SignOutSection />
   </div>

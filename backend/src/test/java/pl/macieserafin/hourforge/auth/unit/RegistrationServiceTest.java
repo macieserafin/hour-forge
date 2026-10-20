@@ -24,9 +24,10 @@ class RegistrationServiceTest {
     @Mock UserCredentialRepository credentials;
     @Mock PasswordEncoder encoder;
     @Mock EmailVerificationService verification;
+    @Mock AccountMailService accountMail;
     private RegistrationService service;
 
-    @BeforeEach void setup() { service = new RegistrationService(users, credentials, encoder, verification); }
+    @BeforeEach void setup() { service = new RegistrationService(users, credentials, encoder, verification, accountMail); }
 
     @Test void normalizesIdentityAndPersistsOnlyTheEncodedPasswordWithoutTrimmingIt() {
         var request = new RegistrationRequest("  New User  ", "  New@Example.test  ", " password 2026! ");
@@ -59,11 +60,23 @@ class RegistrationServiceTest {
         verifyNoInteractions(users, credentials, encoder);
     }
 
-    @Test void doesNotOverwriteAnExistingAccountOrItsPassword() {
+    @Test void withoutMailAnExistingAddressIsReportedAndNothingIsOverwritten() {
         when(users.findByEmailIgnoreCase("new@example.test")).thenReturn(Optional.of(user()));
         assertThatThrownBy(() -> service.register(new RegistrationRequest("New User", "new@example.test", "Valid-password-2026!")))
                 .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode().value()).isEqualTo(409));
         verify(users, never()).saveAndFlush(any());
-        verifyNoInteractions(encoder, credentials);
+        verifyNoInteractions(credentials);
+        verify(accountMail, never()).sendRegistrationAttempt(any());
+    }
+
+    @Test void withMailAnExistingAddressLooksLikeSuccessAndTheOwnerIsTold() {
+        var existing = user();
+        when(users.findByEmailIgnoreCase("new@example.test")).thenReturn(Optional.of(existing));
+        when(accountMail.enabled()).thenReturn(true);
+        service.register(new RegistrationRequest("New User", "new@example.test", "Valid-password-2026!"));
+        verify(accountMail).sendRegistrationAttempt(existing);
+        verify(encoder).encode("Valid-password-2026!");
+        verify(users, never()).saveAndFlush(any());
+        verifyNoInteractions(credentials, verification);
     }
 }
