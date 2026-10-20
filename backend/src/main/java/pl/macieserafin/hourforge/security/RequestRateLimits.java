@@ -23,6 +23,8 @@ public class RequestRateLimits {
 
     public void projectCreation(UUID userId) { acquire("project-creation:" + userId, limits.projectCreation()); }
 
+    public void reportExport(UUID userId) { acquire("report-export:" + userId, limits.reportExport()); }
+
     private void acquire(String key, RateLimitProperties.Limit limit) {
         limiter.tryAcquire(key, limit).ifPresent(retryAfter -> { throw new TooManyRequestsException(retryAfter); });
     }

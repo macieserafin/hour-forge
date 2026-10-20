@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, getReportActive, getReportBreakdown, getReportEntries, getReportMembers, getReportProjects, getReportSummary,
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { saveBlob } from './download'
+import { ApiError, downloadReport, getReportActive, getReportBreakdown, getReportEntries, getReportMembers, getReportProjects, getReportSummary,
   type ReportFilters, type ReportGroup, type ReportResult, type ReportSort } from './api'
 import { dashboardKey } from './dashboard'
 import { teamsKey, useAuthError } from './teams'
@@ -51,6 +52,12 @@ export function useReportActive(userId: string, teamId: string, page: number, en
     refetchInterval: 15_000, refetchOnWindowFocus: 'always' })
   useReportError(userId, query.error)
   return query
+}
+
+export function useDownloadReport(teamId: string, filters: ReportFilters, kind: 'csv' | 'pdf') {
+  const handleError = useAuthError()
+  return useMutation({ mutationFn: () => downloadReport(teamId, filters, kind), retry: false, gcTime: 0, onError: handleError,
+    onSuccess: ({ blob, filename }) => saveBlob(blob, filename) })
 }
 
 export function useReportEntries(userId: string, teamId: string, filters: ReportFilters, sort: ReportSort, page: number) {

@@ -1,3 +1,4 @@
+import { filenameFrom } from './download'
 export interface User {
   id: string
   email: string
@@ -692,6 +693,21 @@ export function getReportEntries(teamId: string, filters: ReportFilters, sort: R
   return reportRequest<ReportResult<ReportEntry>>(teamId, 'entries', params, signal)
 }
 
+export type ReportDownload = 'csv' | 'pdf'
+
+/** A file version of the report the owner is looking at; the server applies the same filters as on screen. */
+export async function downloadReport(teamId: string, filters: ReportFilters, kind: ReportDownload): Promise<{ blob: Blob; filename: string }> {
+  const response = await request(`/api/teams/${encodeURIComponent(teamId)}/reports/export.${kind}?${reportParams(filters)}`)
+  if (!response.ok) {
+    throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
+      : response.status === 400 ? 'Sprawdź zakres dat (najwyżej 366 dni) i filtry. Plik CSV może mieć najwyżej 50 000 wpisów, więc zawęź raport.'
+      : response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.'
+      : response.status === 403 || response.status === 404 ? 'Raport jest niedostępny. Sprawdź swoje uprawnienia i filtry.'
+      : 'Nie udało się pobrać pliku. Spróbuj ponownie.')
+  }
+  return { blob: await response.blob(), filename: filenameFrom(response, `hourforge-raport.${kind}`) }
+}
+
 export const getReportMembers = (teamId: string, page: number, signal?: AbortSignal) =>
   reportRequest<ReportResult<ReportMember>>(teamId, 'members', new URLSearchParams({ page: String(page), size: '100' }), signal)
 export const getReportProjects = (teamId: string, page: number, signal?: AbortSignal) =>
@@ -703,8 +719,7 @@ export async function downloadAccountData(): Promise<{ blob: Blob; filename: str
     throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
       : response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.' : 'Nie udało się pobrać danych. Spróbuj ponownie.')
   }
-  const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') ?? '')?.[1]
-  return { blob: await response.blob(), filename: name ?? 'hourforge-export.json' }
+  return { blob: await response.blob(), filename: filenameFrom(response, 'hourforge-export.json') }
 }
 
 export async function deleteAccount(currentPassword: string): Promise<void> {

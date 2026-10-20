@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { changePassword, deleteAccount, downloadAccountData, requestEmailChange, signOutEverywhere, updateProfile } from './api'
+import { saveBlob } from './download'
 import { sessionOptions } from './auth'
 import { useAuthError } from './teams'
 
@@ -42,14 +43,7 @@ export function passwordChangeError(current: string, next: string, confirmation:
 export function useDownloadAccountData() {
   const handleError = useAuthError()
   return useMutation({ mutationFn: downloadAccountData, retry: false, gcTime: 0, onError: handleError,
-    onSuccess: ({ blob, filename }) => {
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = filename
-      link.click()
-      URL.revokeObjectURL(url)
-    } })
+    onSuccess: ({ blob, filename }) => saveBlob(blob, filename) })
 }
 
 export function useDeleteAccount() {

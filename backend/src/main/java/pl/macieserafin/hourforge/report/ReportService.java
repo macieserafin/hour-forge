@@ -88,6 +88,43 @@ public class ReportService {
         return new ReportResponse.Result<>(context(team), ReportRepository.page(rows, page, size));
     }
 
+    /**
+     * Context for a downloadable report. The owner may export the whole team; any other active member only their own
+     * entries, whatever person filter was sent.
+     */
+    public ReportResponse.Context exportContext(UUID actorId, UUID teamId, ReportFilter filter, boolean ownOnly) {
+        if (!ownOnly) return context(owner(actorId, teamId), filter, true);
+        var team = activeMemberTeam(actorId, teamId);
+        var own = new ReportFilter(filter.from(), filter.to(), java.util.List.of(actorId), filter.projectIds(),
+                filter.entryType(), filter.undated(), filter.q());
+        return context(team, own, true);
+    }
+
+    /**
+     * Streams the completed entries of the filter oldest first, in pages, and stops after {@code max}.
+     * Returns true when more entries existed than were delivered.
+     */
+    @Transactional(readOnly = true)
+    public boolean forEachEntry(UUID teamId, ReportFilter filter, int max, java.util.function.Consumer<ReportResponse.Entry> sink) {
+        final int pageSize = 500;
+        int delivered = 0;
+        for (int page = 0; ; page++) {
+            var rows = reports.entries(teamId, filter, false, ReportEntrySort.WORK_DATE, true, page, pageSize);
+            for (var row : rows.subList(0, Math.min(rows.size(), pageSize))) {
+                if (delivered == max) return true;
+                sink.accept(entry(row));
+                delivered++;
+            }
+            if (rows.size() <= pageSize) return false;
+        }
+    }
+
+    private Team activeMemberTeam(UUID actorId, UUID teamId) {
+        if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        return members.findByTeamIdAndUserId(teamId, actorId).filter(m -> m.getLeftAt() == null)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND)).getTeam();
+    }
+
     private Team owner(UUID actorId, UUID teamId) {
         if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         var membership = members.findByTeamIdAndUserId(teamId, actorId).filter(m -> m.getLeftAt() == null)

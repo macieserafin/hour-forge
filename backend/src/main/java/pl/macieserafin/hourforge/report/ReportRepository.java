@@ -100,8 +100,10 @@ public class ReportRepository {
             case DURATION -> "durationSeconds";
             case CREATED_AT -> "createdAt";
         };
-        query.select(root).where(filter(cb, root, teamId, filter, active)).orderBy(
-                ascending ? cb.asc(root.get(field)) : cb.desc(root.get(field)), cb.asc(root.get("id")));
+        // Creation time breaks ties between entries of the same day in the order they were written; the ID keeps pages stable.
+        var primary = ascending ? cb.asc(root.get(field)) : cb.desc(root.get(field));
+        var created = ascending ? cb.asc(root.get("createdAt")) : cb.desc(root.get("createdAt"));
+        query.select(root).where(filter(cb, root, teamId, filter, active)).orderBy(primary, created, cb.asc(root.get("id")));
         return em.createQuery(query).setFirstResult(page * size).setMaxResults(size + 1).getResultList();
     }
 

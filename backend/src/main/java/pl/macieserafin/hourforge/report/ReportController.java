@@ -2,16 +2,26 @@ package pl.macieserafin.hourforge.report;
 
 import java.util.UUID;
 import org.springframework.data.domain.Sort.Direction;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
+import pl.macieserafin.hourforge.security.RequestRateLimits;
 
 @RestController
 @RequestMapping("/api/teams/{teamId}/reports")
 public class ReportController {
     private final ReportService reports;
+    private final ReportExportService exports;
+    private final RequestRateLimits rateLimits;
 
-    public ReportController(ReportService reports) { this.reports = reports; }
+    public ReportController(ReportService reports, ReportExportService exports, RequestRateLimits rateLimits) {
+        this.reports = reports;
+        this.exports = exports;
+        this.rateLimits = rateLimits;
+    }
 
     @GetMapping("/summary")
     public ReportResponse.Summary summary(@AuthenticationPrincipal AppUserPrincipal actor,
@@ -34,6 +44,19 @@ public class ReportController {
             @RequestParam(defaultValue = "DESC") Direction direction,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
         return reports.entries(actor.getUserId(), teamId, filter, sort, direction == Direction.ASC, page, size);
+    }
+
+    @GetMapping("/export.csv")
+    public ResponseEntity<byte[]> csv(@AuthenticationPrincipal AppUserPrincipal actor,
+            @PathVariable UUID teamId, @ModelAttribute ReportFilter filter) {
+        rateLimits.reportExport(actor.getUserId());
+        return download(exports.csv(actor.getUserId(), teamId, filter), "text/csv; charset=UTF-8");
+    }
+
+    private static ResponseEntity<byte[]> download(ReportExportService.Download download, String contentType) {
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(contentType))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + download.filename() + "\"")
+                .header(HttpHeaders.CACHE_CONTROL, "no-store").body(download.content());
     }
 
     @GetMapping("/active-timers")

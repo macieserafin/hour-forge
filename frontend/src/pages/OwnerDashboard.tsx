@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, LoaderCircle, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, LoaderCircle, RefreshCw } from 'lucide-react'
 import { ApiError, type ReportBucket, type ReportFilters, type ReportGroup, type ReportPage, type ReportSort, type Team } from '../lib/api'
-import { MAX_REPORT_DAYS, clearedSearch, filtersFromSearch, filtersToSearch, reportRangeDays, reportRanges, useReportActive, useReportBreakdown, useReportEntries, useReportMembers, useReportProjects, useReportSummary } from '../lib/reports'
+import { MAX_REPORT_DAYS, clearedSearch, filtersFromSearch, filtersToSearch, reportRangeDays, reportRanges, useDownloadReport, useReportActive, useReportBreakdown, useReportEntries, useReportMembers, useReportProjects, useReportSummary } from '../lib/reports'
 import { formatDuration } from '../lib/time'
 
 const dateLabel = (date: string | null) => date === null ? 'Bez daty' : new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
@@ -114,6 +114,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
   const days = useReportBreakdown(userId, team.id, filters, 'DAY', dayPage)
   const mixed = useReportBreakdown(userId, team.id, filters, 'MEMBER_PROJECT', mixedPage)
   const entries = useReportEntries(userId, team.id, filters, sort, entryPage)
+  const csv = useDownloadReport(team.id, filters, 'csv')
   const memberOptions = useReportMembers(userId, team.id)
   const projectOptions = useReportProjects(userId, team.id)
   const queries = [summary, people, projects, days, mixed, entries, memberOptions, projectOptions]
@@ -155,10 +156,16 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
   return <section className="owner-dashboard" aria-label="Raport zespołu">
     <header className="teams-toolbar">
       <div><h2>Czas zespołu</h2><p>Zapisana praca w zespole {team.name}.</p></div>
-      <button className="button-secondary" disabled={busy} onClick={() => void Promise.all(queries.map(query => query.refetch()))}>
-        <RefreshCw size={15} className={busy ? 'spin' : ''} />Odśwież raport
-      </button>
+      <div className="report-actions">
+        <button className="button-secondary" disabled={csv.isPending} onClick={() => csv.mutate()}>
+          {csv.isPending ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />}Pobierz CSV
+        </button>
+        <button className="button-secondary" disabled={busy} onClick={() => void Promise.all(queries.map(query => query.refetch()))}>
+          <RefreshCw size={15} className={busy ? 'spin' : ''} />Odśwież raport
+        </button>
+      </div>
     </header>
+    {csv.isError && <p className="form-error" role="alert">{csv.error.message}</p>}
     <ActivePanel userId={userId} team={team} />
     <div className="report-ranges" role="group" aria-label="Szybkie zakresy dat">
       <button type="button" className="button-secondary" onClick={() => applyRange(ranges.today)}>Dzisiaj</button>
