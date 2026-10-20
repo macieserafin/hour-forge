@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,6 +28,14 @@ public class JiraIssueController {
     public JiraIssueController(JiraIssueService issues, RequestRateLimits rateLimits) {
         this.issues = issues;
         this.rateLimits = rateLimits;
+    }
+
+    /** The title and state of one issue the person may see, for a hover card; nothing is stored. */
+    @GetMapping("/issues/{issueId:[0-9]{1,20}}")
+    public IssueResponse one(@AuthenticationPrincipal AppUserPrincipal principal, @PathVariable String issueId, @RequestParam UUID teamId) {
+        rateLimits.jiraSearch(principal.getUserId());
+        var issue = issues.lookup(principal.getUserId(), teamId, issueId);
+        return new IssueResponse(issue.id(), issue.key(), issue.summary(), issue.status(), issue.issueType(), issue.projectKey());
     }
 
     @GetMapping("/issues")

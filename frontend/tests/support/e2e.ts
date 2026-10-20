@@ -12,7 +12,7 @@ export const test = base.extend<{ isolatedDatabase: void }>({
     const container = process.env.HOUR_FORGE_E2E_CONTAINER
     if (!container?.startsWith('hour-forge-e2e-')) throw new Error('Managed E2E database was not started. Run tests through playwright.config.ts.')
     const reset = () => execFileSync('docker', ['exec', container, 'psql', '-U', 'hourforge_e2e', '-d', 'hourforge_e2e',
-      '-v', 'ON_ERROR_STOP=1', '-c', 'TRUNCATE TABLE teams CASCADE; DELETE FROM email_tokens; DELETE FROM jira_user_authorizations; DELETE FROM oauth_states; DELETE FROM user_credentials; DELETE FROM users;'], { stdio: 'pipe' })
+      '-v', 'ON_ERROR_STOP=1', '-c', 'TRUNCATE TABLE teams CASCADE; DELETE FROM email_tokens; DELETE FROM jira_user_authorizations; DELETE FROM oauth_states; DELETE FROM user_preferences; DELETE FROM user_credentials; DELETE FROM users;'], { stdio: 'pipe' })
     reset()
     await request.delete(`${mailApi()}/api/v1/messages`)
     try {

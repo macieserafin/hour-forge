@@ -19,8 +19,10 @@ test('select team, create, inspect, edit and archive projects', { tag: '@respons
   await form.getByLabel('Nazwa projektu').fill(`  ${projectName}  `)
   await form.getByLabel('Opis', { exact: false }).fill('Pierwszy opis\nDruga linia')
   await page.screenshot({ path: testInfo.outputPath('project-create-modal.png'), fullPage: false, animations: 'disabled' })
-  // The textarea participates in the modal's keyboard focus loop, followed by the repository field and the buttons.
+  // The textarea participates in the modal's keyboard focus loop, followed by the colour choice (one tab stop), the repository field and the buttons.
   await form.getByLabel('Opis', { exact: false }).focus()
+  await page.keyboard.press('Tab')
+  await expect(form.getByLabel('Bez koloru')).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(form.getByLabel('Repozytorium GitHub', { exact: false })).toBeFocused()
   await page.keyboard.press('Tab')

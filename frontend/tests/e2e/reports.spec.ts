@@ -19,7 +19,7 @@ test('owner filters and pages team reports while a member only sees personal tim
         workDate: dates.today, durationSeconds: 60, description: `Owner task ${index}` })
     }
     await create(page.request, `/api/teams/${team.id}/projects/${historical.id}/archive`, {})
-    const foreign = await create(page.request, '/api/teams', { name: 'Unrelated team', timezone: 'UTC' })
+    const foreign = await create(page.request, '/api/teams', { name: 'Unrelated team', timezone: 'Europe/Warsaw' })
     const foreignProject = await create(page.request, `/api/teams/${foreign.id}/projects`, { name: 'Unrelated project', description: null })
     await create(page.request, '/api/time-entries', { teamId: foreign.id, projectId: foreignProject.id,
       workDate: dates.today, durationSeconds: 10000, description: 'Foreign team work' })

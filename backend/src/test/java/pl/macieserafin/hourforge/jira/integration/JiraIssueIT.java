@@ -195,4 +195,26 @@ class JiraIssueIT extends JiraIntegrationTestSupport {
         entityManager.flush();
         return jdbc.queryForObject(sql, Integer.class, person.getId());
     }
+
+    @Test
+    void readsOneIssueLiveForAHoverCardAndCachesItBriefly() throws Exception {
+        mvc.perform(get(ISSUES + "/10002").param("teamId", team.getId().toString()).with(user(memberPrincipal))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.key").value("PROJ-2")).andExpect(jsonPath("$.summary").value("Second task")).andExpect(jsonPath("$.status").value("To Do"));
+        assertThat(ATLASSIAN.issueCalls.get()).isEqualTo(1);
+        mvc.perform(get(ISSUES + "/10002").param("teamId", team.getId().toString()).with(user(memberPrincipal))).andExpect(status().isOk());
+        assertThat(ATLASSIAN.issueCalls.get()).isEqualTo(1);
+        mvc.perform(get(ISSUES + "/99999").param("teamId", team.getId().toString()).with(user(memberPrincipal))).andExpect(status().isNotFound());
+        assertThat(jdbc.queryForObject("select count(*) from time_entries", Integer.class)).isZero();
+    }
+
+    @Test
+    void theHoverCardNeedsMembershipAConnectedAccountAndAPlainIssueId() throws Exception {
+        mvc.perform(get(ISSUES + "/10001").param("teamId", team.getId().toString()).with(user(otherPrincipal))).andExpect(status().isConflict());
+        mvc.perform(get(ISSUES + "/10001").param("teamId", team.getId().toString()).with(user(new AppUserPrincipal(outsider.getId(), outsider.getEmail(), "unused"))))
+                .andExpect(status().isNotFound());
+        mvc.perform(get(ISSUES + "/10001").param("teamId", team.getId().toString())).andExpect(status().isUnauthorized());
+        mvc.perform(get(ISSUES + "/abc").param("teamId", team.getId().toString()).with(user(memberPrincipal))).andExpect(status().isNotFound());
+        mvc.perform(get(ISSUES + "/1%2F..").param("teamId", team.getId().toString()).with(user(memberPrincipal))).andExpect(status().is4xxClientError());
+        assertThat(ATLASSIAN.issueCalls.get()).isZero();
+    }
 }

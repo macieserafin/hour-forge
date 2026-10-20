@@ -54,13 +54,13 @@ export function SwitchTimerModal({ userId, entry, teams, description, onClose, o
   const [next, setNext] = useState('')
   const [issue, setIssue] = useState<JiraIssueLink | null>(null)
   const [validation, setValidation] = useState('')
-  const swap = useSwitchTimer(userId)
+  const swap = useSwitchTimer(userId, onSwitched)
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!projects.data?.some(project => project.id === projectId)) { setValidation('Wybierz projekt, nad którym teraz pracujesz.'); return }
     setValidation('')
     swap.mutate({ stop: { entryId: entry.id, description: finished.trim() },
-      start: { teamId, projectId, description: next.trim() || null, jiraIssueId: issue?.id ?? null } }, { onSuccess: result => onSwitched(result.stopped) })
+      start: { teamId, projectId, description: next.trim() || null, jiraIssueId: issue?.id ?? null } })
   }
   return <Modal title="Przełącz zadanie" busy={swap.isPending} onClose={onClose}>
     <p className="dialog-description">Zakończymy bieżący timer i od razu uruchomimy nowy. Jeśli nowego nie uda się uruchomić, bieżący działa dalej.</p>

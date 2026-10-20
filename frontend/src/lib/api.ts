@@ -482,7 +482,7 @@ async function timeRequest(path: string, body?: unknown, signal?: AbortSignal): 
       403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
       404: 'Nie znaleziono wpisu, projektu lub zespołu albo nie masz już do niego dostępu.',
       409: path.endsWith('/pause') || path.endsWith('/resume') ? 'Stan timera uległ zmianie. Sprawdź aktualny stan i spróbuj ponownie.'
-        : path.endsWith('/start') ? 'Nie można uruchomić timera. Sprawdź aktywny timer i status projektu.'
+        : path.endsWith('/start') ? 'Nie można uruchomić timera. Sprawdź aktywny timer, status projektu i połączenie z Jira.'
         : path.endsWith('/stop') ? 'Nie można zatrzymać tego timera. Mógł już zostać zatrzymany lub nie upłynęła jeszcze pełna sekunda.'
         : path.endsWith('/update') ? 'Nie można zmienić tego timera. Mógł już zostać zatrzymany, a projekt musi być aktywny i należeć do tego samego zespołu.'
         : path.endsWith('/switch') ? 'Nie można przełączyć timera. Bieżący timer musi działać co najmniej sekundę, a nowy projekt musi być aktywny.'
@@ -956,3 +956,6 @@ export const getDashboardOverview = (weekStart: Preferences['weekStart'], signal
   dashboardRequest<DashboardOverview>(`/api/dashboard/overview?${new URLSearchParams({ weekStart })}`, signal)
 export const getDashboardActivity = (weekStart: Preferences['weekStart'], weeks = 12, signal?: AbortSignal) =>
   dashboardRequest<DashboardActivity>(`/api/dashboard/activity?${new URLSearchParams({ weekStart, weeks: String(weeks) })}`, signal)
+
+export const getJiraIssue = (teamId: string, issueId: string, signal?: AbortSignal) =>
+  jiraRequest<JiraIssue>(`/api/integrations/jira/issues/${encodeURIComponent(issueId)}?${new URLSearchParams({ teamId })}`, 'GET', undefined, signal)

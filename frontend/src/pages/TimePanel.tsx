@@ -205,6 +205,9 @@ export function TimePanel({ userId }: { userId: string }) {
           <TimeEntryHistory key={`${userId}:${selected.id}`} userId={userId} teamId={selected.id} timezone={selected.timezone} readOnly={!!selected.archivedAt}
             canWorkAgain={active.isSuccess && !active.isFetching && !active.data && !start.isPending && !stop.isPending && !state.isPending && !discard.isPending}
             onCopy={selected.archivedAt ? undefined : setCopying}
+            onStartForIssue={item => start.mutate({ teamId: selected.id, projectId: item.projectId, description: null, jiraIssueId: item.jiraIssueId ?? null }, {
+              onSuccess: () => { saveLastProject(userId, selected.id, item.projectId); setSaved(null); stop.reset(); state.reset() },
+            })}
             onWorkAgain={item => start.mutate({ teamId: selected.id, projectId: item.projectId, description: item.description }, {
               onSuccess: () => { saveLastProject(userId, selected.id, item.projectId); setSaved(null); stop.reset(); state.reset() },
             })} />

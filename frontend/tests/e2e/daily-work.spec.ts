@@ -1,0 +1,81 @@
+import { test, expect, create, setupTeam, submitLogin, teamDate, write } from '../support/e2e'
+
+test('changes and switches a running timer, saves a template and repeats yesterday', async ({ page }) => {
+  const { team, project } = await setupTeam(page, `daily ${Date.now()}`)
+  const second = await write(page.request, `/api/teams/${team.id}/projects`, { name: `Second ${Date.now()}`, description: null, color: 'TEAL' })
+  await create(page.request, '/api/time-entries', { teamId: team.id, projectId: project.id, workDate: teamDate(1), durationSeconds: 1800, description: 'Yesterday work' })
+
+  await page.goto(`/time?team=${team.id}`)
+  await page.getByLabel('Projekt', { exact: true }).selectOption(project.id)
+  await page.getByLabel('Opis pracy', { exact: false }).first().fill('First task')
+  await page.getByRole('button', { name: 'Zapisz bieżące jako szablon' }).click()
+  await page.getByLabel('Nazwa szablonu').fill('Morning routine')
+  await page.getByRole('button', { name: 'Zapisz szablon' }).click()
+  await expect(page.getByRole('button', { name: 'Usuń szablon „Morning routine”' })).toBeVisible()
+  await page.getByRole('button', { name: 'Uruchom timer' }).click()
+
+  const timer = page.getByRole('region', { name: 'Aktywny timer' })
+  await expect(timer).toContainText(project.name)
+  await expect(page).toHaveTitle(/^▶ \d\d:\d\d:\d\d · /)
+  await page.waitForTimeout(1500)
+
+  await timer.getByRole('button', { name: 'Zmień projekt lub zadanie' }).click()
+  const change = page.getByRole('dialog', { name: 'Zmień projekt lub zadanie' })
+  await change.getByLabel('Projekt', { exact: true }).selectOption(second.id)
+  await change.getByRole('button', { name: 'Zapisz zmiany' }).click()
+  await expect(change).not.toBeVisible()
+  await expect(timer).toContainText(second.name)
+
+  await timer.getByRole('button', { name: 'Przełącz zadanie' }).click()
+  const swap = page.getByRole('dialog', { name: 'Przełącz zadanie' })
+  await swap.getByLabel('Nowy projekt').selectOption(project.id)
+  await swap.getByLabel('Opis nowej pracy', { exact: false }).fill('Next task')
+  await swap.getByRole('button', { name: 'Przełącz', exact: true }).click()
+  await expect(swap).not.toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'Praca zakończona i zapisana' })).toBeVisible()
+  await expect(timer).toContainText(project.name)
+  await expect(timer.getByLabel('Opis wykonanej pracy', { exact: false })).toHaveValue('Next task')
+  await page.waitForTimeout(1500)
+  await timer.getByRole('button', { name: 'Zakończ pracę' }).click()
+  await expect(page.getByText('Żaden timer nie jest uruchomiony.')).toBeVisible()
+  await expect(page).not.toHaveTitle(/^▶/)
+
+  const history = page.getByRole('region', { name: 'Wpisy historii czasu' })
+  await expect(history.getByRole('row').filter({ hasText: second.name })).toHaveCount(1)
+  await page.getByRole('button', { name: 'Powtórz wczorajszy dzień' }).click()
+  const repeat = page.getByRole('dialog', { name: 'Powtórz wczorajszy dzień' })
+  await expect(repeat).toContainText('Yesterday work')
+  await repeat.getByRole('button', { name: 'Skopiuj wpisy' }).click()
+  await expect(repeat.getByRole('status')).toContainText('Skopiowano wpisy: 1')
+  await repeat.getByRole('button', { name: 'Zamknij', exact: true }).click()
+  await expect(history.getByText('Yesterday work')).toHaveCount(2)
+})
+
+test('remembers the device for 30 days and applies the chosen preferences', async ({ page, context }) => {
+  await page.goto('/login')
+  await page.getByLabel('Zapamiętaj mnie na tym urządzeniu (30 dni)').check()
+  await submitLogin(page)
+  await expect(page).toHaveURL(/\/dashboard$/)
+  const cookie = (await context.cookies()).find(item => item.name === 'JSESSIONID')!
+  expect(cookie.expires).toBeGreaterThan(Date.now() / 1000 + 29 * 86400)
+
+  await page.goto('/account')
+  const prefs = page.getByRole('region', { name: 'Preferencje' })
+  await prefs.getByLabel('Zapis czasu').selectOption('DECIMAL')
+  await prefs.getByLabel('Strona startowa po zalogowaniu').selectOption('TIME')
+  await prefs.getByRole('button', { name: 'Zapisz ustawienia' }).click()
+  await expect(prefs.getByRole('status')).toContainText('Ustawienia zostały zapisane.')
+
+  const team = await create(page.request, '/api/teams', { name: `Prefs ${Date.now()}`, timezone: 'Europe/Warsaw' })
+  const project = await create(page.request, `/api/teams/${team.id}/projects`, { name: 'Prefs project', description: null })
+  await create(page.request, '/api/time-entries', { teamId: team.id, projectId: project.id, workDate: teamDate(0), durationSeconds: 1800, description: null })
+
+  await page.goto('/login')
+  await expect(page).toHaveURL(/\/time/)
+  await page.goto(`/dashboard?team=${team.id}`)
+  await expect(page.getByLabel('Czas dzisiaj')).toContainText('0,50 h')
+
+  await page.getByRole('link', { name: /Co nowego/ }).click()
+  await expect(page.getByRole('heading', { name: 'Szybsza codzienna praca' })).toBeVisible()
+  await expect(page.getByLabel(/Nowości:/)).toHaveCount(0)
+})

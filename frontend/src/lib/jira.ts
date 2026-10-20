@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, disconnectJiraAccount, disconnectJiraSite, getJiraIssues, getJiraSites, getJiraStatus, selectJiraSite, startJiraAuthorization, type JiraIntent, type JiraIssueFilters } from './api'
+import { ApiError, disconnectJiraAccount, disconnectJiraSite, getJiraIssue, getJiraIssues, getJiraSites, getJiraStatus, selectJiraSite, startJiraAuthorization, type JiraIntent, type JiraIssueFilters } from './api'
 import { useAuthError } from './teams'
 
 export const jiraKey = (userId: string, teamId: string) => ['jira', userId, teamId] as const
@@ -50,6 +50,12 @@ export function useJiraIssues(userId: string, teamId: string, filters: JiraIssue
   })
   useEffect(() => { if (query.error) handleError(query.error) }, [query.error, handleError])
   return query
+}
+
+/** One issue, read live for a hover card; fetched only while the card is open and kept for a short while. */
+export function useJiraIssue(userId: string, teamId: string, issueId: string, enabled: boolean) {
+  return useQuery({ queryKey: [...jiraKey(userId, teamId), 'issue', issueId], queryFn: ({ signal }) => getJiraIssue(teamId, issueId, signal),
+    enabled, retry: false, staleTime: 60_000 })
 }
 
 export function useStartJira(teamId: string) {

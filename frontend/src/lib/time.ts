@@ -78,11 +78,12 @@ export function useUpdateTimer(userId: string) {
     onSuccess: entry => client.setQueryData(activeTimerKey(userId), entry) })
 }
 
-export function useSwitchTimer(userId: string) {
+/** The callback runs from the hook itself: the new timer replaces the old one on screen, so the dialog that asked may already be gone. */
+export function useSwitchTimer(userId: string, onStopped?: (stopped: TimeEntry) => void) {
   const client = useQueryClient()
   const callbacks = useTimeCallbacks(userId, true)
   return useMutation({ mutationFn: switchTimer, retry: false, ...callbacks,
-    onSuccess: result => client.setQueryData(activeTimerKey(userId), result.started) })
+    onSuccess: result => { client.setQueryData(activeTimerKey(userId), result.started); onStopped?.(result.stopped) } })
 }
 
 /** Whole seconds of work on a running timer: pauses are not counted, and a paused timer stands still. */

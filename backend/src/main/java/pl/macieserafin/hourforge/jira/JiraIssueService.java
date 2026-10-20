@@ -76,6 +76,17 @@ public class JiraIssueService {
     public record Found(UUID connectionId, JiraApiClient.Issue issue) {
     }
 
+    /** One issue for display (a tooltip): read live as the person, briefly cached, never stored. */
+    public JiraApiClient.Issue lookup(UUID userId, UUID teamId, String issueId) {
+        var connection = connection(userId, teamId);
+        var key = JiraSearchCache.key(userId, connection.getCloudId(), "issue:" + issueId, null);
+        var cached = cache.get(key);
+        if (cached.isPresent()) return cached.get().issues().get(0);
+        var issue = find(userId, teamId, issueId).issue();
+        cache.put(key, new JiraApiClient.SearchResult(java.util.List.of(issue), null));
+        return issue;
+    }
+
     /** One issue by id, as the person: used to check a link before it is saved. */
     public Found find(UUID userId, UUID teamId, String issueId) {
         var connection = connection(userId, teamId);

@@ -55,6 +55,7 @@ export function App() {
     <Route path="/forgot-password" element={user ? <Navigate to="/dashboard" replace /> : <ForgotPasswordPage />} />
     <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
     <Route path="/integrations" element={user ? <DashboardPage user={user} section="integrations" /> : signIn} />
+    <Route path="/whats-new" element={user ? <DashboardPage user={user} section="whats-new" /> : signIn} />
     <Route path="/account" element={user ? <DashboardPage user={user} section="account" /> : signIn} />
     <Route path="/invite/:token" element={user ? <InvitePage user={user} /> : signIn} />
     <Route path="*" element={user ? <StartRedirect userId={user.id} /> : <Navigate to="/login" replace />} />

@@ -66,6 +66,8 @@ export default async function globalSetup() {
         // Every scenario registers its accounts from 127.0.0.1; limits are verified by backend tests.
         APP_RATELIMIT_REGISTRATION_MAX: '100000', APP_RATELIMIT_TEAMCREATION_MAX: '100000',
         APP_RATELIMIT_INVITATIONCREATION_MAX: '100000', APP_RATELIMIT_PROJECTCREATION_MAX: '100000',
+        // Background jobs have their own tests; a browser run must not be disturbed by them.
+        JOBS_ENABLED: 'false',
         JIRA_INTEGRATION_ENABLED: 'true', JIRA_CLIENT_ID: 'e2e-client', JIRA_CLIENT_SECRET: 'e2e-client-secret-only',
         JIRA_REDIRECT_URI: redirectUri, JIRA_TOKEN_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
         APP_JIRA_AUTHBASEURL: atlassian.url, APP_JIRA_APIBASEURL: atlassian.url },

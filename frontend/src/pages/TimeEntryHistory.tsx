@@ -11,9 +11,10 @@ import { formatDuration, useTimeEntryHistory } from '../lib/time'
 const emptyFilters: TimeEntryHistoryFilters = { projectId: '', from: '', to: '', q: '' }
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
 
-export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false, canWorkAgain = false, onWorkAgain, onCopy }: {
+export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false, canWorkAgain = false, onWorkAgain, onCopy, onStartForIssue }: {
   userId: string; teamId: string; timezone: string; readOnly?: boolean; canWorkAgain?: boolean; onWorkAgain?: (entry: TimeEntryHistoryItem) => void
   onCopy?: (entry: TimeEntryHistoryItem) => void
+  onStartForIssue?: (entry: TimeEntryHistoryItem) => void
 }) {
   const projects = useProjects(userId, teamId, true)
   const [draft, setDraft] = useState(emptyFilters)
@@ -93,13 +94,15 @@ export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false, c
             <thead><tr><th scope="col">Data pracy</th><th scope="col">Projekt i opis pracy</th><th scope="col">Rodzaj</th><th scope="col">Czas</th>{!readOnly && <th scope="col">Akcje</th>}</tr></thead>
             <tbody>{history.data.content.map(entry => <tr key={entry.id}>
               <td>{entry.workDate ? <time dateTime={entry.workDate}>{dateLabel(entry.workDate)}</time> : 'Bez daty'}</td>
-              <td><strong className="history-project-name"><ProjectDot color={entry.projectColor} />{entry.projectName}</strong><p className="history-description">{entry.description || 'Bez opisu'}</p><JiraKeyLink userId={userId} teamId={entry.teamId} issueKey={entry.jiraIssueKey} />{entry.editedAt && <span className="edited-mark" title={`Ostatnio zmieniony ${new Date(entry.editedAt).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })}`}>edytowano</span>}</td>
+              <td><strong className="history-project-name"><ProjectDot color={entry.projectColor} />{entry.projectName}</strong><p className="history-description">{entry.description || 'Bez opisu'}</p><JiraKeyLink userId={userId} teamId={entry.teamId} issueKey={entry.jiraIssueKey} issueId={entry.jiraIssueId} />{entry.editedAt && <span className="edited-mark" title={`Ostatnio zmieniony ${new Date(entry.editedAt).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })}`}>edytowano</span>}</td>
               <td><span className="history-entry-type">{entry.entryType === 'TIMER' ? 'Timer' : 'Wpis ręczny'}</span></td>
               <td className="history-duration">{formatDuration(entry.durationSeconds)}</td>
               {!readOnly && <td><div className="history-actions">
                 <button className="text-link" disabled={!canWorkAgain || !projects.data?.some(project => project.id === entry.projectId && !project.archivedAt)}
                   aria-label={`Pracuj ponownie nad: ${entry.projectName}${entry.description ? ` — ${entry.description}` : ''}`}
                   onClick={() => onWorkAgain?.(entry)}>Pracuj ponownie</button>
+                {entry.jiraIssueId && entry.jiraIssueKey && onStartForIssue && <button className="text-link" disabled={!canWorkAgain || !projects.data?.some(project => project.id === entry.projectId && !project.archivedAt)}
+                  aria-label={`Uruchom timer dla zadania ${entry.jiraIssueKey}`} onClick={() => onStartForIssue(entry)}>Start: {entry.jiraIssueKey}</button>}
                 {onCopy && <button className="text-link" aria-label={`Kopiuj wpis: ${entry.projectName}${entry.description ? ` — ${entry.description}` : ''}`} onClick={() => onCopy(entry)}>Kopiuj</button>}
                 <button className="text-link" disabled={!projects.data || projects.isError} onClick={() => setAction({ type: 'edit', entry })}>Edytuj</button>
                 <button className="text-link" onClick={() => setAction({ type: 'delete', entry })}>Usuń</button></div></td>}
