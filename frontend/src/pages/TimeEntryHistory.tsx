@@ -5,10 +5,12 @@ import { DeleteTimeEntry, EditTimeEntry } from './TimeEntryActions'
 import { useProjects } from '../lib/projects'
 import { formatDuration, useTimeEntryHistory } from '../lib/time'
 
-const emptyFilters: TimeEntryHistoryFilters = { projectId: '', from: '', to: '' }
+const emptyFilters: TimeEntryHistoryFilters = { projectId: '', from: '', to: '', q: '' }
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
 
-export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false }: { userId: string; teamId: string; timezone: string; readOnly?: boolean }) {
+export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false, canWorkAgain = false, onWorkAgain }: {
+  userId: string; teamId: string; timezone: string; readOnly?: boolean; canWorkAgain?: boolean; onWorkAgain?: (entry: TimeEntryHistoryItem) => void
+}) {
   const projects = useProjects(userId, teamId, true)
   const [draft, setDraft] = useState(emptyFilters)
   const [filters, setFilters] = useState(emptyFilters)
@@ -16,7 +18,7 @@ export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false }:
   const [validation, setValidation] = useState('')
   const [action, setAction] = useState<{ type: 'edit' | 'delete'; entry: TimeEntryHistoryItem } | null>(null)
   const history = useTimeEntryHistory(userId, teamId, filters, page)
-  const hasFilters = !!(filters.projectId || filters.from || filters.to || filters.undated)
+  const hasFilters = !!(filters.projectId || filters.from || filters.to || filters.undated || filters.q?.trim())
 
   function apply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -46,6 +48,9 @@ export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false }:
 
     <form className="history-filters" aria-label="Filtry historii czasu" onSubmit={apply} onInput={() => setValidation('')}>
       <label><input type="checkbox" checked={!!draft.undated} onChange={event => setDraft({ ...draft, undated: event.target.checked, from: '', to: '' })} /> Tylko bez daty</label>
+      <div className="field-group"><label htmlFor="history-search">Szukaj w opisach</label>
+        <input className="text-input" id="history-search" type="search" maxLength={200} value={draft.q ?? ''}
+          onChange={event => setDraft({ ...draft, q: event.target.value })} /></div>
       <div className="field-group"><label htmlFor="history-project">Projekt w historii</label>
         <select className="text-input" id="history-project" value={draft.projectId} disabled={projects.isPending || projects.isError}
           onChange={event => setDraft({ ...draft, projectId: event.target.value })}>
@@ -83,7 +88,11 @@ export function TimeEntryHistory({ userId, teamId, timezone, readOnly = false }:
               <td><strong className="history-project-name">{entry.projectName}</strong><p className="history-description">{entry.description || 'Bez opisu'}</p></td>
               <td><span className="history-entry-type">{entry.entryType === 'TIMER' ? 'Timer' : 'Wpis ręczny'}</span></td>
               <td className="history-duration">{formatDuration(entry.durationSeconds)}</td>
-              {!readOnly && <td><div className="history-actions"><button className="text-link" disabled={!projects.data || projects.isError} onClick={() => setAction({ type: 'edit', entry })}>Edytuj</button>
+              {!readOnly && <td><div className="history-actions">
+                <button className="text-link" disabled={!canWorkAgain || !projects.data?.some(project => project.id === entry.projectId && !project.archivedAt)}
+                  aria-label={`Pracuj ponownie nad: ${entry.projectName}${entry.description ? ` — ${entry.description}` : ''}`}
+                  onClick={() => onWorkAgain?.(entry)}>Pracuj ponownie</button>
+                <button className="text-link" disabled={!projects.data || projects.isError} onClick={() => setAction({ type: 'edit', entry })}>Edytuj</button>
                 <button className="text-link" onClick={() => setAction({ type: 'delete', entry })}>Usuń</button></div></td>}
             </tr>)}</tbody>
           </table>

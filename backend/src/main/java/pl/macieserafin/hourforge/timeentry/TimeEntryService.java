@@ -29,6 +29,7 @@ import java.util.UUID;
 public class TimeEntryService {
     private static final int MAX_MANUAL_DURATION_SECONDS = 24 * 60 * 60;
     private static final int WORK_DATE_YEARS_BACK = 2;
+    private static final int MAX_SEARCH_LENGTH = 200;
 
     private final Clock clock;
     private final TimeEntryRepository entries;
@@ -50,14 +51,25 @@ public class TimeEntryService {
     @Transactional(readOnly = true)
     public TimeEntryHistoryResponse history(UUID userId, UUID teamId, UUID projectId,
                                             LocalDate from, LocalDate to, int page, int size) {
-        return history(userId, teamId, projectId, from, to, page, size, false);
+        return history(userId, teamId, projectId, from, to, page, size, false, null);
     }
 
     @Transactional(readOnly = true)
     public TimeEntryHistoryResponse history(UUID userId, UUID teamId, UUID projectId,
                                             LocalDate from, LocalDate to, int page, int size, boolean undated) {
+        return history(userId, teamId, projectId, from, to, page, size, undated, null);
+    }
+
+    @Transactional(readOnly = true)
+    public TimeEntryHistoryResponse history(UUID userId, UUID teamId, UUID projectId,
+                                            LocalDate from, LocalDate to, int page, int size, boolean undated,
+                                            String text) {
         if (!users.existsById(userId)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+        var search = text == null ? "" : text.strip();
+        if (search.length() > MAX_SEARCH_LENGTH) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Search text is too long");
         }
         if (page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE
                 || (from != null && to != null && from.isAfter(to)) || (undated && (from != null || to != null))) {
@@ -76,6 +88,10 @@ public class TimeEntryService {
             predicates.add(cb.or(cb.equal(root.get("entryType"), EntryType.MANUAL),
                     cb.and(cb.equal(root.get("entryType"), EntryType.TIMER), cb.isNotNull(root.get("endedAt")))));
             if (projectId != null) predicates.add(cb.equal(root.get("project").get("id"), projectId));
+            if (!search.isEmpty()) {
+                var escaped = search.toLowerCase().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+                predicates.add(cb.like(cb.lower(root.get("description")), "%" + escaped + "%", '\\'));
+            }
             if (undated) predicates.add(cb.isNull(root.get("workDate")));
             if (from != null) predicates.add(cb.greaterThanOrEqualTo(root.get("workDate"), from));
             if (to != null) predicates.add(cb.lessThanOrEqualTo(root.get("workDate"), to));
@@ -148,6 +164,14 @@ public class TimeEntryService {
         completePause(entry, clock.instant().truncatedTo(ChronoUnit.MICROS));
         updateDescription(entry, request.description());
         return response(entries.saveAndFlush(entry));
+    }
+
+    @Transactional
+    public void discard(UUID userId, UUID entryId) {
+        lockUser(userId);
+        // Ownership is sufficient, like stopping: losing team access must not trap a mistaken timer.
+        entries.delete(unfinishedTimer(userId, entryId));
+        entries.flush();
     }
 
     private TimeEntry unfinishedTimer(UUID userId, UUID entryId) {

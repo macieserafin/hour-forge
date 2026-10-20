@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, changeTimerState, createManualTimeEntry, deleteTimeEntry, getActiveTimer, getTimeEntryHistory, startTimer, stopTimer, updateTimeEntry, type TimeEntryHistoryFilters } from './api'
+import { ApiError, changeTimerState, createManualTimeEntry, deleteTimeEntry, discardTimer, getActiveTimer, getTimeEntryHistory, startTimer, stopTimer, updateTimeEntry, type TimeEntryHistoryFilters } from './api'
 import { teamsKey, useAuthError } from './teams'
 import { dashboardKey } from './dashboard'
 
@@ -71,6 +71,13 @@ export function useChangeTimerState(userId: string) {
     onSuccess: entry => client.setQueryData(activeTimerKey(userId), entry) })
 }
 
+export function useDiscardTimer(userId: string) {
+  const client = useQueryClient()
+  const callbacks = useTimeCallbacks(userId, true)
+  return useMutation({ mutationFn: discardTimer, retry: false, ...callbacks,
+    onSuccess: () => client.setQueryData(activeTimerKey(userId), null) })
+}
+
 export function useManualTimeEntry(userId: string) {
   const callbacks = useTimeCallbacks(userId, true)
   return useMutation({ mutationFn: createManualTimeEntry, retry: false, ...callbacks })
@@ -85,6 +92,36 @@ export function useDeleteTimeEntry(userId: string) {
   const callbacks = useTimeCallbacks(userId, true)
   return useMutation({ mutationFn: deleteTimeEntry, retry: false, ...callbacks })
 }
+
+/** A running timer is flagged as possibly forgotten after this much counted work. */
+export const LONG_TIMER_SECONDS = 12 * 60 * 60
+
+// Per-browser conveniences only: storage may be missing or blocked, so every access is guarded.
+function readStored(key: string) {
+  try { return window.localStorage.getItem(key) } catch { return null }
+}
+
+function writeStored(key: string, value: string | null) {
+  try {
+    if (value === null) window.localStorage.removeItem(key)
+    else window.localStorage.setItem(key, value)
+  } catch { /* storage unavailable */ }
+}
+
+const lastProjectKey = (userId: string, teamId: string) => `hourforge:last-project:${userId}:${teamId}`
+const timerDraftKey = (userId: string, entryId: string) => `hourforge:timer-draft:${userId}:${entryId}`
+const longTimerKey = (userId: string, entryId: string) => `hourforge:long-timer-dismissed:${userId}:${entryId}`
+
+export const readLastProject = (userId: string, teamId: string) => readStored(lastProjectKey(userId, teamId))
+export const saveLastProject = (userId: string, teamId: string, projectId: string) => writeStored(lastProjectKey(userId, teamId), projectId)
+export const readTimerDraft = (userId: string, entryId: string) => readStored(timerDraftKey(userId, entryId))
+export const saveTimerDraft = (userId: string, entryId: string, description: string) => writeStored(timerDraftKey(userId, entryId), description)
+export const clearTimerLocalState = (userId: string, entryId: string) => {
+  writeStored(timerDraftKey(userId, entryId), null)
+  writeStored(longTimerKey(userId, entryId), null)
+}
+export const isLongTimerDismissed = (userId: string, entryId: string) => readStored(longTimerKey(userId, entryId)) === '1'
+export const dismissLongTimer = (userId: string, entryId: string) => writeStored(longTimerKey(userId, entryId), '1')
 
 export const MAX_MANUAL_DURATION_SECONDS = 24 * 60 * 60
 export const workDateRangeMessage = 'Data pracy musi mieścić się w ostatnich 2 latach i nie może być późniejsza niż dziś.'

@@ -202,6 +202,46 @@ class TimeEntryHistoryIT extends ApiIntegrationTestSupport {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void searchMatchesDescriptionsIgnoringCaseEscapesWildcardsAndKeepsOtherFilters() throws Exception {
+        var login = describe("Fix LOGIN bug", "2026-10-18");
+        describe("Rate 100% done", "2026-10-17");
+        describe("snake_case name", "2026-10-16");
+        describe("snakeXcase name", "2026-10-15");
+        manual(actor, project, "2026-10-14");
+        var foreign = entries.saveAndFlush(new TimeEntry(other, team, project, EntryType.MANUAL,
+                LocalDate.parse("2026-10-13"), null, null, 60, "login of someone else"));
+
+        search("login", 1).andExpect(jsonPath("$.content[0].id").value(login.getId().toString()));
+        search("  Login ", 1);
+        search("%", 1).andExpect(jsonPath("$.content[0].description").value("Rate 100% done"));
+        search("_", 1).andExpect(jsonPath("$.content[0].description").value("snake_case name"));
+        search("\\", 0);
+        search("nothing", 0);
+        search("", 5);
+        mvc.perform(get("/api/time-entries").param("teamId", team.getId().toString()).param("q", "login")
+                        .param("from", "2026-10-19").with(user(principal)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
+        search("x".repeat(201), 0, 400);
+        search("x".repeat(200), 0);
+        org.assertj.core.api.Assertions.assertThat(foreign.getId()).isNotNull();
+    }
+
+    private TimeEntry describe(String description, String date) {
+        return entries.saveAndFlush(new TimeEntry(actor, team, project, EntryType.MANUAL,
+                LocalDate.parse(date), null, null, 60, description));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions search(String text, int total) throws Exception {
+        return search(text, total, 200);
+    }
+
+    private org.springframework.test.web.servlet.ResultActions search(String text, int total, int status) throws Exception {
+        var result = mvc.perform(get("/api/time-entries").param("teamId", team.getId().toString())
+                .param("q", text).with(user(principal))).andExpect(status().is(status));
+        return status == 200 ? result.andExpect(jsonPath("$.totalElements").value(total)) : result;
+    }
+
     private TimeEntry manual(User owner, Project target, String date) {
         return entries.saveAndFlush(new TimeEntry(owner, target.getTeam(), target, EntryType.MANUAL,
                 LocalDate.parse(date), null, null, 120, "Manual work"));

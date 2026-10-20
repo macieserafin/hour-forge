@@ -143,6 +143,7 @@ export interface TimeEntryHistoryFilters {
   projectId: string
   from: string
   to: string
+  q?: string
 }
 
 export async function getTimeEntryHistory(teamId: string, filters: TimeEntryHistoryFilters,
@@ -152,6 +153,7 @@ export async function getTimeEntryHistory(teamId: string, filters: TimeEntryHist
   if (filters.projectId) params.set('projectId', filters.projectId)
   if (filters.from) params.set('from', filters.from)
   if (filters.to) params.set('to', filters.to)
+  if (filters.q?.trim()) params.set('q', filters.q.trim())
   const response = await request(`/api/time-entries?${params}`, { signal })
   if (!response.ok) {
     const messages: Record<number, string> = {
@@ -404,6 +406,7 @@ async function timeRequest(path: string, body?: unknown, signal?: AbortSignal): 
       409: path.endsWith('/pause') || path.endsWith('/resume') ? 'Stan timera uległ zmianie. Sprawdź aktualny stan i spróbuj ponownie.'
         : path.endsWith('/start') ? 'Nie można uruchomić timera. Sprawdź aktywny timer i status projektu.'
         : path.endsWith('/stop') ? 'Nie można zatrzymać tego timera. Mógł już zostać zatrzymany lub nie upłynęła jeszcze pełna sekunda.'
+        : path.endsWith('/discard') ? 'Nie można odrzucić tego timera. Mógł już zostać zatrzymany lub odrzucony.'
         : 'Zespół jest zarchiwizowany i nie można dodać do niego czasu.',
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się odczytać lub zapisać czasu. Odśwież stan przed ponowieniem operacji.')
@@ -414,7 +417,8 @@ async function timeRequest(path: string, body?: unknown, signal?: AbortSignal): 
 export const getActiveTimer = (signal?: AbortSignal) => timeRequest('/api/timer/active', undefined, signal)
 export const startTimer = (body: StartTimerInput) => timeRequest('/api/timer/start', body) as Promise<TimeEntry>
 export const stopTimer = (body: { entryId: string; description: string | null }) => timeRequest('/api/timer/stop', body) as Promise<TimeEntry>
-export const changeTimerState = ({ action, ...body }: { action: 'pause' | 'resume'; entryId: string; description: string | null }) =>
+export const discardTimer = async (body: { entryId: string }) => { await timeRequest('/api/timer/discard', body) }
+export const changeTimerState =({ action, ...body }: { action: 'pause' | 'resume'; entryId: string; description: string | null }) =>
   timeRequest(`/api/timer/${action}`, body) as Promise<TimeEntry>
 export const createManualTimeEntry = (body: ManualTimeInput) => timeRequest('/api/time-entries', body) as Promise<TimeEntry>
 

@@ -38,6 +38,13 @@ public class TimerController {
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
+    @PostMapping("/discard")
+    public ResponseEntity<Void> discard(@AuthenticationPrincipal AppUserPrincipal principal,
+                                        @Valid @RequestBody TimerStateRequest request) {
+        entries.discard(principal.getUserId(), request.entryId());
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/pause")
     public TimeEntryResponse pause(@AuthenticationPrincipal AppUserPrincipal principal,
                                    @Valid @RequestBody TimerStateRequest request) {
