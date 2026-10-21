@@ -7,6 +7,7 @@ import { MAX_REPORT_DAYS, clearedSearch, filtersFromSearch, filtersToSearch, rep
 import { formatClock, formatDuration, formatHours } from '../lib/time'
 import { ProjectDot } from '../components/ProjectDot'
 import { projectColorHex } from '../lib/projectColors'
+import { useTags } from '../lib/tags'
 import { BarChart, type ChartItem } from '../components/BarChart'
 
 const dateLabel = (date: string | null) => date === null ? 'Bez daty' : new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
@@ -41,6 +42,7 @@ const breakdowns: Record<ReportGroup, { title: string; table: string; pages: str
   PROJECT: { title: 'Czas według projektów', table: 'Tabela czasu projektów', pages: 'Strony czasu projektów', columns: ['Projekt'] },
   DAY: { title: 'Czas według dni', table: 'Tabela czasu według dni', pages: 'Strony czasu według dni', columns: ['Dzień'] },
   MEMBER_PROJECT: { title: 'Czas według osób i projektów', table: 'Tabela czasu osób i projektów', pages: 'Strony czasu osób i projektów', columns: ['Osoba', 'Projekt'] },
+  TAG: { title: 'Czas według tagów', table: 'Tabela czasu tagów', pages: 'Strony czasu tagów', columns: ['Tag'] },
 }
 
 const MAX_CHART_PROJECTS = 8
@@ -73,6 +75,7 @@ function bucketCells(group: ReportGroup, bucket: ReportBucket): ReactNode[] {
     case 'PROJECT': return [<>{bucket.projectName}{archivedNote(bucket)}</>]
     case 'DAY': return [bucket.workDate ? <time dateTime={bucket.workDate}>{dateLabel(bucket.workDate)}</time> : 'Bez daty']
     case 'MEMBER_PROJECT': return [bucket.displayName, <>{bucket.projectName}{archivedNote(bucket)}</>]
+    case 'TAG': return [bucket.tagName ?? 'Bez tagu']
   }
 }
 
@@ -84,7 +87,7 @@ function BreakdownTable({ data, group, busy, onPage }: { data: ReportPage<Report
         <table className="team-table report-breakdown-table">
           <caption className="sr-only">{labels.title}</caption>
           <thead><tr>{labels.columns.map(column => <th key={column} scope="col">{column}</th>)}<th scope="col">Czas</th><th scope="col">Wpisy</th></tr></thead>
-          <tbody>{data.content.map(bucket => <tr key={`${bucket.workDate ?? 'none'}|${bucket.userId ?? ''}|${bucket.projectId ?? ''}`}>
+          <tbody>{data.content.map(bucket => <tr key={`${bucket.workDate ?? 'none'}|${bucket.userId ?? ''}|${bucket.projectId ?? ''}|${bucket.tagId ?? ''}`}>
             {bucketCells(group, bucket).map((cell, index) => <td key={index}>{cell}</td>)}
             <td className="history-duration">{formatDuration(bucket.durationSeconds)}</td><td>{bucket.entryCount}</td>
           </tr>)}</tbody>
@@ -95,6 +98,16 @@ function BreakdownTable({ data, group, busy, onPage }: { data: ReportPage<Report
 }
 
 const startedAt = (value: string | null) => value ? new Date(value).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : ''
+
+/** Time by tag. Only teams that have tags see it, so the others get no extra request or empty table. */
+function TagBreakdown({ userId, team, filters }: { userId: string; team: Team; filters: ReportFilters }) {
+  const [page, setPage] = useState(0)
+  const filtersKey = JSON.stringify(filters)
+  useEffect(() => setPage(0), [filtersKey])
+  const tags = useReportBreakdown(userId, team.id, filters, 'TAG', page)
+  return <section className="report-section" aria-label="Czas według tagów"><h3>Czas według tagów</h3>
+    <ReportState query={tags}>{data => <BreakdownTable data={data.data} group="TAG" busy={tags.isFetching} onPage={setPage} />}</ReportState></section>
+}
 
 function ActivePanel({ userId, team }: { userId: string; team: Team }) {
   const [page, setPage] = useState(0)
@@ -143,6 +156,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
   const csv = useDownloadReport(team.id, filters, 'csv')
   const pdf = useDownloadReport(team.id, filters, 'pdf')
   const memberOptions = useReportMembers(userId, team.id)
+  const tagOptions = useTags(userId, team.id, true)
   const projectOptions = useReportProjects(userId, team.id)
   const queries = [summary, people, projects, days, mixed, entries, memberOptions, projectOptions]
   const accessError = queries.map(query => query.error).find(error => error instanceof ApiError && [401, 403, 404].includes(error.status))
@@ -219,6 +233,10 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
         </select>
         {projectOptions.hasNextPage && !accessError && <button type="button" className="text-link report-load-more" disabled={projectOptions.isFetching} onClick={() => void projectOptions.fetchNextPage()}>Wczytaj kolejne projekty</button>}
       </div>
+      {(tagOptions.data?.length ?? 0) > 0 && <div className="field-group"><label htmlFor="report-tag">Tag</label>
+        <select className="text-input" id="report-tag" value={draft.tagId ?? ''} onChange={event => setDraft({ ...draft, tagId: event.target.value })}>
+          <option value="">Wszystkie tagi</option>{tagOptions.data!.map(tag => <option key={tag.id} value={tag.id}>{tag.name}{tag.archivedAt ? ' (archiwalny)' : ''}</option>)}
+        </select></div>}
       <div className="field-group"><label htmlFor="report-type">Rodzaj wpisu</label><select className="text-input" id="report-type" value={draft.entryType} onChange={event => setDraft({ ...draft, entryType: event.target.value as ReportFilters['entryType'] })}>
         <option value="">Wszystkie rodzaje</option><option value="TIMER">Timer</option><option value="MANUAL">Wpis ręczny</option>
       </select></div>
@@ -240,6 +258,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
         <section className="report-section" aria-label="Czas według osób"><h3>Czas według osób</h3><ReportState query={people}>{data => <BreakdownTable data={data.data} group="MEMBER" busy={people.isFetching} onPage={setMemberPage} />}</ReportState></section>
         <section className="report-section" aria-label="Czas według projektów"><h3>Czas według projektów</h3><ReportState query={projects}>{data => <>{complete(data.data) && <BarChart title="Podział czasu na projekty" layout="rows" labelHeading="Projekt" items={projectChart(data.data)} />}<BreakdownTable data={data.data} group="PROJECT" busy={projects.isFetching} onPage={setProjectPage} /></>}</ReportState></section>
         <section className="report-section" aria-label="Czas według dni"><h3>Czas według dni</h3><ReportState query={days}>{data => <>{complete(data.data) && <BarChart title="Czas w kolejnych dniach" labelHeading="Dzień" items={dayChart(data.data)} />}<BreakdownTable data={data.data} group="DAY" busy={days.isFetching} onPage={setDayPage} /></>}</ReportState></section>
+        {(tagOptions.data?.length ?? 0) > 0 && <TagBreakdown userId={userId} team={team} filters={filters} />}
         <section className="report-section" aria-label="Czas według osób i projektów"><h3>Osoby i projekty</h3><ReportState query={mixed}>{data => <BreakdownTable data={data.data} group="MEMBER_PROJECT" busy={mixed.isFetching} onPage={setMixedPage} />}</ReportState></section>
       </div>
       <section className="report-section report-history" aria-label="Wpisy zespołu">
@@ -258,7 +277,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
                 <tbody>{data.data.content.map(entry => <tr key={entry.id}>
                   <td data-label="Data pracy">{entry.workDate ? <time dateTime={entry.workDate}>{dateLabel(entry.workDate)}</time> : 'Bez daty'}</td>
                   <td data-label="Osoba">{entry.displayName}</td>
-                  <td data-label="Projekt i opis pracy"><strong className="history-project-name"><ProjectDot color={entry.projectColor} />{entry.projectName}</strong>{entry.projectArchivedAt && <span className="report-meta">Projekt archiwalny</span>}<p className="history-description">{entry.description || 'Bez opisu'}</p><JiraKeyLink userId={userId} teamId={team.id} issueKey={entry.jiraIssueKey} />{entry.editedAt && <span className="edited-mark" title={`Ostatnio zmieniony ${new Date(entry.editedAt).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })}`}>{entry.editedByName ? `poprawił(a): ${entry.editedByName}` : 'edytowano'}</span>}</td>
+                  <td data-label="Projekt i opis pracy"><strong className="history-project-name"><ProjectDot color={entry.projectColor} />{entry.projectName}</strong>{entry.projectArchivedAt && <span className="report-meta">Projekt archiwalny</span>}{entry.tagName && <span className="tag-mark">{entry.tagName}</span>}<p className="history-description">{entry.description || 'Bez opisu'}</p><JiraKeyLink userId={userId} teamId={team.id} issueKey={entry.jiraIssueKey} />{entry.editedAt && <span className="edited-mark" title={`Ostatnio zmieniony ${new Date(entry.editedAt).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })}`}>{entry.editedByName ? `poprawił(a): ${entry.editedByName}` : 'edytowano'}</span>}</td>
                   <td data-label="Rodzaj"><span className="history-entry-type">{entry.entryType === 'TIMER' ? 'Timer' : 'Wpis ręczny'}</span></td>
                   <td data-label="Czas" className="history-duration">{formatDuration(entry.durationSeconds)}</td>
                 </tr>)}</tbody>

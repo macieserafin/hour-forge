@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { ChevronLeft, ChevronRight, LoaderCircle, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Modal } from '../components/Modal'
+import { TagSelect } from '../components/TagSelect'
 import { ProjectDot } from '../components/ProjectDot'
 import type { Team, TeamMember, TimeEntryHistoryItem } from '../lib/api'
 import { useAddMemberEntry, useCorrectEntry, useDeleteMemberEntry, useMemberTimeEntries } from '../lib/corrections'
@@ -21,6 +22,7 @@ function CorrectionForm({ userId, team, member, entry, onDone }: { userId: strin
   const [minutes, setMinutes] = useState(String(entry ? Math.floor(entry.durationSeconds / 60) % 60 : 0))
   const [seconds, setSeconds] = useState(String(entry ? entry.durationSeconds % 60 : 0))
   const [description, setDescription] = useState(entry?.description ?? '')
+  const [tagId, setTagId] = useState(entry?.tagId ?? '')
   const [validation, setValidation] = useState('')
   const range = workDateRange(team.timezone)
   const options = (projects.data ?? []).filter(project => !project.archivedAt || project.id === entry?.projectId)
@@ -36,7 +38,7 @@ function CorrectionForm({ userId, team, member, entry, onDone }: { userId: strin
     }
     if (duration !== entry?.durationSeconds && duration > MAX_MANUAL_DURATION_SECONDS) { setValidation(maxDurationMessage); return }
     setValidation('')
-    const body = { teamId: team.id, projectId, workDate: undated ? null : date, durationSeconds: duration, description: description.trim() || null }
+    const body = { teamId: team.id, projectId, workDate: undated ? null : date, durationSeconds: duration, description: description.trim() || null, ...(tagId ? { tagId } : {}) }
     if (entry) change.mutate({ ...body, id: entry.id }, { onSuccess: onDone })
     else add.mutate({ ...body, memberId: member.userId }, { onSuccess: onDone })
   }
@@ -54,6 +56,7 @@ function CorrectionForm({ userId, team, member, entry, onDone }: { userId: strin
         <div><label htmlFor="fix-seconds">Sekundy</label><input id="fix-seconds" className="text-input" type="number" min={0} max={59} step={1} value={seconds} onChange={event => setSeconds(event.target.value)} /></div>
       </div></div>
       <div className="field-group"><label htmlFor="fix-description">Opis pracy <span className="optional-label">(opcjonalnie)</span></label><textarea id="fix-description" className="text-input project-description-input" rows={3} maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></div>
+      <TagSelect userId={userId} teamId={team.id} value={tagId} currentTag={entry?.tagId && entry.tagName ? { id: entry.tagId, name: entry.tagName } : null} onChange={setTagId} />
     </fieldset>
     {(validation || save.isError) && <p className="form-error" role="alert">{validation || save.error?.message}</p>}
     <footer className="dialog-actions"><button type="button" className="button-secondary" disabled={save.isPending} onClick={onDone}>Wróć do listy</button>

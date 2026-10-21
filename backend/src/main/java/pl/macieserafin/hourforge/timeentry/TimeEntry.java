@@ -17,6 +17,7 @@ import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import pl.macieserafin.hourforge.project.Project;
+import pl.macieserafin.hourforge.tag.Tag;
 import pl.macieserafin.hourforge.team.Team;
 import pl.macieserafin.hourforge.user.User;
 
@@ -69,6 +70,10 @@ public class TimeEntry {
     private Instant lastEditedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tag_id")
+    private Tag tag;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "last_edited_by")
     private User lastEditedBy;
 
@@ -117,6 +122,14 @@ public class TimeEntry {
 
     public void setLastEditedAt(Instant lastEditedAt) {
         this.lastEditedAt = lastEditedAt;
+    }
+
+    public Tag getTag() {
+        return tag;
+    }
+
+    public void setTag(Tag tag) {
+        this.tag = tag;
     }
 
     public User getLastEditedBy() {

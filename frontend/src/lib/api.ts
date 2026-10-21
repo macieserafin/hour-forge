@@ -99,6 +99,7 @@ export interface TimeEntry {
   pausedDurationSeconds: number
   jiraIssueId?: string | null
   jiraIssueKey?: string | null
+  tagId?: string | null
 }
 
 export interface StartTimerInput {
@@ -107,6 +108,8 @@ export interface StartTimerInput {
   description: string | null
   /** The Jira issue to link; null or absent means no link (when editing: remove it). */
   jiraIssueId?: string | null
+  /** The work tag; absent means no tag (when editing: remove it). */
+  tagId?: string | null
 }
 
 export interface DashboardSummary {
@@ -149,6 +152,9 @@ export interface TimeEntryHistoryItem {
   editedAt?: string | null
   editedByName?: string | null
   projectColor?: string | null
+  tagId?: string | null
+  tagName?: string | null
+  tagColor?: string | null
 }
 
 export interface TimeEntryHistory {
@@ -510,6 +516,7 @@ export interface UpdateTimerInput {
   projectId: string
   description: string | null
   jiraIssueId: string | null
+  tagId?: string | null
 }
 
 export interface SwitchTimerInput {
@@ -555,6 +562,7 @@ export interface ReportFilters {
   projectId: string
   entryType: '' | 'TIMER' | 'MANUAL'
   q?: string
+  tagId?: string
 }
 
 export interface ReportContext {
@@ -589,6 +597,9 @@ export interface ReportBucket {
   projectName: string | null
   projectArchivedAt: string | null
   projectColor?: string | null
+  tagId?: string | null
+  tagName?: string | null
+  tagColor?: string | null
   durationSeconds: number
   entryCount: number
 }
@@ -650,6 +661,8 @@ export interface ReportProject {
 }
 
 export interface ReportEntry {
+  tagName?: string | null
+  tagColor?: string | null
   jiraIssueKey?: string | null
   editedAt?: string | null
   editedByName?: string | null
@@ -681,6 +694,7 @@ function reportParams(filters: ReportFilters, page?: number) {
   if (filters.to) params.set('to', filters.to)
   if (filters.userId) params.set('userIds', filters.userId)
   if (filters.projectId) params.set('projectIds', filters.projectId)
+  if (filters.tagId) params.set('tagIds', filters.tagId)
   if (filters.entryType) params.set('entryType', filters.entryType)
   if (filters.q?.trim()) params.set('q', filters.q.trim())
   if (page !== undefined) { params.set('page', String(page)); params.set('size', '20') }
@@ -704,7 +718,7 @@ async function reportRequest<T>(teamId: string, endpoint: string, params: URLSea
 export const getReportSummary = (teamId: string, filters: ReportFilters, signal?: AbortSignal) =>
   reportRequest<ReportSummary>(teamId, 'summary', reportParams(filters), signal)
 
-export type ReportGroup = 'MEMBER' | 'PROJECT' | 'DAY' | 'MEMBER_PROJECT'
+export type ReportGroup = 'MEMBER' | 'PROJECT' | 'DAY' | 'MEMBER_PROJECT' | 'TAG'
 
 export interface ReportActiveTimer {
   entry: ReportEntry
@@ -998,3 +1012,42 @@ export const correctMemberTimeEntry = ({ teamId, id, ...body }: CorrectionInput 
   correctionRequest<null>(`${teamPath(teamId)}/time-entries/${encodeURIComponent(id)}`, 'PATCH', body)
 export const deleteMemberTimeEntry = ({ teamId, id }: { teamId: string; id: string }) =>
   correctionRequest<null>(`${teamPath(teamId)}/time-entries/${encodeURIComponent(id)}`, 'DELETE')
+
+export interface Tag {
+  id: string
+  teamId: string
+  name: string
+  color: string | null
+  archivedAt: string | null
+}
+
+export interface TagInput {
+  name: string
+  color: string | null
+}
+
+async function tagRequest<T>(teamId: string, method: 'GET' | 'POST' | 'PUT', suffix = '', body?: unknown, signal?: AbortSignal): Promise<T> {
+  const csrf = method === 'GET' ? null : await getCsrf()
+  const response = await request(`${teamPath(teamId)}/tags${suffix}`, {
+    method, signal, headers: csrf ? { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token } : undefined,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: 'Podaj nazwę tagu (do 40 znaków) i wybierz kolor z listy.',
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Tagami zarządza właściciel lub administrator zespołu albo sesja formularza wygasła.',
+      404: 'Zespół lub tag są niedostępne. Odśwież listę.',
+      409: method === 'GET' ? 'Nie udało się wczytać tagów.' : 'Tag o tej nazwie już istnieje, jest zarchiwizowany albo zespół jest zarchiwizowany.',
+    }
+    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wykonać operacji na tagach. Odśwież listę i spróbuj ponownie.')
+  }
+  return await response.json() as T
+}
+
+export const getTags = (teamId: string, includeArchived: boolean, signal?: AbortSignal) =>
+  tagRequest<Tag[]>(teamId, 'GET', includeArchived ? '?includeArchived=true' : '', undefined, signal)
+export const createTag = ({ teamId, ...body }: TagInput & { teamId: string }) => tagRequest<Tag>(teamId, 'POST', '', body)
+export const updateTag = ({ teamId, id, ...body }: TagInput & { teamId: string; id: string }) => tagRequest<Tag>(teamId, 'PUT', `/${encodeURIComponent(id)}`, body)
+export const archiveTag = ({ teamId, id }: { teamId: string; id: string }) => tagRequest<Tag>(teamId, 'POST', `/${encodeURIComponent(id)}/archive`)
+export const restoreTag = ({ teamId, id }: { teamId: string; id: string }) => tagRequest<Tag>(teamId, 'POST', `/${encodeURIComponent(id)}/restore`)

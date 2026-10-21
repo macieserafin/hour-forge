@@ -205,7 +205,7 @@ class JiraLinkIT extends JiraIntegrationTestSupport {
         var csv = new String(mvc.perform(get("/api/teams/" + team.getId() + "/reports/export.csv")
                         .param("from", LocalDate.now().toString()).param("to", LocalDate.now().toString()).with(user(ownerPrincipal)))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray(), StandardCharsets.UTF_8);
-        assertThat(csv).contains("Zadanie Jira").contains(";Website;PROJ-1;Work;");
+        assertThat(csv).contains("Zadanie Jira").contains(";Website;;PROJ-1;Work;");
         mvc.perform(get("/api/teams/" + team.getId() + "/reports/export.pdf").param("from", LocalDate.now().toString())
                         .param("to", LocalDate.now().toString()).with(user(ownerPrincipal)))
                 .andExpect(status().isOk());

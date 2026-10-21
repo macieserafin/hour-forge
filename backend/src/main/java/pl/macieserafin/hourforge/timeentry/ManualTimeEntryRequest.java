@@ -10,9 +10,9 @@ import java.util.UUID;
 public record ManualTimeEntryRequest(@NotNull UUID teamId, @NotNull UUID projectId,
                                      LocalDate workDate, @NotNull @Positive Integer durationSeconds,
                                      @Size(max = 2000) String description,
-                                     @Pattern(regexp = "[0-9]{1,20}") String jiraIssueId) {
+                                     @Pattern(regexp = "[0-9]{1,20}") String jiraIssueId, UUID tagId) {
     public ManualTimeEntryRequest(UUID teamId, UUID projectId, LocalDate workDate, Integer durationSeconds, String description) {
-        this(teamId, projectId, workDate, durationSeconds, description, null);
+        this(teamId, projectId, workDate, durationSeconds, description, null, null);
     }
 
     public ManualTimeEntryRequest {

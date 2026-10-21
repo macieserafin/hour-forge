@@ -17,6 +17,6 @@ public record AccountExport(Instant exportedAt, Profile profile, List<Membership
     public record Entry(UUID id, UUID teamId, String teamName, UUID projectId, String projectName, String type,
                         LocalDate workDate, Instant startedAt, Instant endedAt, Integer durationSeconds,
                         double pausedSeconds, String description, Instant createdAt, Instant updatedAt,
-                        String jiraIssueKey) {
+                        String jiraIssueKey, String tagName) {
     }
 }

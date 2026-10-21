@@ -21,6 +21,7 @@ export function mockApi(overrides: Record<string, Handler> = {}) {
       role: team.role, joinedAt: team.createdAt, leftAt: null }], page: 0, size: 20, totalElements: 1, totalPages: 1 }),
     [`GET /api/teams/${team.id}/invites`]: () => json({ content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 }),
     [`GET /api/teams/${team.id}/templates`]: () => json([]),
+    [`GET /api/teams/${team.id}/tags`]: () => json([]),
     [`GET /api/teams/${team.id}/projects`]: () => json([project]),
     [`GET /api/teams/${team.id}/projects/${project.id}`]: () => json(project),
     'GET /api/integrations/jira/status': () => json({ available: false, siteConnected: false, siteName: null, siteUrl: null, userConnected: false, canManage: false }),

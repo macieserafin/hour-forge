@@ -16,12 +16,13 @@ public final class ReportCsv {
 
     ReportCsv() {
         out.writeBytes(new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF});
-        row("Data pracy", "Osoba", "Zespół", "Projekt", "Zadanie Jira", "Opis", "Rodzaj", "Czas (gg:mm:ss)", "Czas (sekundy)");
+        row("Data pracy", "Osoba", "Zespół", "Projekt", "Tag", "Zadanie Jira", "Opis", "Rodzaj", "Czas (gg:mm:ss)", "Czas (sekundy)");
     }
 
     void entry(ReportResponse.Entry entry, String teamName) {
         long seconds = entry.durationSeconds() == null ? 0 : entry.durationSeconds();
         row(entry.workDate() == null ? "" : entry.workDate().toString(), entry.displayName(), teamName, entry.projectName(),
+                entry.tagName() == null ? "" : entry.tagName(),
                 entry.jiraIssueKey() == null ? "" : entry.jiraIssueKey(),
                 entry.description() == null ? "" : entry.description(),
                 entry.entryType() == EntryType.TIMER ? "Timer" : "Wpis ręczny", clock(seconds), Long.toString(seconds));

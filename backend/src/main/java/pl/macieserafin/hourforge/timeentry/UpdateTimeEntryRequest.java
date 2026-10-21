@@ -15,9 +15,9 @@ public record UpdateTimeEntryRequest(@NotNull UUID projectId, LocalDate workDate
                                      @NotNull @Positive @Digits(integer = 10, fraction = 0)
                                      @DecimalMax("2147483647") BigDecimal durationSeconds,
                                      @Size(max = 2000) String description,
-                                     @Pattern(regexp = "[0-9]{1,20}") String jiraIssueId) {
+                                     @Pattern(regexp = "[0-9]{1,20}") String jiraIssueId, UUID tagId) {
     public UpdateTimeEntryRequest(UUID projectId, LocalDate workDate, BigDecimal durationSeconds, String description) {
-        this(projectId, workDate, durationSeconds, description, null);
+        this(projectId, workDate, durationSeconds, description, null, null);
     }
 
     public UpdateTimeEntryRequest {

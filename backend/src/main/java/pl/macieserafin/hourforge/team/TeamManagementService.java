@@ -10,6 +10,7 @@ import pl.macieserafin.hourforge.jira.JiraConnectionRepository;
 import pl.macieserafin.hourforge.jira.JiraUserAuthorizationRepository;
 import pl.macieserafin.hourforge.jira.OAuthStateRepository;
 import pl.macieserafin.hourforge.project.ProjectRepository;
+import pl.macieserafin.hourforge.tag.TagRepository;
 import pl.macieserafin.hourforge.timeentry.EntryType;
 import pl.macieserafin.hourforge.timeentry.TimeEntryRepository;
 import pl.macieserafin.hourforge.user.UserRepository;
@@ -25,6 +26,7 @@ public class TeamManagementService {
     private final TeamMemberRepository members;
     private final UserRepository users;
     private final ProjectRepository projects;
+    private final TagRepository tags;
     private final TimeEntryRepository entries;
     private final TeamInviteRepository invites;
     private final JiraConnectionRepository jiraConnections;
@@ -36,11 +38,12 @@ public class TeamManagementService {
     public TeamManagementService(TeamRepository teams, TeamMemberRepository members, UserRepository users,
                                  ProjectRepository projects, TimeEntryRepository entries, TeamInviteRepository invites,
                                  JiraConnectionRepository jiraConnections, JiraUserAuthorizationRepository jiraAuthorizations,
-                                 OAuthStateRepository oauthStates, EntryTemplateRepository entryTemplates, Clock clock) {
+                                 OAuthStateRepository oauthStates, EntryTemplateRepository entryTemplates, TagRepository tags, Clock clock) {
         this.teams = teams;
         this.members = members;
         this.users = users;
         this.projects = projects;
+        this.tags = tags;
         this.entries = entries;
         this.invites = invites;
         this.jiraConnections = jiraConnections;
@@ -126,6 +129,7 @@ public class TeamManagementService {
         // Children first; the team row stays locked until the transaction commits.
         entries.deleteAllByTeamId(team.getId());
         entryTemplates.deleteAllByTeamId(team.getId());
+        tags.deleteAllByTeamId(team.getId());
         projects.deleteAllByTeamId(team.getId());
         invites.deleteAllByTeamId(team.getId());
         oauthStates.deleteAllByTeamId(team.getId());

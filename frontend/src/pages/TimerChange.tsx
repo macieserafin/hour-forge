@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { JiraIssuePicker, type JiraIssueLink } from '../components/JiraIssuePicker'
 import { Modal } from '../components/Modal'
+import { TagSelect } from '../components/TagSelect'
 import type { Team, TimeEntry } from '../lib/api'
 import { useProjects } from '../lib/projects'
 import { useSwitchTimer, useUpdateTimer } from '../lib/time'
@@ -18,10 +19,11 @@ export function ChangeTimerModal({ userId, entry, team, description, onClose, on
   const [projectId, setProjectId] = useState(entry.projectId)
   const [note, setNote] = useState(description)
   const [issue, setIssue] = useState<JiraIssueLink | null>(() => currentLink(entry))
+  const [tagId, setTagId] = useState(entry.tagId ?? '')
   const options = projects.data?.filter(project => !project.archivedAt || project.id === entry.projectId) ?? []
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    update.mutate({ entryId: entry.id, projectId, description: note.trim(), jiraIssueId: issue?.id ?? null }, { onSuccess: onChanged })
+    update.mutate({ entryId: entry.id, projectId, description: note.trim(), jiraIssueId: issue?.id ?? null, ...(tagId ? { tagId } : {}) }, { onSuccess: onChanged })
   }
   return <Modal title="Zmień projekt lub zadanie" busy={update.isPending} onClose={onClose}>
     <p className="dialog-description">Timer działa dalej, a czas liczy się od jego uruchomienia. Zespół: <strong>{team.name}</strong>.</p>
@@ -33,6 +35,7 @@ export function ChangeTimerModal({ userId, entry, team, description, onClose, on
             {options.map(project => <option key={project.id} value={project.id}>{project.name}{project.archivedAt ? ' (archiwalny)' : ''}</option>)}</select></div>
         <div className="field-group"><label htmlFor="change-note">Opis pracy <span className="optional-label">(opcjonalnie)</span></label>
           <textarea id="change-note" className="text-input timer-description" rows={3} maxLength={2000} value={note} onChange={event => setNote(event.target.value)} /></div>
+        <TagSelect userId={userId} teamId={entry.teamId} value={tagId} onChange={setTagId} />
         <JiraIssuePicker userId={userId} teamId={entry.teamId} value={issue} onChange={setIssue} />
       </fieldset>
       {update.isError && <p className="form-error" role="alert">{update.error.message}</p>}
@@ -53,6 +56,7 @@ export function SwitchTimerModal({ userId, entry, teams, description, onClose, o
   const [finished, setFinished] = useState(description)
   const [next, setNext] = useState('')
   const [issue, setIssue] = useState<JiraIssueLink | null>(null)
+  const [tagId, setTagId] = useState('')
   const [validation, setValidation] = useState('')
   const swap = useSwitchTimer(userId, onSwitched)
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -60,7 +64,7 @@ export function SwitchTimerModal({ userId, entry, teams, description, onClose, o
     if (!projects.data?.some(project => project.id === projectId)) { setValidation('Wybierz projekt, nad którym teraz pracujesz.'); return }
     setValidation('')
     swap.mutate({ stop: { entryId: entry.id, description: finished.trim() },
-      start: { teamId, projectId, description: next.trim() || null, jiraIssueId: issue?.id ?? null } })
+      start: { teamId, projectId, description: next.trim() || null, jiraIssueId: issue?.id ?? null, ...(tagId ? { tagId } : {}) } })
   }
   return <Modal title="Przełącz zadanie" busy={swap.isPending} onClose={onClose}>
     <p className="dialog-description">Zakończymy bieżący timer i od razu uruchomimy nowy. Jeśli nowego nie uda się uruchomić, bieżący działa dalej.</p>
@@ -76,6 +80,7 @@ export function SwitchTimerModal({ userId, entry, teams, description, onClose, o
             <option value="" disabled>Wybierz projekt</option>{projects.data?.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></div>
         <div className="field-group"><label htmlFor="switch-next">Opis nowej pracy <span className="optional-label">(opcjonalnie)</span></label>
           <textarea id="switch-next" className="text-input timer-description" rows={2} maxLength={2000} value={next} onChange={event => setNext(event.target.value)} /></div>
+        {teamId && <TagSelect key={`tag-${teamId}`} userId={userId} teamId={teamId} value={tagId} onChange={setTagId} />}
         {teamId && <JiraIssuePicker key={teamId} userId={userId} teamId={teamId} value={issue} onChange={setIssue} />}
       </fieldset>
       {(validation || swap.isError) && <p className="form-error" role="alert">{validation || swap.error?.message}</p>}

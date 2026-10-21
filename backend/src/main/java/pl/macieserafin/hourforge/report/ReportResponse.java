@@ -18,14 +18,15 @@ public final class ReportResponse {
     public record Breakdown(ReportGrouping groupBy, Context context, Page<Bucket> data) {}
     public record Bucket(LocalDate workDate, UUID userId, String displayName,
                          UUID projectId, String projectName, Instant projectArchivedAt, String projectColor,
-                         long durationSeconds, long entryCount) {}
+                         long durationSeconds, long entryCount, UUID tagId, String tagName, String tagColor) {}
     public record Member(UUID userId, String displayName, TeamRole role, Instant joinedAt, Instant leftAt) {}
     public record Project(UUID projectId, String name, String description, Instant createdAt, Instant archivedAt) {}
     public record Entry(UUID id, UUID userId, String displayName, UUID projectId, String projectName,
                         Instant projectArchivedAt, EntryType entryType, LocalDate workDate,
                         Instant startedAt, Instant endedAt, Integer durationSeconds, String description,
                         Instant pausedAt, long pausedDurationMicros, Instant createdAt, Instant updatedAt,
-                        String jiraIssueKey, Instant editedAt, String editedByName, String projectColor) {}
+                        String jiraIssueKey, Instant editedAt, String editedByName, String projectColor,
+                        String tagName, String tagColor) {}
     public record ActiveTimer(Entry entry, long elapsedSeconds) {}
     public record Active(Context context, Instant asOf, Page<ActiveTimer> data) {}
 }

@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.project.Project;
 import pl.macieserafin.hourforge.project.ProjectRepository;
+import pl.macieserafin.hourforge.tag.Tag;
+import pl.macieserafin.hourforge.tag.TagRepository;
 import pl.macieserafin.hourforge.team.TeamMember;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
@@ -38,15 +40,17 @@ public class TimeEntryService {
     private final TeamRepository teams;
     private final TeamMemberRepository members;
     private final ProjectRepository projects;
+    private final TagRepository tags;
 
     public TimeEntryService(TimeEntryRepository entries, UserRepository users, TeamRepository teams,
-                            TeamMemberRepository members, ProjectRepository projects, Clock clock) {
+                            TeamMemberRepository members, ProjectRepository projects, TagRepository tags, Clock clock) {
         this.clock = clock;
         this.entries = entries;
         this.users = users;
         this.teams = teams;
         this.members = members;
         this.projects = projects;
+        this.tags = tags;
     }
 
     @Transactional(readOnly = true)
@@ -121,7 +125,9 @@ public class TimeEntryService {
                 entry.getId(), entry.getTeam().getId(), entry.getProject().getId(), entry.getProject().getName(),
                 entry.getEntryType(), entry.getWorkDate(), entry.getDurationSeconds(), entry.getDescription(),
                 entry.getStartedAt(), entry.getEndedAt(), entry.getJiraIssueId(), entry.getJiraIssueKey(),
-                entry.getLastEditedAt(), entry.correctedByName(), entry.getProject().getColor() == null ? null : entry.getProject().getColor().name())).toList();
+                entry.getLastEditedAt(), entry.correctedByName(), entry.getProject().getColor() == null ? null : entry.getProject().getColor().name(),
+                entry.getTag() == null ? null : entry.getTag().getId(), entry.getTag() == null ? null : entry.getTag().getName(),
+                entry.getTag() == null || entry.getTag().getColor() == null ? null : entry.getTag().getColor().name())).toList();
         return new TimeEntryHistoryResponse(content, page, size, result.getTotalElements(), result.getTotalPages());
     }
 
@@ -155,6 +161,7 @@ public class TimeEntryService {
         var entry = new TimeEntry(user, project.getTeam(), project, EntryType.TIMER, workDate,
                 now, null, null, request.description());
         entry.setJiraIssue(link);
+        entry.setTag(tagFor(project.getTeam().getId(), request.tagId(), null));
         return response(save(entry, link));
     }
 
@@ -193,6 +200,7 @@ public class TimeEntryService {
         }
         updateDescription(entry, request.description());
         entry.setJiraIssue(link);
+        entry.setTag(tagFor(entry.getTeam().getId(), request.tagId(), entry.getTag()));
         return response(save(entry, link));
     }
 
@@ -207,6 +215,7 @@ public class TimeEntryService {
         var workDate = now.atZone(ZoneId.of(project.getTeam().getTimezone())).toLocalDate();
         var next = new TimeEntry(user, project.getTeam(), project, EntryType.TIMER, workDate, now, null, null, start.description());
         next.setJiraIssue(link);
+        next.setTag(tagFor(project.getTeam().getId(), start.tagId(), null));
         return new SwitchTimerResponse(response(stopped), response(save(next, link)));
     }
 
@@ -286,6 +295,7 @@ public class TimeEntryService {
         var entry = new TimeEntry(user, project.getTeam(), project, EntryType.MANUAL, request.workDate(),
                 null, null, request.durationSeconds(), request.description());
         entry.setJiraIssue(link);
+        entry.setTag(tagFor(project.getTeam().getId(), request.tagId(), null));
         return response(save(entry, link));
     }
 
@@ -321,6 +331,9 @@ public class TimeEntryService {
         boolean changed = !project.getId().equals(entry.getProject().getId()) || !java.util.Objects.equals(entry.getWorkDate(), request.workDate())
                 || !entry.getDurationSeconds().equals(durationSeconds) || !java.util.Objects.equals(entry.getDescription(), request.description())
                 || !java.util.Objects.equals(entry.getJiraIssueId(), link == null ? null : link.issueId());
+        var tag = tagFor(entry.getTeam().getId(), request.tagId(), entry.getTag());
+        changed |= !java.util.Objects.equals(entry.getTag() == null ? null : entry.getTag().getId(), tag == null ? null : tag.getId());
+        entry.setTag(tag);
         entry.setProject(project);
         entry.setWorkDate(request.workDate());
         entry.setDurationSeconds(durationSeconds);
@@ -354,6 +367,7 @@ public class TimeEntryService {
         requireManualDuration(durationSeconds);
         requireWorkDateInWindow(request.workDate(), team.getTimezone());
         var entry = new TimeEntry(member, team, project, EntryType.MANUAL, request.workDate(), null, null, durationSeconds, request.description());
+        entry.setTag(tagFor(teamId, request.tagId(), null));
         markEdited(entry, actor);
         return response(save(entry, null));
     }
@@ -423,6 +437,7 @@ public class TimeEntryService {
         for (var original : source) {
             var copy = new TimeEntry(user, team, original.getProject(), EntryType.MANUAL, request.toDate(), null, null, original.getDurationSeconds(), original.getDescription());
             // The link was checked when it was made; a link to a disconnected site was already removed with the site.
+            copy.setTag(original.getTag());
             if (original.getJiraIssueId() != null) copy.setJiraIssue(new IssueLink(original.getJiraConnectionId(), original.getJiraIssueId(), original.getJiraIssueKey()));
             entries.save(copy);
             total += original.getDurationSeconds();
@@ -445,6 +460,15 @@ public class TimeEntryService {
             if (link != null) throw new ResponseStatusException(HttpStatus.CONFLICT, "The Jira site of this team changed; choose the issue again");
             throw exception;
         }
+    }
+
+    /** A tag put on an entry must belong to its team and be active; the one an entry already has may be kept after archiving. */
+    private Tag tagFor(UUID teamId, UUID tagId, Tag current) {
+        if (tagId == null) return null;
+        if (current != null && current.getId().equals(tagId)) return current;
+        var tag = tags.findByIdAndTeamId(tagId, teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (tag.getArchivedAt() != null) throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived tags cannot be used");
+        return tag;
     }
 
     private void requireManualDuration(int durationSeconds) {
@@ -515,6 +539,7 @@ public class TimeEntryService {
         return new TimeEntryResponse(entry.getId(), entry.getUser().getId(), entry.getTeam().getId(),
                 entry.getProject().getId(), entry.getEntryType(), entry.getWorkDate(), entry.getStartedAt(),
                 entry.getEndedAt(), entry.getDurationSeconds(), entry.getDescription(), entry.getCreatedAt(), entry.getUpdatedAt(),
-                entry.getPausedAt(), entry.getPausedDurationMicros() / 1_000_000.0, entry.getJiraIssueId(), entry.getJiraIssueKey());
+                entry.getPausedAt(), entry.getPausedDurationMicros() / 1_000_000.0, entry.getJiraIssueId(), entry.getJiraIssueKey(),
+                entry.getTag() == null ? null : entry.getTag().getId());
     }
 }

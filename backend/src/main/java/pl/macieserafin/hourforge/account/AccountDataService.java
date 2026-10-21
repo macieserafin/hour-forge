@@ -92,7 +92,8 @@ public class AccountDataService {
                         entry.getProject().getId(), entry.getProject().getName(), entry.getEntryType().name(),
                         entry.getWorkDate(), entry.getStartedAt(), entry.getEndedAt(), entry.getDurationSeconds(),
                         entry.getPausedDurationMicros() / 1_000_000.0, entry.getDescription(), entry.getCreatedAt(),
-                        entry.getUpdatedAt(), entry.getJiraIssueKey())).toList();
+                        entry.getUpdatedAt(), entry.getJiraIssueKey(),
+                        entry.getTag() == null ? null : entry.getTag().getName())).toList();
         return new AccountExport(clock.instant(),
                 new AccountExport.Profile(user.getId(), user.getEmail(), user.getDisplayName(), user.getCreatedAt(),
                         user.getEmailVerifiedAt()),

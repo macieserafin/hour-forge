@@ -34,6 +34,7 @@ public class ReportRepository {
         if (filter.to() != null) predicates.add(cb.lessThanOrEqualTo(root.get("workDate"), filter.to()));
         if (!filter.userIds().isEmpty()) predicates.add(root.get("user").get("id").in(filter.userIds()));
         if (!filter.projectIds().isEmpty()) predicates.add(root.get("project").get("id").in(filter.projectIds()));
+        if (!filter.tagIds().isEmpty()) predicates.add(root.get("tag").get("id").in(filter.tagIds()));
         if (filter.entryType() != null) predicates.add(cb.equal(root.get("entryType"), filter.entryType()));
         if (filter.q() != null) predicates.add(DescriptionSearch.contains(cb, root.get("description"), filter.q()));
         return cb.and(predicates.toArray(Predicate[]::new));
@@ -66,6 +67,12 @@ public class ReportRepository {
             dimensions.add(root.get("project").get("archivedAt"));
             dimensions.add(root.get("project").get("color"));
         }
+        if (grouping.tag) {
+            var tag = root.join("tag", JoinType.LEFT);
+            dimensions.add(tag.get("id"));
+            dimensions.add(tag.get("name"));
+            dimensions.add(tag.get("color"));
+        }
         var selections = new ArrayList<Selection<?>>(dimensions);
         selections.add(cb.coalesce(cb.sumAsLong(root.get("durationSeconds")), 0L));
         selections.add(cb.count(root));
@@ -86,8 +93,11 @@ public class ReportRepository {
         var projectName = grouping.project ? row.get(index++, String.class) : null;
         var archived = grouping.project ? row.get(index++, java.time.Instant.class) : null;
         var color = grouping.project ? row.get(index++, pl.macieserafin.hourforge.project.ProjectColor.class) : null;
+        var tagId = grouping.tag ? row.get(index++, UUID.class) : null;
+        var tagName = grouping.tag ? row.get(index++, String.class) : null;
+        var tagColor = grouping.tag ? row.get(index++, pl.macieserafin.hourforge.project.ProjectColor.class) : null;
         return new ReportResponse.Bucket(day, userId, name, projectId, projectName, archived, color == null ? null : color.name(),
-                row.get(index++, Long.class), row.get(index, Long.class));
+                row.get(index++, Long.class), row.get(index, Long.class), tagId, tagName, tagColor == null ? null : tagColor.name());
     }
 
     public List<TimeEntry> entries(UUID teamId, ReportFilter filter, boolean active,
@@ -97,6 +107,7 @@ public class ReportRepository {
         var root = query.from(TimeEntry.class);
         root.fetch("user");
         root.fetch("project");
+        root.fetch("tag", JoinType.LEFT);
         String field = switch (sort) {
             case WORK_DATE -> "workDate";
             case DURATION -> "durationSeconds";
@@ -126,6 +137,11 @@ public class ReportRepository {
 
     public boolean containsProjects(UUID teamId, List<UUID> ids) {
         return ids.isEmpty() || em.createQuery("select count(p) from Project p where p.team.id = :teamId and p.id in :ids", Long.class)
+                .setParameter("teamId", teamId).setParameter("ids", ids).getSingleResult() == ids.stream().distinct().count();
+    }
+
+    public boolean containsTags(UUID teamId, List<UUID> ids) {
+        return ids.isEmpty() || em.createQuery("select count(t) from Tag t where t.team.id = :teamId and t.id in :ids", Long.class)
                 .setParameter("teamId", teamId).setParameter("ids", ids).getSingleResult() == ids.stream().distinct().count();
     }
 

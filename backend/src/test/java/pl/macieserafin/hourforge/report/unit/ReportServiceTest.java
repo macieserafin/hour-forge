@@ -46,6 +46,7 @@ class ReportServiceTest {
         var service = ownerService(team, Clock.fixed(Instant.parse(instant), ZoneOffset.UTC));
         when(reports.containsMembers(team.getId(), List.of())).thenReturn(true);
         when(reports.containsProjects(team.getId(), List.of())).thenReturn(true);
+        when(reports.containsTags(team.getId(), List.of())).thenReturn(true);
         var filter = new ReportFilter(monday, monday.plusDays(6), null, null, null);
         when(reports.totals(team.getId(), filter)).thenReturn(new ReportResponse.Totals(0, 0));
         var result = service.summary(actorId, team.getId(), empty);
@@ -82,6 +83,7 @@ class ReportServiceTest {
         var service = ownerService(team, CLOCK);
         when(reports.containsMembers(team.getId(), List.of())).thenReturn(true);
         when(reports.containsProjects(team.getId(), List.of())).thenReturn(true);
+        when(reports.containsTags(team.getId(), List.of())).thenReturn(true);
         var project = project(team);
         var running = new TimeEntry(user(), team, project, EntryType.TIMER, LocalDate.parse("2026-10-01"), NOW.minusSeconds(120), null, null, null);
         running.setPausedDurationMicros(30_500_000);

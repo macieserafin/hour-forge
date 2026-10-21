@@ -89,17 +89,17 @@ public class ReportExportService {
             pdf.heading("Wpisy");
             var rows = new ArrayList<List<String>>();
             boolean truncated = reports.forEachEntry(teamId, f, maxPdfEntries, entry -> rows.add(own
-                    ? List.of(date(entry.workDate()), entry.projectName(), jira(entry), text(entry.description()), kind(entry.entryType()), duration(entry))
-                    : List.of(date(entry.workDate()), entry.displayName(), entry.projectName(), jira(entry), text(entry.description()),
+                    ? List.of(date(entry.workDate()), entry.projectName(), tag(entry), jira(entry), text(entry.description()), kind(entry.entryType()), duration(entry))
+                    : List.of(date(entry.workDate()), entry.displayName(), entry.projectName(), tag(entry), jira(entry), text(entry.description()),
                             kind(entry.entryType()), duration(entry))));
             if (rows.isEmpty()) {
                 pdf.paragraph("Brak wpisów dla wybranych filtrów.");
             } else {
                 pdf.table(own
-                        ? List.of(new ReportPdf.Column("Data pracy", 70), new ReportPdf.Column("Projekt", 130), new ReportPdf.Column("Jira", 65), new ReportPdf.Column("Opis pracy", 350),
+                        ? List.of(new ReportPdf.Column("Data pracy", 70), new ReportPdf.Column("Projekt", 120), new ReportPdf.Column("Tag", 70), new ReportPdf.Column("Jira", 65), new ReportPdf.Column("Opis pracy", 290),
                                 new ReportPdf.Column("Rodzaj", 70), new ReportPdf.Column("Czas", 58, true))
-                        : List.of(new ReportPdf.Column("Data pracy", 70), new ReportPdf.Column("Osoba", 105), new ReportPdf.Column("Projekt", 110), new ReportPdf.Column("Jira", 65),
-                                new ReportPdf.Column("Opis pracy", 290), new ReportPdf.Column("Rodzaj", 70), new ReportPdf.Column("Czas", 58, true)),
+                        : List.of(new ReportPdf.Column("Data pracy", 70), new ReportPdf.Column("Osoba", 105), new ReportPdf.Column("Projekt", 100), new ReportPdf.Column("Tag", 60), new ReportPdf.Column("Jira", 65),
+                                new ReportPdf.Column("Opis pracy", 230), new ReportPdf.Column("Rodzaj", 70), new ReportPdf.Column("Czas", 58, true)),
                         rows);
             }
             if (truncated) {
@@ -148,6 +148,10 @@ public class ReportExportService {
 
     private static String date(java.time.LocalDate date) {
         return date == null ? "Bez daty" : date.toString();
+    }
+
+    private static String tag(ReportResponse.Entry entry) {
+        return entry.tagName() == null ? "" : entry.tagName();
     }
 
     private static String jira(ReportResponse.Entry entry) {

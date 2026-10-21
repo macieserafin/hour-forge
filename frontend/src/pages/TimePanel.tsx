@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Clock3, LoaderCircle, Pause, Plus, Play, Square, Trash2 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { JiraIssuePicker, type JiraIssueLink } from '../components/JiraIssuePicker'
+import { TagSelect } from '../components/TagSelect'
 import { TemplatePicker } from '../components/TemplatePicker'
 import { ProjectDot } from '../components/ProjectDot'
 import { Modal } from '../components/Modal'
@@ -15,7 +16,7 @@ import { LONG_TIMER_SECONDS, MAX_MANUAL_DURATION_SECONDS, clearTimerLocalState, 
 
 const dateLabel = (date: string | null) => date === null ? 'Bez daty' : new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
 
-interface ManualInitial { projectId: string; description: string | null; durationSeconds: number; jiraIssueId: string | null; jiraIssueKey: string | null }
+interface ManualInitial { projectId: string; description: string | null; durationSeconds: number; jiraIssueId: string | null; jiraIssueKey: string | null; tagId?: string | null }
 
 function ManualTimeModal({ userId, team, projects, projectId, initial, onClose, onSaved }: {
   userId: string; team: Team; projects: Project[]; projectId: string; initial?: ManualInitial; onClose: () => void; onSaved: (entry: TimeEntry) => void
@@ -30,6 +31,7 @@ function ManualTimeModal({ userId, team, projects, projectId, initial, onClose, 
   const [seconds, setSeconds] = useState(String((initial?.durationSeconds ?? 0) % 60))
   const [description, setDescription] = useState(initial?.description ?? '')
   const [issue, setIssue] = useState<JiraIssueLink | null>(initial?.jiraIssueId && initial.jiraIssueKey ? { id: initial.jiraIssueId, key: initial.jiraIssueKey, summary: '' } : null)
+  const [tagId, setTagId] = useState(initial?.tagId ?? '')
   const [validation, setValidation] = useState('')
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -43,7 +45,7 @@ function ManualTimeModal({ userId, team, projects, projectId, initial, onClose, 
     }
     if (duration > MAX_MANUAL_DURATION_SECONDS) { setValidation(maxDurationMessage); return }
     setValidation('')
-    save.mutate({ teamId: team.id, projectId: selected, workDate: undated ? null : date, durationSeconds: duration, description: description.trim() || null, jiraIssueId: issue?.id ?? null }, { onSuccess: onSaved })
+    save.mutate({ teamId: team.id, projectId: selected, workDate: undated ? null : date, durationSeconds: duration, description: description.trim() || null, jiraIssueId: issue?.id ?? null, ...(tagId ? { tagId } : {}) }, { onSuccess: onSaved })
   }
   return <Modal title={initial ? 'Kopiuj wpis' : 'Dodaj wpis ręczny'} busy={save.isPending} onClose={onClose}>
     <p className="dialog-description">Zespół: <strong>{team.name}</strong>. {initial ? 'Poprawiony wpis zapisze się jako nowy, na wybraną datę.' : 'Dodaj czas pracy bez uruchamiania timera.'}</p>
@@ -59,6 +61,7 @@ function ManualTimeModal({ userId, team, projects, projectId, initial, onClose, 
           <div><label htmlFor="manual-seconds">Sekundy</label><input className="text-input" id="manual-seconds" type="number" min={0} max={59} step={1} value={seconds} onChange={event => setSeconds(event.target.value)} /></div>
         </div></div>
         <div className="field-group"><label htmlFor="manual-description">Opis pracy <span className="optional-label">(opcjonalnie)</span></label><textarea className="text-input project-description-input" id="manual-description" rows={3} maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></div>
+        <TagSelect userId={userId} teamId={team.id} value={tagId} onChange={setTagId} />
         <JiraIssuePicker userId={userId} teamId={team.id} value={issue} onChange={setIssue} />
         <TemplatePicker userId={userId} teamId={team.id} current={{ projectId: selected, description, issue }}
           onApply={template => { setSelected(template.projectId); setDescription(template.description ?? ''); setIssue(template.jiraIssueId && template.jiraIssueKey ? { id: template.jiraIssueId, key: template.jiraIssueKey, summary: '' } : null) }} />
@@ -129,6 +132,7 @@ function TeamTimeEntry({ userId, team, start, canStart, onSaved, onStarted }: {
   const [projectId, setProjectId] = useState(() => readLastProject(userId, team.id) ?? '')
   const [description, setDescription] = useState('')
   const [issue, setIssue] = useState<JiraIssueLink | null>(null)
+  const [tagId, setTagId] = useState('')
   const [manual, setManual] = useState(false)
   const manualProjects = useProjects(userId, team.id, true, manual)
   const [validation, setValidation] = useState('')
@@ -137,8 +141,8 @@ function TeamTimeEntry({ userId, team, start, canStart, onSaved, onStarted }: {
     event.preventDefault()
     if (!selected) { setValidation('Wybierz projekt.'); return }
     setValidation('')
-    start.mutate({ teamId: team.id, projectId: selected.id, description: description.trim() || null, jiraIssueId: issue?.id ?? null }, {
-      onSuccess: () => { saveLastProject(userId, team.id, selected.id); setDescription(''); setIssue(null); onStarted() },
+    start.mutate({ teamId: team.id, projectId: selected.id, description: description.trim() || null, jiraIssueId: issue?.id ?? null, ...(tagId ? { tagId } : {}) }, {
+      onSuccess: () => { saveLastProject(userId, team.id, selected.id); setDescription(''); setIssue(null); setTagId(''); onStarted() },
     })
   }
   return <section className="time-entry-section" aria-label="Rejestrowanie czasu w zespole">
@@ -150,6 +154,7 @@ function TeamTimeEntry({ userId, team, start, canStart, onSaved, onStarted }: {
         <fieldset disabled={start.isPending}>
           <div className="field-group"><label htmlFor="time-project">Projekt</label><select className="text-input" id="time-project" required value={selected?.id ?? ''} onChange={event => { setProjectId(event.target.value); setValidation(''); start.reset() }}><option value="" disabled>Wybierz projekt</option>{projects.data.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></div>
           <div className="field-group"><label htmlFor="time-description">Opis pracy <span className="optional-label">(opcjonalnie)</span></label><textarea className="text-input timer-description" id="time-description" rows={3} maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></div>
+          <TagSelect userId={userId} teamId={team.id} value={tagId} onChange={setTagId} />
           <JiraIssuePicker userId={userId} teamId={team.id} value={issue} onChange={setIssue} />
           <TemplatePicker userId={userId} teamId={team.id} current={{ projectId, description, issue }}
             onApply={template => { setProjectId(template.projectId); setDescription(template.description ?? ''); setIssue(template.jiraIssueId && template.jiraIssueKey ? { id: template.jiraIssueId, key: template.jiraIssueKey, summary: '' } : null); setValidation('') }} />
@@ -169,7 +174,7 @@ function CopyEntryModal({ userId, team, item, onClose, onSaved }: { userId: stri
   const projects = useProjects(userId, team.id, true)
   if (projects.isPending || projects.isError) return <Modal title="Kopiuj wpis" busy={false} onClose={onClose}>{projects.isError ? <div role="alert">{projects.error.message}</div> : <p role="status">Ładowanie projektów…</p>}</Modal>
   return <ManualTimeModal userId={userId} team={team} projects={projects.data} projectId={item.projectId} onClose={onClose} onSaved={onSaved}
-    initial={{ projectId: item.projectId, description: item.description, durationSeconds: item.durationSeconds, jiraIssueId: item.jiraIssueId ?? null, jiraIssueKey: item.jiraIssueKey ?? null }} />
+    initial={{ projectId: item.projectId, description: item.description, durationSeconds: item.durationSeconds, jiraIssueId: item.jiraIssueId ?? null, jiraIssueKey: item.jiraIssueKey ?? null, tagId: item.tagId ?? null }} />
 }
 
 export function TimePanel({ userId }: { userId: string }) {

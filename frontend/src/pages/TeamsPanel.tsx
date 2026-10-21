@@ -1,3 +1,4 @@
+import { TagsPanel } from './TagsPanel'
 import { useState, type FormEvent } from 'react'
 import { Check, Copy, Link2, LoaderCircle, Plus, Settings, Users } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -117,6 +118,7 @@ export function TeamsPanel({ userId }: { userId: string }) {
         }} /> : <p className="form-error" role="alert">Ten zespół jest niedostępny. Wybierz inny zespół z listy.</p>}
       </>}
     {modal === 'create' && <CreateTeamModal userId={userId} onClose={() => setModal(null)} onCreated={team => { select(team); setModal(null) }} />}
+    {!teams.isError && selected && canManage(selected.role) && <TagsPanel key={`tags:${selected.id}`} userId={userId} team={selected} />}
     {!teams.isError && selected && canManage(selected.role) && <TeamInvitationsPanel key={`${selected.id}:${selected.role}`} userId={userId} team={selected} />}
     {modal === 'invite' && selected && canManage(selected.role) && !selected.archivedAt && <InviteModal key={selected.id} userId={userId} team={selected} onClose={() => setModal(null)} />}
     {modal === 'settings' && selected && canManage(selected.role) && <TeamSettingsModal key={selected.id} userId={userId} team={selected} onClose={() => setModal(null)}

@@ -95,7 +95,7 @@ public class ReportService {
         if (!ownOnly) return context(owner(actorId, teamId), filter, true);
         var team = activeMemberTeam(actorId, teamId);
         var own = new ReportFilter(filter.from(), filter.to(), java.util.List.of(actorId), filter.projectIds(),
-                filter.entryType(), filter.undated(), filter.q());
+                filter.entryType(), filter.undated(), filter.q(), filter.tagIds());
         return context(team, own, true);
     }
 
@@ -144,7 +144,7 @@ public class ReportService {
         }
         if ((from == null) != (to == null) || (from != null && (from.isAfter(to)
                 || from.getYear() < 1 || to.getYear() > 9999))
-                || input.userIds().size() > 100 || input.projectIds().size() > 100) {
+                || input.userIds().size() > 100 || input.projectIds().size() > 100 || input.tagIds().size() > 100) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Use a valid from/to pair and at most 100 IDs per filter");
         }
         if (from != null && ChronoUnit.DAYS.between(from, to) + 1 > MAX_REPORT_DAYS) {
@@ -153,7 +153,8 @@ public class ReportService {
         if (input.q() != null && input.q().length() > DescriptionSearch.MAX_LENGTH) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Search text can have at most " + DescriptionSearch.MAX_LENGTH + " characters");
         }
-        if (!reports.containsMembers(team.getId(), input.userIds()) || !reports.containsProjects(team.getId(), input.projectIds())) {
+        if (!reports.containsMembers(team.getId(), input.userIds()) || !reports.containsProjects(team.getId(), input.projectIds())
+                || !reports.containsTags(team.getId(), input.tagIds())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
         if (from == null && defaultWeek && !input.undated()) {
@@ -162,7 +163,8 @@ public class ReportService {
             to = from.plusDays(6);
         }
         var filter = new ReportFilter(from, to, input.userIds().stream().distinct().sorted().toList(),
-                input.projectIds().stream().distinct().sorted().toList(), input.entryType(), input.undated(), input.q());
+                input.projectIds().stream().distinct().sorted().toList(), input.entryType(), input.undated(), input.q(),
+                input.tagIds().stream().distinct().sorted().toList());
         return new ReportResponse.Context(team.getId(), team.getName(), team.getTimezone(), filter);
     }
 
@@ -177,7 +179,8 @@ public class ReportService {
                 e.getProject().getId(), e.getProject().getName(), e.getProject().getArchivedAt(),
                 e.getEntryType(), e.getWorkDate(), e.getStartedAt(), e.getEndedAt(), e.getDurationSeconds(),
                 e.getDescription(), e.getPausedAt(), e.getPausedDurationMicros(), e.getCreatedAt(), e.getUpdatedAt(),
-                e.getJiraIssueKey(), e.getLastEditedAt(), e.correctedByName(), e.getProject().getColor() == null ? null : e.getProject().getColor().name());
+                e.getJiraIssueKey(), e.getLastEditedAt(), e.correctedByName(), e.getProject().getColor() == null ? null : e.getProject().getColor().name(),
+                e.getTag() == null ? null : e.getTag().getName(), e.getTag() == null || e.getTag().getColor() == null ? null : e.getTag().getColor().name());
     }
 
     private long elapsed(TimeEntry entry, Instant now) {

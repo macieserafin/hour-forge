@@ -100,11 +100,11 @@ class ReportExportIT extends ApiIntegrationTestSupport {
         var body = download(csv(owner));
         assertThat(body).endsWith("\r\n");
         assertThat(body.split("\r\n")).containsExactly(
-                "Data pracy;Osoba;Zespół;Projekt;Zadanie Jira;Opis;Rodzaj;Czas (gg:mm:ss);Czas (sekundy)",
-                "2026-10-19;Worker;\"Zespół; Test\";Inny;;\"'=HYPERLINK(\"\"http://x\"\")\";Wpis ręczny;00:01:00;60",
-                "2026-10-20;Worker;\"Zespół; Test\";Strona;;\"Line one\nline; two\";Wpis ręczny;00:01:30;90",
-                "2026-10-21;Właściciel Żółć;\"Zespół; Test\";Strona;;Zażółć gęślą jaźń;Wpis ręczny;01:02:05;3725",
-                "2026-10-22;Worker;\"Zespół; Test\";Strona;;;Timer;00:05:00;300");
+                "Data pracy;Osoba;Zespół;Projekt;Tag;Zadanie Jira;Opis;Rodzaj;Czas (gg:mm:ss);Czas (sekundy)",
+                "2026-10-19;Worker;\"Zespół; Test\";Inny;;;\"'=HYPERLINK(\"\"http://x\"\")\";Wpis ręczny;00:01:00;60",
+                "2026-10-20;Worker;\"Zespół; Test\";Strona;;;\"Line one\nline; two\";Wpis ręczny;00:01:30;90",
+                "2026-10-21;Właściciel Żółć;\"Zespół; Test\";Strona;;;Zażółć gęślą jaźń;Wpis ręczny;01:02:05;3725",
+                "2026-10-22;Worker;\"Zespół; Test\";Strona;;;;Timer;00:05:00;300");
     }
 
     @Test
