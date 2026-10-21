@@ -9,10 +9,17 @@ import java.time.ZoneId;
 public record CreateTeamRequest(
         @NotBlank @Size(max = 255) String name,
         @NotBlank @Size(max = 255) String timezone,
-        Boolean activeTimersVisible
+        Boolean activeTimersVisible,
+        Boolean requireDescription,
+        Boolean requireTagOrIssue,
+        pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart weekStart
 ) {
     public CreateTeamRequest(String name, String timezone) {
-        this(name, timezone, null);
+        this(name, timezone, null, null, null, null);
+    }
+
+    public CreateTeamRequest(String name, String timezone, Boolean activeTimersVisible) {
+        this(name, timezone, activeTimersVisible, null, null, null);
     }
 
     public CreateTeamRequest {

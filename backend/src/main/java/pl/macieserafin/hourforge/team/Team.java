@@ -34,6 +34,23 @@ public class Team {
     @Column(name = "active_timers_visible", nullable = false)
     private boolean activeTimersVisible = true;
 
+    @Column(name = "require_description", nullable = false)
+    private boolean requireDescription;
+
+    @Column(name = "require_tag_or_issue", nullable = false)
+    private boolean requireTagOrIssue;
+
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "week_start", nullable = false, length = 10)
+    private pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart weekStart = pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart.MONDAY;
+
+    public boolean isRequireDescription() { return requireDescription; }
+    public void setRequireDescription(boolean requireDescription) { this.requireDescription = requireDescription; }
+    public boolean isRequireTagOrIssue() { return requireTagOrIssue; }
+    public void setRequireTagOrIssue(boolean requireTagOrIssue) { this.requireTagOrIssue = requireTagOrIssue; }
+    public pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart getWeekStart() { return weekStart; }
+    public void setWeekStart(pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart weekStart) { this.weekStart = weekStart; }
+
     protected Team() {
     }
 

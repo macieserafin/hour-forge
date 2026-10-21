@@ -19,6 +19,9 @@ export function TeamSettingsModal({ userId, team, onClose, onSaved, onArchived, 
   const [name, setName] = useState(team.name)
   const [timezone, setTimezone] = useState(team.timezone)
   const [liveView, setLiveView] = useState(team.activeTimersVisible)
+  const [requireDescription, setRequireDescription] = useState(team.requireDescription)
+  const [requireTagOrIssue, setRequireTagOrIssue] = useState(team.requireTagOrIssue)
+  const [weekStart, setWeekStart] = useState(team.weekStart)
   const [confirmation, setConfirmation] = useState('')
   const [validation, setValidation] = useState('')
   const busy = update.isPending || archive.isPending || remove.isPending
@@ -29,7 +32,7 @@ export function TeamSettingsModal({ userId, team, onClose, onSaved, onArchived, 
     event.preventDefault()
     if (!name.trim()) { setValidation('Wpisz nazwę zespołu.'); return }
     setValidation('')
-    update.mutate({ teamId: team.id, name: name.trim(), timezone, activeTimersVisible: liveView }, { onSuccess: onSaved })
+    update.mutate({ teamId: team.id, name: name.trim(), timezone, activeTimersVisible: liveView, requireDescription, requireTagOrIssue, weekStart }, { onSuccess: onSaved })
   }
 
   const title = view === 'archive' ? 'Zarchiwizuj zespół' : view === 'delete' ? 'Usuń zespół' : 'Ustawienia zespołu'
@@ -42,6 +45,13 @@ export function TeamSettingsModal({ userId, team, onClose, onSaved, onArchived, 
             <p className="field-hint">Nowa strefa dotyczy nowych wpisów i bieżących dat. Zapisane daty pracy się nie zmieniają.</p></div>
           <div className="field-group"><label><input type="checkbox" checked={liveView} onChange={event => setLiveView(event.target.checked)} /> Pokaż właścicielowi, kto teraz pracuje</label>
             <p className="field-hint">Podgląd aktywnych timerów w raporcie zespołu: osoba, projekt i czas. Wyłączenie ukrywa go także przed właścicielem.</p></div>
+          <fieldset className="team-rules"><legend>Reguły zespołu</legend>
+            <label><input type="checkbox" checked={requireDescription} onChange={event => setRequireDescription(event.target.checked)} /> Wymagaj opisu pracy</label>
+            <label><input type="checkbox" checked={requireTagOrIssue} onChange={event => setRequireTagOrIssue(event.target.checked)} /> Wymagaj tagu lub zadania Jira</label>
+            <p className="field-hint">Reguły dotyczą wpisów, które członkowie zapisują sami (zatrzymanie timera, wpis ręczny, edycja). Korekty właściciela i administratora są od nich wolne. Wymóg tagu lub zadania działa, dopóki zespół ma aktywny tag albo połączoną Jirę.</p>
+            <div className="field-group"><label htmlFor="settings-week">Pierwszy dzień tygodnia w raportach zespołu</label>
+              <select className="text-input" id="settings-week" value={weekStart} onChange={event => setWeekStart(event.target.value as 'MONDAY' | 'SUNDAY')}><option value="MONDAY">Poniedziałek</option><option value="SUNDAY">Niedziela</option></select></div>
+          </fieldset>
         </fieldset>
         {archived && <p className="field-hint">Zespół jest zarchiwizowany, więc jego ustawień nie można zmieniać.</p>}
         {(validation || update.isError) && <p className="form-error" role="alert">{validation || update.error?.message}</p>}
@@ -52,7 +62,7 @@ export function TeamSettingsModal({ userId, team, onClose, onSaved, onArchived, 
         <h3 id="danger-zone-title">Operacje nieodwracalne</h3>
         <div className="team-actions">
           {!archived && <button type="button" className="button-secondary" disabled={busy} onClick={() => setView('archive')}><Archive size={15} />Zarchiwizuj zespół</button>}
-          <button type="button" className="button-secondary button-danger-outline" disabled={busy} onClick={() => { setConfirmation(''); setView('delete') }}><Trash2 size={15} />Usuń zespół</button>
+          {team.role === 'OWNER' && <button type="button" className="button-secondary button-danger-outline" disabled={busy} onClick={() => { setConfirmation(''); setView('delete') }}><Trash2 size={15} />Usuń zespół</button>}
         </div>
       </section>
     </>}

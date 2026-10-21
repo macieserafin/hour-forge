@@ -159,7 +159,7 @@ public class ReportService {
         }
         if (from == null && defaultWeek && !input.undated()) {
             from = clock.instant().atZone(ZoneId.of(team.getTimezone())).toLocalDate()
-                    .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                    .with(TemporalAdjusters.previousOrSame(team.getWeekStart() == pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart.SUNDAY ? DayOfWeek.SUNDAY : DayOfWeek.MONDAY));
             to = from.plusDays(6);
         }
         var filter = new ReportFilter(from, to, input.userIds().stream().distinct().sorted().toList(),

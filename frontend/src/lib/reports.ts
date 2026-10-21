@@ -81,11 +81,11 @@ function useReportOptions<T>(userId: string, teamId: string, kind: 'members' | '
 export const useReportMembers = (userId: string, teamId: string) => useReportOptions(userId, teamId, 'members', getReportMembers)
 export const useReportProjects = (userId: string, teamId: string) => useReportOptions(userId, teamId, 'projects', getReportProjects)
 
-export function reportWeek(timezone: string, now = new Date()): ReportFilters {
+export function reportWeek(timezone: string, now = new Date(), weekStart: 'MONDAY' | 'SUNDAY' = 'MONDAY'): ReportFilters {
   const parts = new Intl.DateTimeFormat('en', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
   const part = (type: string) => Number(parts.find(p => p.type === type)!.value)
   const date = new Date(Date.UTC(part('year'), part('month') - 1, part('day')))
-  date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7)
+  date.setUTCDate(date.getUTCDate() - (weekStart === 'SUNDAY' ? date.getUTCDay() : (date.getUTCDay() + 6) % 7))
   const from = date.toISOString().slice(0, 10)
   date.setUTCDate(date.getUTCDate() + 6)
   return { from, to: date.toISOString().slice(0, 10), userId: '', projectId: '', entryType: '', q: '' }
@@ -124,8 +124,8 @@ export function reportRanges(timezone: string, now = new Date(), weekStart: 'MON
 }
 
 /** Reads report filters from the address; anything missing or malformed falls back to the current week. */
-export function filtersFromSearch(search: URLSearchParams, timezone: string, now = new Date()): ReportFilters {
-  const week = reportWeek(timezone, now)
+export function filtersFromSearch(search: URLSearchParams, timezone: string, now = new Date(), weekStart: 'MONDAY' | 'SUNDAY' = 'MONDAY'): ReportFilters {
+  const week = reportWeek(timezone, now, weekStart)
   const undated = search.get('undated') === 'true'
   const from = search.get('from') ?? ''
   const to = search.get('to') ?? ''

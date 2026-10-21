@@ -63,6 +63,15 @@ public class TeamManagementService {
         team.setTimezone(request.timezone());
         // Absent means unchanged, so older clients that only send name and zone do not reset the setting.
         if (request.activeTimersVisible() != null) team.setActiveTimersVisible(request.activeTimersVisible());
+        if (request.requireDescription() != null) team.setRequireDescription(request.requireDescription());
+        if (request.weekStart() != null) team.setWeekStart(request.weekStart());
+        if (request.requireTagOrIssue() != null) {
+            // A rule nobody can satisfy would lock everyone out of saving work: it needs a tag to pick or a Jira site to link to.
+            if (request.requireTagOrIssue() && !team.isRequireTagOrIssue() && !tagOrIssueAvailable(teamId)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Add a tag or connect Jira before requiring one");
+            }
+            team.setRequireTagOrIssue(request.requireTagOrIssue());
+        }
         return TeamResponse.of(teams.saveAndFlush(team), role);
     }
 
@@ -152,6 +161,10 @@ public class TeamManagementService {
     }
 
     /** Checks that the actor is an active owner or admin and returns the role. */
+    private boolean tagOrIssueAvailable(UUID teamId) {
+        return !tags.findByTeamIdAndArchivedAtIsNullOrderByNameAscIdAsc(teamId).isEmpty() || jiraConnections.findByTeamId(teamId).isPresent();
+    }
+
     private TeamRole managerRole(UUID actorId, UUID teamId) {
         if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         var role = activeMember(teamId, actorId).getRole();

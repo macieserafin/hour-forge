@@ -11,8 +11,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.project.Project;
 import pl.macieserafin.hourforge.project.ProjectRepository;
+import pl.macieserafin.hourforge.jira.JiraConnectionRepository;
 import pl.macieserafin.hourforge.tag.Tag;
 import pl.macieserafin.hourforge.tag.TagRepository;
+import pl.macieserafin.hourforge.team.Team;
 import pl.macieserafin.hourforge.team.TeamMember;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
@@ -41,9 +43,10 @@ public class TimeEntryService {
     private final TeamMemberRepository members;
     private final ProjectRepository projects;
     private final TagRepository tags;
+    private final JiraConnectionRepository jiraConnections;
 
     public TimeEntryService(TimeEntryRepository entries, UserRepository users, TeamRepository teams,
-                            TeamMemberRepository members, ProjectRepository projects, TagRepository tags, Clock clock) {
+                            TeamMemberRepository members, ProjectRepository projects, TagRepository tags, JiraConnectionRepository jiraConnections, Clock clock) {
         this.clock = clock;
         this.entries = entries;
         this.users = users;
@@ -51,6 +54,7 @@ public class TimeEntryService {
         this.members = members;
         this.projects = projects;
         this.tags = tags;
+        this.jiraConnections = jiraConnections;
     }
 
     @Transactional(readOnly = true)
@@ -181,6 +185,8 @@ public class TimeEntryService {
         if (seconds < 1 || seconds > Integer.MAX_VALUE) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Timer duration must fit a positive number of whole seconds");
         }
+        var finalDescription = description != null ? (description.isBlank() ? null : description) : entry.getDescription();
+        requireTeamRules(entry.getTeam(), finalDescription, entry.getTag(), entry.getJiraIssueId() != null);
         completePause(entry, now);
         entry.setEndedAt(now);
         entry.setDurationSeconds((int) seconds);
@@ -296,6 +302,7 @@ public class TimeEntryService {
                 null, null, request.durationSeconds(), request.description());
         entry.setJiraIssue(link);
         entry.setTag(tagFor(project.getTeam().getId(), request.tagId(), null));
+        requireTeamRules(project.getTeam(), request.description(), entry.getTag(), link != null);
         return response(save(entry, link));
     }
 
@@ -308,10 +315,10 @@ public class TimeEntryService {
     @Transactional
     public TimeEntryResponse update(UUID userId, UUID entryId, UpdateTimeEntryRequest request, IssueLink link) {
         var entry = editableEntry(userId, entryId);
-        return response(applyUpdate(entry, request, link, entry.getUser()));
+        return response(applyUpdate(entry, request, link, entry.getUser(), true));
     }
 
-    private TimeEntry applyUpdate(TimeEntry entry, UpdateTimeEntryRequest request, IssueLink link, User editor) {
+    private TimeEntry applyUpdate(TimeEntry entry, UpdateTimeEntryRequest request, IssueLink link, User editor, boolean enforceRules) {
         var project = projects.findByIdAndTeamId(request.projectId(), entry.getTeam().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (!project.getId().equals(entry.getProject().getId()) && project.getArchivedAt() != null) {
@@ -333,6 +340,7 @@ public class TimeEntryService {
                 || !java.util.Objects.equals(entry.getJiraIssueId(), link == null ? null : link.issueId());
         var tag = tagFor(entry.getTeam().getId(), request.tagId(), entry.getTag());
         changed |= !java.util.Objects.equals(entry.getTag() == null ? null : entry.getTag().getId(), tag == null ? null : tag.getId());
+        if (enforceRules) requireTeamRules(entry.getTeam(), request.description(), tag, link != null);
         entry.setTag(tag);
         entry.setProject(project);
         entry.setWorkDate(request.workDate());
@@ -379,7 +387,7 @@ public class TimeEntryService {
         var actor = users.findById(actorId).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         var entry = correctableEntry(actorId, teamId, entryId);
         var link = entry.getJiraIssueId() == null ? null : new IssueLink(entry.getJiraConnectionId(), entry.getJiraIssueId(), entry.getJiraIssueKey());
-        return response(applyUpdate(entry, request, link, actor));
+        return response(applyUpdate(entry, request, link, actor, false));
     }
 
     @Transactional
@@ -459,6 +467,20 @@ public class TimeEntryService {
             // Only a link can fail here: its site was disconnected after it was checked.
             if (link != null) throw new ResponseStatusException(HttpStatus.CONFLICT, "The Jira site of this team changed; choose the issue again");
             throw exception;
+        }
+    }
+
+    /**
+     * The rules the team's owner set for saved entries. A tag-or-Jira rule asks for something only while there is
+     * something to choose, so archiving every tag never locks people out of saving work.
+     */
+    private void requireTeamRules(Team team, String description, Tag tag, boolean issueLinked) {
+        if (team.isRequireDescription() && (description == null || description.isBlank())) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "This team requires a description of the work");
+        }
+        if (team.isRequireTagOrIssue() && tag == null && !issueLinked
+                && (jiraConnections.findByTeamId(team.getId()).isPresent() || !tags.findByTeamIdAndArchivedAtIsNullOrderByNameAscIdAsc(team.getId()).isEmpty())) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "This team requires a tag or a Jira task");
         }
     }
 

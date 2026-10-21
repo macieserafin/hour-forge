@@ -42,12 +42,13 @@ class TimeEntryServiceTest {
     @Mock TeamMemberRepository members;
     @Mock ProjectRepository projects;
     @Mock pl.macieserafin.hourforge.tag.TagRepository tags;
+    @Mock pl.macieserafin.hourforge.jira.JiraConnectionRepository jiraConnections;
     private TimeEntryService service;
     private final User actor = user();
     private final Team team = team();
     private final Project project = project(team);
 
-    @BeforeEach void setup() { service = new TimeEntryService(entries, users, teams, members, projects, tags, CLOCK); }
+    @BeforeEach void setup() { service = new TimeEntryService(entries, users, teams, members, projects, tags, jiraConnections, CLOCK); }
     private TimeEntry timer() {
         var entry = identified(new TimeEntry(actor, team, project, EntryType.TIMER, LocalDate.of(2026, 10, 19), NOW.minusSeconds(120), null, null, "Original"));
         when(users.findLockedForTimeEntryById(actor.getId())).thenReturn(Optional.of(actor));

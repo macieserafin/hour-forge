@@ -24,7 +24,7 @@ it('edits the team name and time zone from the settings', async () => {
   await userEvent.selectOptions(modal.getByLabelText('Strefa czasowa'), 'UTC')
   await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
   expect(await screen.findByText('Zapisano ustawienia zespołu Nowa nazwa.')).toBeVisible()
-  expect(sent).toEqual({ name: 'Nowa nazwa', timezone: 'UTC', activeTimersVisible: true })
+  expect(sent).toEqual({ name: 'Nowa nazwa', timezone: 'UTC', activeTimersVisible: true, requireDescription: false, requireTagOrIssue: false, weekStart: 'MONDAY' })
 })
 
 it('turns the live view off for the whole team from the settings', async () => {
@@ -39,7 +39,7 @@ it('turns the live view off for the whole team from the settings', async () => {
   await userEvent.click(toggle)
   await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
   await screen.findByText(/Zapisano ustawienia zespołu/)
-  expect(sent).toEqual({ name: team.name, timezone: team.timezone, activeTimersVisible: false })
+  expect(sent).toEqual({ name: team.name, timezone: team.timezone, activeTimersVisible: false, requireDescription: false, requireTagOrIssue: false, weekStart: 'MONDAY' })
 })
 
 it('archives a team only after showing the irreversible effects', async () => {
@@ -100,4 +100,36 @@ it('does not offer team settings to a member', async () => {
   panel()
   expect(await screen.findByText('Twoja rola: Członek')).toBeVisible()
   expect(screen.queryByRole('button', { name: 'Ustawienia zespołu' })).not.toBeInTheDocument()
+})
+
+it('sets the team rules and the first day of the week from the settings', async () => {
+  let current = { ...team }
+  let sent: Record<string, unknown> = {}
+  mockApi({ 'GET /api/teams': () => json([current]),
+    'PATCH /api/teams/team': (_url, options) => { sent = JSON.parse(String(options.body)); current = { ...current, ...sent }; return json(current) } })
+  panel()
+  const modal = await openSettings()
+  await userEvent.click(modal.getByLabelText('Wymagaj opisu pracy'))
+  await userEvent.click(modal.getByLabelText('Wymagaj tagu lub zadania Jira'))
+  await userEvent.selectOptions(modal.getByLabelText('Pierwszy dzień tygodnia w raportach zespołu'), 'SUNDAY')
+  await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
+  expect(await screen.findByText('Zapisano ustawienia zespołu Studio.')).toBeVisible()
+  expect(sent).toMatchObject({ requireDescription: true, requireTagOrIssue: true, weekStart: 'SUNDAY' })
+})
+
+it('explains that a tag or task cannot be required before one exists', async () => {
+  mockApi({ 'PATCH /api/teams/team': () => json({}, 409) })
+  panel()
+  const modal = await openSettings()
+  await userEvent.click(modal.getByLabelText('Wymagaj tagu lub zadania Jira'))
+  await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
+  expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('Reguła wymagająca tagu lub zadania Jira')
+})
+
+it('shows an admin the settings but not the option to delete the team', async () => {
+  mockApi({ 'GET /api/teams': () => json([{ ...team, role: 'ADMIN' }]) })
+  panel()
+  const modal = await openSettings()
+  expect(modal.getByRole('button', { name: /Zarchiwizuj zespół/ })).toBeVisible()
+  expect(modal.queryByRole('button', { name: /Usuń zespół/ })).not.toBeInTheDocument()
 })

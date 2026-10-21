@@ -138,7 +138,7 @@ function ActivePanel({ userId, team }: { userId: string; team: Team }) {
 export function OwnerDashboard({ userId, team }: { userId: string; team: Team }) {
   const [search, setSearch] = useSearchParams()
   // The address is the source of truth, so a report can be bookmarked, shared and reached with the back button.
-  const filters = useMemo(() => filtersFromSearch(search, team.timezone), [search, team.timezone])
+  const filters = useMemo(() => filtersFromSearch(search, team.timezone, new Date(), team.weekStart), [search, team.timezone, team.weekStart])
   const [draft, setDraft] = useState(filters)
   const [validation, setValidation] = useState('')
   const [memberPage, setMemberPage] = useState(0)
@@ -192,7 +192,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
     setValidation('')
     setSearch(clearedSearch(search), { replace: true })
   }
-  const ranges = reportRanges(team.timezone)
+  const ranges = reportRanges(team.timezone, new Date(), team.weekStart)
 
   return <section className="owner-dashboard" aria-label="Raport zespołu">
     <header className="teams-toolbar">

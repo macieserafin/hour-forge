@@ -19,6 +19,9 @@ export interface Team {
   role: TeamRole
   archivedAt: string | null
   activeTimersVisible: boolean
+  requireDescription: boolean
+  requireTagOrIssue: boolean
+  weekStart: 'MONDAY' | 'SUNDAY'
 }
 
 export interface TeamSummary {
@@ -426,7 +429,7 @@ async function teamManagementRequest<T>(path: string, method: 'GET' | 'PATCH' | 
       401: 'Sesja wygasła. Zaloguj się ponownie.',
       403: 'Tej operacji nie możesz wykonać w tym zespole lub sesja formularza wygasła.',
       404: 'Zespół lub wybrana osoba są niedostępne. Odśwież listę.',
-      409: method === 'PATCH' ? 'Zarchiwizowanego zespołu nie można zmieniać.'
+      409: method === 'PATCH' ? 'Zarchiwizowanego zespołu nie można zmieniać. Reguła wymagająca tagu lub zadania Jira wymaga najpierw dodania tagu albo połączenia z Jira.'
         : 'W zespole działają timery. Poproś członków o ich zatrzymanie i spróbuj ponownie.',
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wykonać operacji na zespole. Odśwież dane i spróbuj ponownie.')
@@ -435,7 +438,7 @@ async function teamManagementRequest<T>(path: string, method: 'GET' | 'PATCH' | 
 }
 
 const teamPath = (teamId: string) => `/api/teams/${encodeURIComponent(teamId)}`
-export const updateTeam = ({ teamId, ...body }: { teamId: string; name: string; timezone: string; activeTimersVisible?: boolean }) => teamManagementRequest<Team>(teamPath(teamId), 'PATCH', body)
+export const updateTeam = ({ teamId, ...body }: { teamId: string; name: string; timezone: string; activeTimersVisible?: boolean; requireDescription?: boolean; requireTagOrIssue?: boolean; weekStart?: 'MONDAY' | 'SUNDAY' }) => teamManagementRequest<Team>(teamPath(teamId), 'PATCH', body)
 export const transferOwnership = (teamId: string, userId: string) => teamManagementRequest<null>(`${teamPath(teamId)}/transfer-ownership`, 'POST', { userId })
 export const changeMemberRole = (teamId: string, userId: string, role: Exclude<TeamRole, 'OWNER'>) => teamManagementRequest<null>(`${teamPath(teamId)}/members/${encodeURIComponent(userId)}/role`, 'PUT', { role })
 export const archiveTeam = (teamId: string) => teamManagementRequest<Team>(`${teamPath(teamId)}/archive`, 'POST')
@@ -495,6 +498,7 @@ async function timeRequest(path: string, body?: unknown, signal?: AbortSignal): 
       401: 'Sesja wygasła. Zaloguj się ponownie.',
       403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
       404: 'Nie znaleziono wpisu, projektu lub zespołu albo nie masz już do niego dostępu.',
+      422: 'Zespół wymaga opisu pracy albo tagu lub zadania Jira. Uzupełnij wpis i spróbuj ponownie.',
       409: path.endsWith('/pause') || path.endsWith('/resume') ? 'Stan timera uległ zmianie. Sprawdź aktualny stan i spróbuj ponownie.'
         : path.endsWith('/start') ? 'Nie można uruchomić timera. Sprawdź aktywny timer, status projektu i połączenie z Jira.'
         : path.endsWith('/stop') ? 'Nie można zatrzymać tego timera. Mógł już zostać zatrzymany lub nie upłynęła jeszcze pełna sekunda.'
@@ -545,7 +549,8 @@ async function changeTimeEntry(id: string, method: 'PATCH' | 'DELETE', body?: Up
       401: 'Sesja wygasła. Zaloguj się ponownie.',
       403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
       404: 'Wpis został usunięty lub nie masz już dostępu do wpisu, projektu lub zespołu.',
-      409: 'Wpis jest aktywnym timerem lub wybrany projekt jest archiwalny. Odśwież historię.',
+      409: 'Wpis jest aktywnym timerem, wybrany projekt lub tag jest archiwalny. Odśwież historię.',
+      422: 'Zespół wymaga opisu pracy albo tagu lub zadania Jira. Uzupełnij wpis i spróbuj ponownie.',
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się zmienić wpisu. Odśwież historię przed ponowieniem operacji.')
   }

@@ -55,6 +55,20 @@ class ReportServiceTest {
     }
 
     @Test
+    void aTeamThatStartsTheWeekOnSundayGetsASundayToSaturdayDefault() {
+        var team = identified(new Team("Team", "UTC"));
+        team.setWeekStart(pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart.SUNDAY);
+        var service = ownerService(team, Clock.fixed(Instant.parse("2026-10-21T10:00:00Z"), ZoneOffset.UTC));
+        when(reports.containsMembers(team.getId(), List.of())).thenReturn(true);
+        when(reports.containsProjects(team.getId(), List.of())).thenReturn(true);
+        when(reports.containsTags(team.getId(), List.of())).thenReturn(true);
+        var sunday = LocalDate.parse("2026-10-18");
+        var filter = new ReportFilter(sunday, sunday.plusDays(6), null, null, null);
+        when(reports.totals(team.getId(), filter)).thenReturn(new ReportResponse.Totals(0, 0));
+        assertThat(service.summary(actorId, team.getId(), empty).context().filter()).isEqualTo(filter);
+    }
+
+    @Test
     void refusesDeletedActorsBeforeReadingTeamOrReportData() {
         var service = new ReportService(users, members, reports, CLOCK);
         assertThatThrownBy(() -> service.summary(UUID.randomUUID(), UUID.randomUUID(), empty))
