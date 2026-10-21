@@ -8,5 +8,10 @@ import java.util.UUID;
 public record PreferencesRequest(UUID defaultTeamId, @NotNull UserPreferences.StartPage startPage,
                                  @NotNull UserPreferences.TimeFormat timeFormat, @NotNull UserPreferences.WeekStart weekStart,
                                  boolean longTimerEmail, boolean browserNotifications,
-                                 @Min(4) @Max(24) int longTimerHours, boolean titleTimer) {
+                                 @Min(4) @Max(24) int longTimerHours, boolean titleTimer,
+                                 Boolean teamEventEmails, Boolean weeklyReportEmail) {
+    public PreferencesRequest(UUID defaultTeamId, UserPreferences.StartPage startPage, UserPreferences.TimeFormat timeFormat,
+                              UserPreferences.WeekStart weekStart, boolean longTimerEmail, boolean browserNotifications, int longTimerHours, boolean titleTimer) {
+        this(defaultTeamId, startPage, timeFormat, weekStart, longTimerEmail, browserNotifications, longTimerHours, titleTimer, null, null);
+    }
 }

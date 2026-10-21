@@ -77,6 +77,7 @@ class TimeEntryConcurrencyIT extends IntegrationTestSupport {
             jdbc.update("delete from projects where team_id in (?, ?)", team.getId(), otherTeam.getId());
             jdbc.update("delete from team_members where team_id in (?, ?)", team.getId(), otherTeam.getId());
             jdbc.update("delete from teams where id in (?, ?)", team.getId(), otherTeam.getId());
+            jdbc.update("delete from user_preferences where user_id in (?, ?)", first.getId(), second.getId());
             jdbc.update("delete from users where id in (?, ?)", first.getId(), second.getId());
         });
     }

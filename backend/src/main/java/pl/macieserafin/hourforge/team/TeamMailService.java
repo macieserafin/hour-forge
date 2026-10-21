@@ -13,9 +13,11 @@ public class TeamMailService {
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("d.MM.yyyy HH:mm 'UTC'").withZone(ZoneOffset.UTC);
 
     private final EmailSender sender;
+    private final pl.macieserafin.hourforge.notification.NotificationService notifications;
 
-    public TeamMailService(EmailSender sender) {
+    public TeamMailService(EmailSender sender, pl.macieserafin.hourforge.notification.NotificationService notifications) {
         this.sender = sender;
+        this.notifications = notifications;
     }
 
     public void sendInvitation(String to, String teamName, String inviterName, String url, Instant expiresAt, Integer maxUses) {
@@ -51,6 +53,8 @@ public class TeamMailService {
 
     private void notify(User person, String subject, String text) {
         if (person.getDeletedAt() != null) return;
-        sender.send(person.getEmail(), subject, "Cześć " + person.getDisplayName() + ",\n\n" + text + "\n");
+        var kind = pl.macieserafin.hourforge.notification.NotificationKind.TEAM_EVENTS;
+        if (!notifications.allows(person.getId(), kind)) return;
+        sender.send(person.getEmail(), subject, "Cześć " + person.getDisplayName() + ",\n\n" + text + "\n" + notifications.footer(person, kind));
     }
 }

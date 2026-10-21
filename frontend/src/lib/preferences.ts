@@ -4,7 +4,7 @@ import { ApiError, getPreferences, savePreferences, type Preferences, type Team 
 import { useAuthError } from './teams'
 
 export const defaultPreferences: Preferences = { defaultTeamId: null, startPage: 'DASHBOARD', timeFormat: 'CLOCK', weekStart: 'MONDAY',
-  longTimerEmail: true, browserNotifications: false, longTimerHours: 10, titleTimer: true }
+  longTimerEmail: true, browserNotifications: false, longTimerHours: 10, titleTimer: true, teamEventEmails: true, weeklyReportEmail: true }
 
 export const preferencesKey = (userId: string) => ['preferences', userId] as const
 

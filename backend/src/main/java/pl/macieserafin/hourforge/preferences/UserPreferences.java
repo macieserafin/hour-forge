@@ -53,6 +53,15 @@ public class UserPreferences {
     @Column(name = "title_timer", nullable = false)
     private boolean titleTimer = true;
 
+    @Column(name = "team_event_emails", nullable = false)
+    private boolean teamEventEmails = true;
+
+    @Column(name = "weekly_report_email", nullable = false)
+    private boolean weeklyReportEmail = true;
+
+    @Column(name = "unsubscribe_token", length = 64)
+    private String unsubscribeToken;
+
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
@@ -75,6 +84,20 @@ public class UserPreferences {
         this.longTimerHours = longTimerHours;
         this.titleTimer = titleTimer;
     }
+
+    /** A null value leaves the setting as it is, so clients that do not know it do not switch it back on. */
+    public void applyNotifications(Boolean teamEventEmails, Boolean weeklyReportEmail) {
+        if (teamEventEmails != null) this.teamEventEmails = teamEventEmails;
+        if (weeklyReportEmail != null) this.weeklyReportEmail = weeklyReportEmail;
+    }
+
+    public void setLongTimerEmail(boolean longTimerEmail) { this.longTimerEmail = longTimerEmail; }
+    public void setTeamEventEmails(boolean teamEventEmails) { this.teamEventEmails = teamEventEmails; }
+    public void setWeeklyReportEmail(boolean weeklyReportEmail) { this.weeklyReportEmail = weeklyReportEmail; }
+    public boolean isTeamEventEmails() { return teamEventEmails; }
+    public boolean isWeeklyReportEmail() { return weeklyReportEmail; }
+    public String getUnsubscribeToken() { return unsubscribeToken; }
+    public void setUnsubscribeToken(String unsubscribeToken) { this.unsubscribeToken = unsubscribeToken; }
 
     public UUID getUserId() { return userId; }
     public UUID getDefaultTeamId() { return defaultTeamId; }

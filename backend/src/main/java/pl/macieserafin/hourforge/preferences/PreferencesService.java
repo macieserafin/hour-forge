@@ -26,7 +26,7 @@ public class PreferencesService {
         // A team the person has left is no longer a default; the stored value is kept but not offered.
         var team = stored.getDefaultTeamId() != null && isActiveMember(stored.getDefaultTeamId(), userId) ? stored.getDefaultTeamId() : null;
         return new PreferencesResponse(team, stored.getStartPage(), stored.getTimeFormat(), stored.getWeekStart(), stored.isLongTimerEmail(),
-                stored.isBrowserNotifications(), stored.getLongTimerHours(), stored.isTitleTimer());
+                stored.isBrowserNotifications(), stored.getLongTimerHours(), stored.isTitleTimer(), stored.isTeamEventEmails(), stored.isWeeklyReportEmail());
     }
 
     @Transactional
@@ -38,6 +38,7 @@ public class PreferencesService {
         var stored = preferences.findById(userId).orElseGet(() -> new UserPreferences(userId));
         stored.apply(request.defaultTeamId(), request.startPage(), request.timeFormat(), request.weekStart(), request.longTimerEmail(),
                 request.browserNotifications(), request.longTimerHours(), request.titleTimer());
+        stored.applyNotifications(request.teamEventEmails(), request.weeklyReportEmail());
         preferences.saveAndFlush(stored);
         return get(userId);
     }

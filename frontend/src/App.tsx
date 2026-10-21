@@ -6,6 +6,7 @@ import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { InvitePage } from './pages/InvitePage'
+import { UnsubscribePage } from './pages/UnsubscribePage'
 import { VerifyEmailPage } from './pages/VerifyEmailPage'
 import { ConfirmEmailChangePage } from './pages/ConfirmEmailChangePage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
@@ -51,6 +52,7 @@ export function App() {
     <Route path="/projects" element={user ? <DashboardPage user={user} section="projects" /> : signIn} />
     <Route path="/time" element={user ? <DashboardPage user={user} section="time" /> : signIn} />
     <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
+    <Route path="/unsubscribe/:token" element={<UnsubscribePage />} />
     <Route path="/confirm-email-change/:token" element={<ConfirmEmailChangePage />} />
     <Route path="/forgot-password" element={user ? <Navigate to="/dashboard" replace /> : <ForgotPasswordPage />} />
     <Route path="/reset-password/:token" element={<ResetPasswordPage />} />

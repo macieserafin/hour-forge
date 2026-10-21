@@ -115,3 +115,16 @@ it('sends rememberMe only when the box is ticked', async () => {
   expect(bodies[0]).not.toContain('rememberMe')
   expect(bodies[1]).toContain('rememberMe=true')
 })
+
+it('lets a person switch off the optional e-mails and keeps the others', async () => {
+  let saved: Record<string, unknown> = {}
+  mockApi({ ...prefs({ teamEventEmails: true, weeklyReportEmail: true }),
+    'PUT /api/account/preferences': (_url, options) => { saved = JSON.parse(String(options.body)); return json(saved) } })
+  renderApp(<App />, '/account')
+  const section = within(await screen.findByRole('region', { name: 'Preferencje' }))
+  expect(section.getByText(/Wiadomości związane z bezpieczeństwem konta/)).toBeVisible()
+  await userEvent.click(await section.findByLabelText(/Cotygodniowy raport zespołu/))
+  await userEvent.click(section.getByRole('button', { name: 'Zapisz ustawienia' }))
+  expect(await section.findByRole('status')).toHaveTextContent('Ustawienia zostały zapisane.')
+  expect(saved).toMatchObject({ weeklyReportEmail: false, teamEventEmails: true })
+})

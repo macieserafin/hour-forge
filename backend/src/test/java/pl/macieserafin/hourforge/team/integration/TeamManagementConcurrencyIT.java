@@ -58,7 +58,10 @@ class TeamManagementConcurrencyIT extends IntegrationTestSupport {
             jdbc.update("delete from projects where team_id = ?", team.getId());
             jdbc.update("delete from team_members where team_id = ?", team.getId());
             jdbc.update("delete from teams where id = ?", team.getId());
-            for (UUID id : userIds) jdbc.update("delete from users where id = ?", id);
+            for (UUID id : userIds) {
+                jdbc.update("delete from user_preferences where user_id = ?", id);
+                jdbc.update("delete from users where id = ?", id);
+            }
         });
     }
 

@@ -26,10 +26,13 @@ public class LongTimerReminderService {
     private final EmailSender sender;
     private final UserPreferencesRepository preferences;
     private final String frontendUrl;
+    private final pl.macieserafin.hourforge.notification.NotificationService notifications;
 
     public LongTimerReminderService(JobsProperties properties, TimeEntryRepository entries, EmailSender sender,
                                     UserPreferencesRepository preferences,
-                                    @Value("${app.frontend-url}") String frontendUrl) {
+                                    @Value("${app.frontend-url}") String frontendUrl,
+                                    pl.macieserafin.hourforge.notification.NotificationService notifications) {
+        this.notifications = notifications;
         this.properties = properties;
         this.entries = entries;
         this.sender = sender;
@@ -69,6 +72,7 @@ public class LongTimerReminderService {
                         + entry.getTeam().getName() + ") został uruchomiony " + entry.getStartedAt().atZone(zone).format(STARTED)
                         + " i działa już " + hours + " godz. czystej pracy. Jeśli o nim zapomniałeś, zatrzymaj go i popraw czas wpisu:\n"
                         + frontendUrl + "/time?team=" + entry.getTeam().getId()
-                        + "\n\nTo jedyne przypomnienie o tym timerze. Jeśli pracujesz dalej, nic nie musisz robić.\n");
+                        + "\n\nTo jedyne przypomnienie o tym timerze. Jeśli pracujesz dalej, nic nie musisz robić.\n"
+                        + notifications.footer(user, pl.macieserafin.hourforge.notification.NotificationKind.LONG_TIMER));
     }
 }

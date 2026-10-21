@@ -55,7 +55,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/email-verification/confirm",
                                 "/api/auth/email-verification/resend", "/api/auth/password-reset/request",
-                                "/api/auth/password-reset/confirm", "/api/auth/email-change/confirm").permitAll()
+                                "/api/auth/password-reset/confirm", "/api/auth/email-change/confirm", "/api/notifications/unsubscribe").permitAll()
                         .anyRequest().authenticated())
                 .requestCache(cache -> cache.disable())
                 .exceptionHandling(exceptions -> exceptions

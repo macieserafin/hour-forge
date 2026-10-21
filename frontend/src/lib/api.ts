@@ -883,6 +883,8 @@ export interface Preferences {
   browserNotifications: boolean
   longTimerHours: number
   titleTimer: boolean
+  teamEventEmails?: boolean
+  weeklyReportEmail?: boolean
 }
 
 export async function getPreferences(signal?: AbortSignal): Promise<Preferences> {
@@ -1075,3 +1077,9 @@ export interface ReportTimesheet {
 
 export const getReportTimesheet = (teamId: string, filters: ReportFilters, signal?: AbortSignal) =>
   reportRequest<ReportTimesheet>(teamId, 'timesheet', reportParams(filters), signal)
+
+export type UnsubscribeKind = 'TEAM_EVENTS' | 'WEEKLY_REPORT' | 'LONG_TIMER'
+
+export const unsubscribe = (input: { token: string; kind: UnsubscribeKind }) => publicPost('/api/notifications/unsubscribe', input,
+  { 400: 'Link jest nieprawidłowy.', 404: 'Link jest nieprawidłowy albo nie jest już aktualny. Ustawienia powiadomień znajdziesz w koncie.' },
+  'Nie udało się wypisać z wiadomości. Spróbuj ponownie.')

@@ -82,6 +82,10 @@ function PreferencesSection({ userId }: { userId: string }) {
             <option value="MONDAY">Poniedziałek</option><option value="SUNDAY">Niedziela</option></select>
           <p className="field-hint">Dla Twojego pulpitu i zakresów „ten tydzień” w Twoim raporcie.</p></div>
         <div className="field-group"><label className="remember-me"><input type="checkbox" checked={current.titleTimer} onChange={event => change({ titleTimer: event.target.checked })} />Pokazuj czas działającego timera w tytule karty przeglądarki</label></div>
+        <h3 className="preferences-heading">Powiadomienia e-mail</h3>
+        <p className="field-hint">Wiadomości związane z bezpieczeństwem konta (logowanie, hasło, adres e-mail) wysyłamy zawsze. Pozostałe możesz wyłączyć tutaj albo linkiem w wiadomości.</p>
+        <div className="field-group"><label className="remember-me"><input type="checkbox" checked={current.teamEventEmails ?? true} onChange={event => change({ teamEventEmails: event.target.checked })} />Zmiany w zespołach: usunięcie, rola administratora, przekazanie własności, archiwizacja</label></div>
+        <div className="field-group"><label className="remember-me"><input type="checkbox" checked={current.weeklyReportEmail ?? true} onChange={event => change({ weeklyReportEmail: event.target.checked })} />Cotygodniowy raport zespołu (dla właścicieli i administratorów)</label></div>
         <h3 className="preferences-heading">Zapomniany timer</h3>
         <div className="field-group"><label htmlFor="pref-hours">Przypomnij, gdy timer działa dłużej niż</label>
           <select id="pref-hours" className="text-input" value={current.longTimerHours} onChange={event => change({ longTimerHours: Number(event.target.value) })}>

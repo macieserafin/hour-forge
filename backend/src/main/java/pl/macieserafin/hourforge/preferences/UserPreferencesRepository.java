@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 public interface UserPreferencesRepository extends JpaRepository<UserPreferences, UUID> {
+    java.util.Optional<UserPreferences> findByUnsubscribeToken(String unsubscribeToken);
+
     @Modifying(flushAutomatically = true)
     @Query("delete from UserPreferences p where p.userId = :userId")
     int deleteByUserId(UUID userId);
