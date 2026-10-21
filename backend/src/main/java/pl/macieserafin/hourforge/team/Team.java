@@ -51,6 +51,17 @@ public class Team {
     public pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart getWeekStart() { return weekStart; }
     public void setWeekStart(pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart weekStart) { this.weekStart = weekStart; }
 
+    @Column(name = "weekly_report_enabled", nullable = false)
+    private boolean weeklyReportEnabled;
+
+    @Column(name = "weekly_report_sent_for")
+    private java.time.LocalDate weeklyReportSentFor;
+
+    public boolean isWeeklyReportEnabled() { return weeklyReportEnabled; }
+    public void setWeeklyReportEnabled(boolean weeklyReportEnabled) { this.weeklyReportEnabled = weeklyReportEnabled; }
+    public java.time.LocalDate getWeeklyReportSentFor() { return weeklyReportSentFor; }
+    public void setWeeklyReportSentFor(java.time.LocalDate weeklyReportSentFor) { this.weeklyReportSentFor = weeklyReportSentFor; }
+
     protected Team() {
     }
 

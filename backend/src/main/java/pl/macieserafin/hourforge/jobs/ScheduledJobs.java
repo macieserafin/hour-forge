@@ -18,9 +18,11 @@ public class ScheduledJobs {
 
     private final RetentionService retention;
     private final LongTimerReminderService reminders;
+    private final WeeklyReportService weeklyReports;
     private final Clock clock;
 
-    public ScheduledJobs(RetentionService retention, LongTimerReminderService reminders, Clock clock) {
+    public ScheduledJobs(RetentionService retention, LongTimerReminderService reminders, WeeklyReportService weeklyReports, Clock clock) {
+        this.weeklyReports = weeklyReports;
         this.retention = retention;
         this.reminders = reminders;
         this.clock = clock;
@@ -34,6 +36,16 @@ public class ScheduledJobs {
                     purged.accounts(), purged.tokens(), purged.oauthStates(), purged.invitations());
         } catch (RuntimeException exception) {
             log.error("Retention job failed", exception);
+        }
+    }
+
+    @Scheduled(initialDelayString = "PT3M", fixedDelayString = "PT15M")
+    public void sendWeeklyReports() {
+        try {
+            int sent = weeklyReports.sendDue(clock.instant());
+            if (sent > 0) log.info("Sent weekly reports for {} teams", sent);
+        } catch (RuntimeException exception) {
+            log.error("Weekly report job failed", exception);
         }
     }
 

@@ -22,6 +22,9 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
     @Query("select member from TeamMember member join fetch member.team where member.user.id = :userId order by member.joinedAt asc, member.id asc")
     List<TeamMember> findAllByUserId(UUID userId);
 
+    @Query("select member from TeamMember member join fetch member.user where member.team.id = :teamId and member.leftAt is null")
+    List<TeamMember> findActiveByTeamId(UUID teamId);
+
     long countByTeamIdAndLeftAtIsNull(UUID teamId);
 
     @Modifying
@@ -41,7 +44,7 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
     @Query("""
             select new pl.macieserafin.hourforge.team.TeamResponse(
                 team.id, team.name, team.timezone, team.createdAt, member.role, team.archivedAt, team.activeTimersVisible,
-                team.requireDescription, team.requireTagOrIssue, team.weekStart)
+                team.requireDescription, team.requireTagOrIssue, team.weekStart, team.weeklyReportEnabled)
             from TeamMember member join member.team team
             where member.user.id = :userId and member.leftAt is null
             order by team.createdAt desc, team.id asc

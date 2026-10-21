@@ -44,6 +44,24 @@ public class SmtpEmailSender implements EmailSender, DisposableBean {
     }
 
     @Override
+    public void sendWithAttachment(String to, String subject, String body, String filename, byte[] content, String contentType) {
+        executor.execute(() -> {
+            try {
+                var message = mailSender.createMimeMessage();
+                var helper = new org.springframework.mail.javamail.MimeMessageHelper(message, true, "UTF-8");
+                helper.setFrom(from);
+                helper.setTo(to);
+                helper.setSubject(subject);
+                helper.setText(body);
+                helper.addAttachment(filename, new org.springframework.core.io.ByteArrayResource(content), contentType);
+                mailSender.send(message);
+            } catch (jakarta.mail.MessagingException | RuntimeException exception) {
+                log.warn("E-mail delivery failed: subject={}, error={}", subject, exception.getClass().getSimpleName());
+            }
+        });
+    }
+
+    @Override
     public void destroy() {
         executor.shutdown();
     }

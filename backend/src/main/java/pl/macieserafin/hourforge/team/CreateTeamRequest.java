@@ -12,14 +12,15 @@ public record CreateTeamRequest(
         Boolean activeTimersVisible,
         Boolean requireDescription,
         Boolean requireTagOrIssue,
-        pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart weekStart
+        pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart weekStart,
+        Boolean weeklyReport
 ) {
     public CreateTeamRequest(String name, String timezone) {
-        this(name, timezone, null, null, null, null);
+        this(name, timezone, null, null, null, null, null);
     }
 
     public CreateTeamRequest(String name, String timezone, Boolean activeTimersVisible) {
-        this(name, timezone, activeTimersVisible, null, null, null);
+        this(name, timezone, activeTimersVisible, null, null, null, null);
     }
 
     public CreateTeamRequest {

@@ -22,6 +22,7 @@ export function TeamSettingsModal({ userId, team, onClose, onSaved, onArchived, 
   const [requireDescription, setRequireDescription] = useState(team.requireDescription)
   const [requireTagOrIssue, setRequireTagOrIssue] = useState(team.requireTagOrIssue)
   const [weekStart, setWeekStart] = useState(team.weekStart)
+  const [weeklyReport, setWeeklyReport] = useState(team.weeklyReport)
   const [confirmation, setConfirmation] = useState('')
   const [validation, setValidation] = useState('')
   const busy = update.isPending || archive.isPending || remove.isPending
@@ -32,7 +33,7 @@ export function TeamSettingsModal({ userId, team, onClose, onSaved, onArchived, 
     event.preventDefault()
     if (!name.trim()) { setValidation('Wpisz nazwę zespołu.'); return }
     setValidation('')
-    update.mutate({ teamId: team.id, name: name.trim(), timezone, activeTimersVisible: liveView, requireDescription, requireTagOrIssue, weekStart }, { onSuccess: onSaved })
+    update.mutate({ teamId: team.id, name: name.trim(), timezone, activeTimersVisible: liveView, requireDescription, requireTagOrIssue, weekStart, weeklyReport }, { onSuccess: onSaved })
   }
 
   const title = view === 'archive' ? 'Zarchiwizuj zespół' : view === 'delete' ? 'Usuń zespół' : 'Ustawienia zespołu'
@@ -45,6 +46,8 @@ export function TeamSettingsModal({ userId, team, onClose, onSaved, onArchived, 
             <p className="field-hint">Nowa strefa dotyczy nowych wpisów i bieżących dat. Zapisane daty pracy się nie zmieniają.</p></div>
           <div className="field-group"><label><input type="checkbox" checked={liveView} onChange={event => setLiveView(event.target.checked)} /> Pokaż właścicielowi, kto teraz pracuje</label>
             <p className="field-hint">Podgląd aktywnych timerów w raporcie zespołu: osoba, projekt i czas. Wyłączenie ukrywa go także przed właścicielem.</p></div>
+          <div className="field-group"><label><input type="checkbox" checked={weeklyReport} onChange={event => setWeeklyReport(event.target.checked)} /> Wysyłaj cotygodniowy raport PDF e-mailem</label>
+            <p className="field-hint">W poniedziałek od 8:00 (czas zespołu) właściciel i administratorzy dostaną raport z poprzedniego tygodnia. Każda osoba może go wyłączyć u siebie w koncie.</p></div>
           <fieldset className="team-rules"><legend>Reguły zespołu</legend>
             <label><input type="checkbox" checked={requireDescription} onChange={event => setRequireDescription(event.target.checked)} /> Wymagaj opisu pracy</label>
             <label><input type="checkbox" checked={requireTagOrIssue} onChange={event => setRequireTagOrIssue(event.target.checked)} /> Wymagaj tagu lub zadania Jira</label>

@@ -14,6 +14,8 @@ public interface TeamRepository extends JpaRepository<Team, UUID> {
     @Query("select team from Team team where team.id = :id")
     Optional<Team> findLockedById(UUID id);
 
+    java.util.List<Team> findByWeeklyReportEnabledTrueAndArchivedAtIsNull();
+
     @Modifying(clearAutomatically = true)
     @Query("delete from Team team where team.id = :id")
     int deleteTeamById(UUID id);

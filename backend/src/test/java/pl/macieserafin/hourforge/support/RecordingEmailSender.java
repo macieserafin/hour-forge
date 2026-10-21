@@ -12,6 +12,18 @@ public class RecordingEmailSender implements EmailSender {
     }
 
     private final List<Message> sent = new ArrayList<>();
+    private final List<String> attachments = new ArrayList<>();
+
+    @Override
+    public synchronized void sendWithAttachment(String to, String subject, String body, String filename, byte[] content, String contentType) {
+        if (content.length == 0) throw new IllegalStateException("empty attachment");
+        attachments.add(to + ":" + filename + ":" + contentType);
+        sent.add(new Message(to, subject, body));
+    }
+
+    public synchronized List<String> attachments() {
+        return List.copyOf(attachments);
+    }
 
     @Override
     public synchronized void send(String to, String subject, String body) {
@@ -24,6 +36,7 @@ public class RecordingEmailSender implements EmailSender {
 
     public synchronized void clear() {
         sent.clear();
+        attachments.clear();
     }
 
     public synchronized Message last() {

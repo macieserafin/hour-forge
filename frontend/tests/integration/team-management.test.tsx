@@ -24,7 +24,7 @@ it('edits the team name and time zone from the settings', async () => {
   await userEvent.selectOptions(modal.getByLabelText('Strefa czasowa'), 'UTC')
   await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
   expect(await screen.findByText('Zapisano ustawienia zespołu Nowa nazwa.')).toBeVisible()
-  expect(sent).toEqual({ name: 'Nowa nazwa', timezone: 'UTC', activeTimersVisible: true, requireDescription: false, requireTagOrIssue: false, weekStart: 'MONDAY' })
+  expect(sent).toEqual({ name: 'Nowa nazwa', timezone: 'UTC', activeTimersVisible: true, requireDescription: false, requireTagOrIssue: false, weekStart: 'MONDAY', weeklyReport: false })
 })
 
 it('turns the live view off for the whole team from the settings', async () => {
@@ -39,7 +39,7 @@ it('turns the live view off for the whole team from the settings', async () => {
   await userEvent.click(toggle)
   await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
   await screen.findByText(/Zapisano ustawienia zespołu/)
-  expect(sent).toEqual({ name: team.name, timezone: team.timezone, activeTimersVisible: false, requireDescription: false, requireTagOrIssue: false, weekStart: 'MONDAY' })
+  expect(sent).toEqual({ name: team.name, timezone: team.timezone, activeTimersVisible: false, requireDescription: false, requireTagOrIssue: false, weekStart: 'MONDAY', weeklyReport: false })
 })
 
 it('archives a team only after showing the irreversible effects', async () => {
@@ -132,4 +132,17 @@ it('shows an admin the settings but not the option to delete the team', async ()
   const modal = await openSettings()
   expect(modal.getByRole('button', { name: /Zarchiwizuj zespół/ })).toBeVisible()
   expect(modal.queryByRole('button', { name: /Usuń zespół/ })).not.toBeInTheDocument()
+})
+
+it('turns the weekly e-mailed report on from the settings', async () => {
+  let current = { ...team }
+  let sent: Record<string, unknown> = {}
+  mockApi({ 'GET /api/teams': () => json([current]),
+    'PATCH /api/teams/team': (_url, options) => { sent = JSON.parse(String(options.body)); current = { ...current, ...sent }; return json(current) } })
+  panel()
+  const modal = await openSettings()
+  await userEvent.click(modal.getByLabelText('Wysyłaj cotygodniowy raport PDF e-mailem'))
+  await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
+  await screen.findByText(/Zapisano ustawienia zespołu/)
+  expect(sent).toMatchObject({ weeklyReport: true })
 })

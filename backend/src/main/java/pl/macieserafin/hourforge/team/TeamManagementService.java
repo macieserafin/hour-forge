@@ -68,6 +68,7 @@ public class TeamManagementService {
         if (request.activeTimersVisible() != null) team.setActiveTimersVisible(request.activeTimersVisible());
         if (request.requireDescription() != null) team.setRequireDescription(request.requireDescription());
         if (request.weekStart() != null) team.setWeekStart(request.weekStart());
+        if (request.weeklyReport() != null) team.setWeeklyReportEnabled(request.weeklyReport());
         if (request.requireTagOrIssue() != null) {
             // A rule nobody can satisfy would lock everyone out of saving work: it needs a tag to pick or a Jira site to link to.
             if (request.requireTagOrIssue() && !team.isRequireTagOrIssue() && !tagOrIssueAvailable(teamId)) {

@@ -2,7 +2,7 @@ import { vi } from 'vitest'
 import type { Project, Team, TimeEntry, TimeEntryHistoryItem, User } from '../../src/lib/api'
 
 export const user: User = { id: 'actor', email: 'actor@example.test', displayName: 'Test Actor' }
-export const team: Team = { id: 'team', name: 'Studio', timezone: 'Europe/Warsaw', role: 'OWNER', createdAt: '2026-10-19T10:00:00Z', archivedAt: null, activeTimersVisible: true, requireDescription: false, requireTagOrIssue: false, weekStart: 'MONDAY' }
+export const team: Team = { id: 'team', name: 'Studio', timezone: 'Europe/Warsaw', role: 'OWNER', createdAt: '2026-10-19T10:00:00Z', archivedAt: null, activeTimersVisible: true, requireDescription: false, requireTagOrIssue: false, weekStart: 'MONDAY', weeklyReport: false }
 export const project: Project = { id: 'project', teamId: team.id, name: 'Website', description: null, createdAt: team.createdAt, archivedAt: null }
 export const entry: TimeEntryHistoryItem = { id: 'entry', teamId: team.id, projectId: project.id, projectName: project.name,
   entryType: 'MANUAL', workDate: '2026-10-19', durationSeconds: 900, description: 'Original work', startedAt: null, endedAt: null }
