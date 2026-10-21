@@ -184,7 +184,7 @@ class ReportIT extends ApiIntegrationTestSupport {
             case PROJECT -> new Integer[]{330, 120};
             case MEMBER_PROJECT -> new Integer[]{60, 270, 120};
             case DAY_MEMBER -> new Integer[]{60, 240, 120, 30};
-            case TAG -> new Integer[]{450};
+            case TAG, JIRA_ISSUE -> new Integer[]{450};
         };
         mvc.perform(request("breakdown").param("groupBy", grouping.name()).param("size", "100"))
                 .andExpect(status().isOk())

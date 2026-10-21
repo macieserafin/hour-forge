@@ -9,18 +9,22 @@ import org.springframework.format.annotation.DateTimeFormat;
 /** {@code q} matches descriptions case-insensitively; an empty value means no text filter. */
 public record ReportFilter(@DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
                            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to, List<UUID> userIds,
-                           List<UUID> projectIds, EntryType entryType, Boolean undated, String q, List<UUID> tagIds) {
+                           List<UUID> projectIds, EntryType entryType, Boolean undated, String q, List<UUID> tagIds, String issueKey) {
     public ReportFilter(LocalDate from, LocalDate to, List<UUID> userIds, List<UUID> projectIds, EntryType entryType, Boolean undated, String q) {
-        this(from, to, userIds, projectIds, entryType, undated, q, null);
+        this(from, to, userIds, projectIds, entryType, undated, q, null, null);
+    }
+
+    public ReportFilter(LocalDate from, LocalDate to, List<UUID> userIds, List<UUID> projectIds, EntryType entryType, Boolean undated, String q, List<UUID> tagIds) {
+        this(from, to, userIds, projectIds, entryType, undated, q, tagIds, null);
     }
 
     public ReportFilter(LocalDate from, LocalDate to, List<UUID> userIds, List<UUID> projectIds, EntryType entryType) {
-        this(from, to, userIds, projectIds, entryType, false, null, null);
+        this(from, to, userIds, projectIds, entryType, false, null, null, null);
     }
 
     public ReportFilter(LocalDate from, LocalDate to, List<UUID> userIds, List<UUID> projectIds, EntryType entryType,
                         Boolean undated) {
-        this(from, to, userIds, projectIds, entryType, undated, null, null);
+        this(from, to, userIds, projectIds, entryType, undated, null, null, null);
     }
 
     public ReportFilter {
@@ -29,5 +33,6 @@ public record ReportFilter(@DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalD
         projectIds = projectIds == null ? List.of() : List.copyOf(projectIds);
         tagIds = tagIds == null ? List.of() : List.copyOf(tagIds);
         q = q == null || q.isBlank() ? null : q.strip();
+        issueKey = issueKey == null || issueKey.isBlank() ? null : issueKey.strip().toUpperCase(java.util.Locale.ROOT);
     }
 }

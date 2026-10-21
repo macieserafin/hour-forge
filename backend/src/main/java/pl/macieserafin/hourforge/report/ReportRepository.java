@@ -36,6 +36,7 @@ public class ReportRepository {
         if (!filter.projectIds().isEmpty()) predicates.add(root.get("project").get("id").in(filter.projectIds()));
         if (!filter.tagIds().isEmpty()) predicates.add(root.get("tag").get("id").in(filter.tagIds()));
         if (filter.entryType() != null) predicates.add(cb.equal(root.get("entryType"), filter.entryType()));
+        if (filter.issueKey() != null) predicates.add(cb.equal(cb.upper(root.get("jiraIssueKey")), filter.issueKey()));
         if (filter.q() != null) predicates.add(DescriptionSearch.contains(cb, root.get("description"), filter.q()));
         return cb.and(predicates.toArray(Predicate[]::new));
     }
@@ -73,6 +74,7 @@ public class ReportRepository {
             dimensions.add(tag.get("name"));
             dimensions.add(tag.get("color"));
         }
+        if (grouping.issue) dimensions.add(root.get("jiraIssueKey"));
         var selections = new ArrayList<Selection<?>>(dimensions);
         selections.add(cb.coalesce(cb.sumAsLong(root.get("durationSeconds")), 0L));
         selections.add(cb.count(root));
@@ -96,8 +98,9 @@ public class ReportRepository {
         var tagId = grouping.tag ? row.get(index++, UUID.class) : null;
         var tagName = grouping.tag ? row.get(index++, String.class) : null;
         var tagColor = grouping.tag ? row.get(index++, pl.macieserafin.hourforge.project.ProjectColor.class) : null;
+        var issueKey = grouping.issue ? row.get(index++, String.class) : null;
         return new ReportResponse.Bucket(day, userId, name, projectId, projectName, archived, color == null ? null : color.name(),
-                row.get(index++, Long.class), row.get(index, Long.class), tagId, tagName, tagColor == null ? null : tagColor.name());
+                row.get(index++, Long.class), row.get(index, Long.class), tagId, tagName, tagColor == null ? null : tagColor.name(), issueKey);
     }
 
     public List<TimeEntry> entries(UUID teamId, ReportFilter filter, boolean active,
@@ -118,6 +121,18 @@ public class ReportRepository {
         var created = ascending ? cb.asc(root.get("createdAt")) : cb.desc(root.get("createdAt"));
         query.select(root).where(filter(cb, root, teamId, filter, active)).orderBy(primary, created, cb.asc(root.get("id")));
         return em.createQuery(query).setFirstResult(page * size).setMaxResults(size + 1).getResultList();
+    }
+
+    /** Seconds per person and day for the filter, at most {@code limit} rows (one more is read to tell if there were more). */
+    public List<Tuple> timesheet(UUID teamId, ReportFilter filter, int limit) {
+        var cb = em.getCriteriaBuilder();
+        var query = cb.createTupleQuery();
+        var root = query.from(TimeEntry.class);
+        var dimensions = List.<Expression<?>>of(root.get("user").get("displayName"), root.get("user").get("id"), root.get("workDate"));
+        query.select(cb.tuple(root.get("user").get("id"), root.get("user").get("displayName"), root.get("workDate"),
+                        cb.coalesce(cb.sumAsLong(root.get("durationSeconds")), 0L)))
+                .where(filter(cb, root, teamId, filter, false)).groupBy(dimensions).orderBy(dimensions.stream().map(cb::asc).toList());
+        return em.createQuery(query).setMaxResults(limit + 1).getResultList();
     }
 
     public List<TeamMember> members(UUID teamId, int page, int size) {

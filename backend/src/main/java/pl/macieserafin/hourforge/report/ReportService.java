@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
@@ -46,6 +47,37 @@ public class ReportService {
         pagination(page, size);
         if (grouping == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Grouping is required");
         return new ReportResponse.Breakdown(grouping, context, reports.breakdown(teamId, context.filter(), grouping, page, size));
+    }
+
+    static final int MAX_TIMESHEET_DAYS = 31;
+    static final int MAX_TIMESHEET_ROWS = 5000;
+
+    /** Time per person and day over the days of the filter, with totals; the default is the team's current week. */
+    public ReportResponse.Timesheet timesheet(UUID actorId, UUID teamId, ReportFilter filter) {
+        var context = context(owner(actorId, teamId), filter, true);
+        var f = context.filter();
+        if (f.undated() || f.from() == null || ChronoUnit.DAYS.between(f.from(), f.to()) + 1 > MAX_TIMESHEET_DAYS) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A timesheet needs a date range of at most " + MAX_TIMESHEET_DAYS + " days");
+        }
+        var days = f.from().datesUntil(f.to().plusDays(1)).toList();
+        var rows = reports.timesheet(teamId, f, MAX_TIMESHEET_ROWS);
+        boolean truncated = rows.size() > MAX_TIMESHEET_ROWS;
+        var people = new java.util.LinkedHashMap<UUID, long[]>();
+        var names = new java.util.HashMap<UUID, String>();
+        var dayTotals = new long[days.size()];
+        for (var row : rows.subList(0, Math.min(rows.size(), MAX_TIMESHEET_ROWS))) {
+            var userId = row.get(0, UUID.class);
+            int index = (int) ChronoUnit.DAYS.between(f.from(), row.get(2, LocalDate.class));
+            long seconds = row.get(3, Long.class);
+            people.computeIfAbsent(userId, key -> new long[days.size()])[index] += seconds;
+            names.put(userId, row.get(1, String.class));
+            dayTotals[index] += seconds;
+        }
+        var result = people.entrySet().stream().map(entry -> new ReportResponse.TimesheetRow(entry.getKey(), names.get(entry.getKey()),
+                java.util.Arrays.stream(entry.getValue()).boxed().toList(), java.util.Arrays.stream(entry.getValue()).sum()))
+                .sorted(java.util.Comparator.comparing(ReportResponse.TimesheetRow::displayName).thenComparing(ReportResponse.TimesheetRow::userId)).toList();
+        return new ReportResponse.Timesheet(context, days, result, java.util.Arrays.stream(dayTotals).boxed().toList(),
+                java.util.Arrays.stream(dayTotals).sum(), truncated);
     }
 
     public ReportResponse.Result<ReportResponse.Entry> entries(UUID actorId, UUID teamId, ReportFilter filter,
@@ -95,7 +127,7 @@ public class ReportService {
         if (!ownOnly) return context(owner(actorId, teamId), filter, true);
         var team = activeMemberTeam(actorId, teamId);
         var own = new ReportFilter(filter.from(), filter.to(), java.util.List.of(actorId), filter.projectIds(),
-                filter.entryType(), filter.undated(), filter.q(), filter.tagIds());
+                filter.entryType(), filter.undated(), filter.q(), filter.tagIds(), filter.issueKey());
         return context(team, own, true);
     }
 
@@ -150,6 +182,9 @@ public class ReportService {
         if (from != null && ChronoUnit.DAYS.between(from, to) + 1 > MAX_REPORT_DAYS) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A report can cover at most " + MAX_REPORT_DAYS + " days");
         }
+        if (input.issueKey() != null && !input.issueKey().matches("[A-Z][A-Z0-9_]{0,39}-[0-9]{1,10}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Use a Jira issue key such as PROJ-123");
+        }
         if (input.q() != null && input.q().length() > DescriptionSearch.MAX_LENGTH) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Search text can have at most " + DescriptionSearch.MAX_LENGTH + " characters");
         }
@@ -164,7 +199,7 @@ public class ReportService {
         }
         var filter = new ReportFilter(from, to, input.userIds().stream().distinct().sorted().toList(),
                 input.projectIds().stream().distinct().sorted().toList(), input.entryType(), input.undated(), input.q(),
-                input.tagIds().stream().distinct().sorted().toList());
+                input.tagIds().stream().distinct().sorted().toList(), input.issueKey());
         return new ReportResponse.Context(team.getId(), team.getName(), team.getTimezone(), filter);
     }
 

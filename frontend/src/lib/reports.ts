@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { saveBlob } from './download'
-import { ApiError, downloadReport, getReportActive, getReportBreakdown, getReportEntries, getReportMembers, getReportProjects, getReportSummary,
+import { ApiError, downloadReport, getReportActive, getReportBreakdown, getReportEntries, getReportTimesheet, getReportMembers, getReportProjects, getReportSummary,
   type ReportDownload, type ReportFilters, type ReportGroup, type ReportResult, type ReportSort } from './api'
 import { dashboardKey } from './dashboard'
 import { teamsKey, useAuthError } from './teams'
@@ -60,6 +60,14 @@ export function useDownloadReport(teamId: string, filters: ReportFilters, kind: 
     onSuccess: ({ blob, filename }) => saveBlob(blob, filename) })
 }
 
+export function useReportTimesheet(userId: string, teamId: string, filters: ReportFilters, enabled = true) {
+  const query = useQuery({ queryKey: [...reportsKey(userId, teamId), 'timesheet', filters], enabled,
+    queryFn: ({ signal }) => getReportTimesheet(teamId, filters, signal), retry,
+    refetchInterval: 60_000, refetchOnWindowFocus: 'always' })
+  useReportError(userId, query.error)
+  return query
+}
+
 export function useReportEntries(userId: string, teamId: string, filters: ReportFilters, sort: ReportSort, page: number) {
   const query = useQuery({ queryKey: [...reportsKey(userId, teamId), 'entries', filters, sort, page],
     queryFn: ({ signal }) => getReportEntries(teamId, filters, sort, page, signal), retry,
@@ -92,7 +100,7 @@ export function reportWeek(timezone: string, now = new Date(), weekStart: 'MONDA
 }
 
 const dateText = /^\d{4}-\d{2}-\d{2}$/
-const managedParams = ['from', 'to', 'person', 'project', 'tag', 'type', 'undated', 'q'] as const
+const managedParams = ['from', 'to', 'person', 'project', 'tag', 'issue', 'type', 'undated', 'q'] as const
 
 function localDate(timezone: string, now: Date) {
   const parts = new Intl.DateTimeFormat('en', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
@@ -138,6 +146,7 @@ export function filtersFromSearch(search: URLSearchParams, timezone: string, now
     userId: search.get('person') ?? '',
     projectId: search.get('project') ?? '',
     ...(search.get('tag') ? { tagId: search.get('tag')! } : {}),
+    ...(search.get('issue') ? { issueKey: search.get('issue')!.slice(0, 64) } : {}),
     entryType: type === 'TIMER' || type === 'MANUAL' ? type : '',
     q: (search.get('q') ?? '').slice(0, 200),
   }
@@ -152,6 +161,7 @@ export function filtersToSearch(filters: ReportFilters, base: URLSearchParams): 
   if (filters.userId) next.set('person', filters.userId)
   if (filters.projectId) next.set('project', filters.projectId)
   if (filters.tagId) next.set('tag', filters.tagId)
+  if (filters.issueKey?.trim()) next.set('issue', filters.issueKey.trim())
   if (filters.entryType) next.set('type', filters.entryType)
   if (filters.q?.trim()) next.set('q', filters.q.trim())
   return next

@@ -35,5 +35,7 @@ export function reportHandlers(target = team) {
     [`${base}/active-timers`]: () => json({ ...reportPage([reportActiveTimer]), asOf: '2026-10-19T09:02:05Z' }),
     [`${base}/members`]: () => json(reportPage([{ ...reportMember }, { ...reportMember, userId: user.id, displayName: user.displayName, role: 'OWNER', leftAt: null }])),
     [`${base}/projects`]: () => json(reportPage([reportProject])),
+    [`${base}/timesheet`]: () => json({ context: reportContext, days: ['2026-10-19', '2026-10-20'], rows: [{ userId: reportMember.userId, displayName: reportMember.displayName, seconds: [900, 0], total: 900 }],
+      dayTotals: [900, 0], total: 900, truncated: false }),
   }
 }

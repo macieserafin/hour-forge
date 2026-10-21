@@ -18,7 +18,9 @@ public final class ReportResponse {
     public record Breakdown(ReportGrouping groupBy, Context context, Page<Bucket> data) {}
     public record Bucket(LocalDate workDate, UUID userId, String displayName,
                          UUID projectId, String projectName, Instant projectArchivedAt, String projectColor,
-                         long durationSeconds, long entryCount, UUID tagId, String tagName, String tagColor) {}
+                         long durationSeconds, long entryCount, UUID tagId, String tagName, String tagColor, String jiraIssueKey) {}
+    public record TimesheetRow(UUID userId, String displayName, List<Long> seconds, long total) {}
+    public record Timesheet(Context context, List<LocalDate> days, List<TimesheetRow> rows, List<Long> dayTotals, long total, boolean truncated) {}
     public record Member(UUID userId, String displayName, TeamRole role, Instant joinedAt, Instant leftAt, String jobTitle, Integer ftePercent) {}
     public record Project(UUID projectId, String name, String description, Instant createdAt, Instant archivedAt) {}
     public record Entry(UUID id, UUID userId, String displayName, UUID projectId, String projectName,

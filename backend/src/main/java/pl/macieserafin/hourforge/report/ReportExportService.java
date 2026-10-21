@@ -60,6 +60,18 @@ public class ReportExportService {
         return new Download("hourforge-raport-" + rangeLabel(context.filter()) + ".csv", csv.bytes());
     }
 
+    /** The same rows as the CSV, as an Excel workbook; also refuses to silently drop rows. */
+    public Download xlsx(UUID actorId, UUID teamId, ReportFilter filter) {
+        var context = reports.exportContext(actorId, teamId, filter, false);
+        var xlsx = new ReportXlsx();
+        boolean truncated = reports.forEachEntry(teamId, context.filter(), maxCsvRows, entry -> xlsx.entry(entry, context.teamName()));
+        if (truncated) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "The report has more than " + maxCsvRows + " entries; narrow the dates or the filters");
+        }
+        return new Download("hourforge-raport-" + rangeLabel(context.filter()) + ".xlsx", xlsx.bytes());
+    }
+
     /**
      * A readable report: totals, time per person, project and day, and the entries. The owner gets the whole team,
      * a member only their own entries ({@code own}). A very long entry list is cut and says so.

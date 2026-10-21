@@ -570,6 +570,7 @@ export interface ReportFilters {
   entryType: '' | 'TIMER' | 'MANUAL'
   q?: string
   tagId?: string
+  issueKey?: string
 }
 
 export interface ReportContext {
@@ -607,6 +608,7 @@ export interface ReportBucket {
   tagId?: string | null
   tagName?: string | null
   tagColor?: string | null
+  jiraIssueKey?: string | null
   durationSeconds: number
   entryCount: number
 }
@@ -704,6 +706,7 @@ function reportParams(filters: ReportFilters, page?: number) {
   if (filters.userId) params.set('userIds', filters.userId)
   if (filters.projectId) params.set('projectIds', filters.projectId)
   if (filters.tagId) params.set('tagIds', filters.tagId)
+  if (filters.issueKey?.trim()) params.set('issueKey', filters.issueKey.trim())
   if (filters.entryType) params.set('entryType', filters.entryType)
   if (filters.q?.trim()) params.set('q', filters.q.trim())
   if (page !== undefined) { params.set('page', String(page)); params.set('size', '20') }
@@ -727,7 +730,7 @@ async function reportRequest<T>(teamId: string, endpoint: string, params: URLSea
 export const getReportSummary = (teamId: string, filters: ReportFilters, signal?: AbortSignal) =>
   reportRequest<ReportSummary>(teamId, 'summary', reportParams(filters), signal)
 
-export type ReportGroup = 'MEMBER' | 'PROJECT' | 'DAY' | 'MEMBER_PROJECT' | 'TAG'
+export type ReportGroup = 'MEMBER' | 'PROJECT' | 'DAY' | 'MEMBER_PROJECT' | 'TAG' | 'JIRA_ISSUE'
 
 export interface ReportActiveTimer {
   entry: ReportEntry
@@ -759,21 +762,21 @@ export function getReportEntries(teamId: string, filters: ReportFilters, sort: R
   return reportRequest<ReportResult<ReportEntry>>(teamId, 'entries', params, signal)
 }
 
-export type ReportDownload = 'csv' | 'pdf' | 'mine-pdf'
+export type ReportDownload = 'csv' | 'xlsx' | 'pdf' | 'mine-pdf'
 
-const downloadPaths: Record<ReportDownload, string> = { csv: 'export.csv', pdf: 'export.pdf', 'mine-pdf': 'mine/export.pdf' }
+const downloadPaths: Record<ReportDownload, string> = { csv: 'export.csv', xlsx: 'export.xlsx', pdf: 'export.pdf', 'mine-pdf': 'mine/export.pdf' }
 
 /** A file version of the report the owner is looking at; the server applies the same filters as on screen. */
 export async function downloadReport(teamId: string, filters: ReportFilters, kind: ReportDownload): Promise<{ blob: Blob; filename: string }> {
   const response = await request(`/api/teams/${encodeURIComponent(teamId)}/reports/${downloadPaths[kind]}?${reportParams(filters)}`)
   if (!response.ok) {
     throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
-      : response.status === 400 ? 'Sprawdź zakres dat (najwyżej 366 dni) i filtry. Plik CSV może mieć najwyżej 50 000 wpisów, więc zawęź raport.'
+      : response.status === 400 ? 'Sprawdź zakres dat (najwyżej 366 dni), klucz zadania Jira i filtry. Plik CSV lub Excel może mieć najwyżej 50 000 wpisów, więc zawęź raport.'
       : response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.'
       : response.status === 403 || response.status === 404 ? 'Raport jest niedostępny. Sprawdź swoje uprawnienia i filtry.'
       : 'Nie udało się pobrać pliku. Spróbuj ponownie.')
   }
-  return { blob: await response.blob(), filename: filenameFrom(response, kind === 'csv' ? 'hourforge-raport.csv' : 'hourforge-raport.pdf') }
+  return { blob: await response.blob(), filename: filenameFrom(response, kind === 'csv' ? 'hourforge-raport.csv' : kind === 'xlsx' ? 'hourforge-raport.xlsx' : 'hourforge-raport.pdf') }
 }
 
 export const getReportMembers = (teamId: string, page: number, signal?: AbortSignal) =>
@@ -1060,3 +1063,15 @@ export const createTag = ({ teamId, ...body }: TagInput & { teamId: string }) =>
 export const updateTag = ({ teamId, id, ...body }: TagInput & { teamId: string; id: string }) => tagRequest<Tag>(teamId, 'PUT', `/${encodeURIComponent(id)}`, body)
 export const archiveTag = ({ teamId, id }: { teamId: string; id: string }) => tagRequest<Tag>(teamId, 'POST', `/${encodeURIComponent(id)}/archive`)
 export const restoreTag = ({ teamId, id }: { teamId: string; id: string }) => tagRequest<Tag>(teamId, 'POST', `/${encodeURIComponent(id)}/restore`)
+
+export interface ReportTimesheet {
+  context: ReportContext
+  days: string[]
+  rows: { userId: string; displayName: string; seconds: number[]; total: number }[]
+  dayTotals: number[]
+  total: number
+  truncated: boolean
+}
+
+export const getReportTimesheet = (teamId: string, filters: ReportFilters, signal?: AbortSignal) =>
+  reportRequest<ReportTimesheet>(teamId, 'timesheet', reportParams(filters), signal)

@@ -50,3 +50,15 @@ it('explains when too many reports were downloaded', async () => {
   await userEvent.click(await screen.findByRole('button', { name: 'Pobierz CSV' }))
   expect(await screen.findByText('Zbyt wiele prób. Spróbuj ponownie za 20 min.')).toBeVisible()
 })
+
+it('downloads the Excel version of the applied filters', async () => {
+  const fetcher = mockApi({ ...reportHandlers(), 'GET /api/teams/team/reports/export.xlsx': () => new Response('x', { status: 200,
+    headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': 'attachment; filename="hourforge-raport-2026-10-01_2026-10-10.xlsx"' } }) })
+  renderApp(<OwnerDashboard userId="actor" team={team} />, '/dashboard?team=team&from=2026-10-01&to=2026-10-10&q=login&issue=PROJ-7')
+  await screen.findByRole('region', { name: 'Łączny czas zespołu' })
+  await userEvent.click(screen.getByRole('button', { name: 'Pobierz Excel' }))
+  await waitFor(() => expect(saved).toHaveLength(1))
+  expect(saved[0]!.download).toBe('hourforge-raport-2026-10-01_2026-10-10.xlsx')
+  const call = fetcher.mock.calls.map(([path]) => new URL(String(path), window.location.origin)).find(url => url.pathname.endsWith('/reports/export.xlsx'))
+  expect(Object.fromEntries(call!.searchParams)).toEqual({ from: '2026-10-01', to: '2026-10-10', q: 'login', issueKey: 'PROJ-7' })
+})

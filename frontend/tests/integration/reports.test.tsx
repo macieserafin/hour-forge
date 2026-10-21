@@ -75,7 +75,7 @@ it('applies the same filters to totals, both breakdowns and entries only after s
   await userEvent.click(screen.getByRole('button', { name: 'Filtruj raport' }))
   await waitFor(() => {
     const calls = fetcher.mock.calls.map(([path]) => new URL(String(path), window.location.origin)).filter(url => url.searchParams.has('userIds'))
-    expect(calls).toHaveLength(6)
+    expect(calls).toHaveLength(7)
     for (const url of calls) {
       expect(Object.fromEntries(url.searchParams)).toMatchObject({ from: '2026-01-01', to: '2026-01-31', userIds: reportMember.userId, projectIds: reportProject.projectId, entryType: 'MANUAL' })
     }

@@ -3,11 +3,12 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Download, LoaderCircle, RefreshCw } from 'lucide-react'
 import { ApiError, type ReportBucket, type ReportFilters, type ReportGroup, type ReportPage, type ReportSort, type Team } from '../lib/api'
-import { MAX_REPORT_DAYS, clearedSearch, filtersFromSearch, filtersToSearch, reportRangeDays, reportRanges, useDownloadReport, useReportActive, useReportBreakdown, useReportEntries, useReportMembers, useReportProjects, useReportSummary } from '../lib/reports'
+import { MAX_REPORT_DAYS, clearedSearch, filtersFromSearch, filtersToSearch, reportRangeDays, reportRanges, useDownloadReport, useReportActive, useReportBreakdown, useReportEntries, useReportTimesheet, useReportMembers, useReportProjects, useReportSummary } from '../lib/reports'
 import { formatClock, formatDuration, formatHours } from '../lib/time'
 import { ProjectDot } from '../components/ProjectDot'
 import { projectColorHex } from '../lib/projectColors'
 import { useTags } from '../lib/tags'
+import { useJiraStatus } from '../lib/jira'
 import { BarChart, type ChartItem } from '../components/BarChart'
 
 const dateLabel = (date: string | null) => date === null ? 'Bez daty' : new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { dateStyle: 'medium' })
@@ -43,6 +44,7 @@ const breakdowns: Record<ReportGroup, { title: string; table: string; pages: str
   DAY: { title: 'Czas według dni', table: 'Tabela czasu według dni', pages: 'Strony czasu według dni', columns: ['Dzień'] },
   MEMBER_PROJECT: { title: 'Czas według osób i projektów', table: 'Tabela czasu osób i projektów', pages: 'Strony czasu osób i projektów', columns: ['Osoba', 'Projekt'] },
   TAG: { title: 'Czas według tagów', table: 'Tabela czasu tagów', pages: 'Strony czasu tagów', columns: ['Tag'] },
+  JIRA_ISSUE: { title: 'Czas według zadań Jira', table: 'Tabela czasu zadań Jira', pages: 'Strony czasu zadań Jira', columns: ['Zadanie Jira'] },
 }
 
 const MAX_CHART_PROJECTS = 8
@@ -76,6 +78,7 @@ function bucketCells(group: ReportGroup, bucket: ReportBucket, person: (bucket: 
     case 'DAY': return [bucket.workDate ? <time dateTime={bucket.workDate}>{dateLabel(bucket.workDate)}</time> : 'Bez daty']
     case 'MEMBER_PROJECT': return [person(bucket), <>{bucket.projectName}{archivedNote(bucket)}</>]
     case 'TAG': return [bucket.tagName ?? 'Bez tagu']
+    case 'JIRA_ISSUE': return [bucket.jiraIssueKey ?? 'Bez zadania Jira']
   }
 }
 
@@ -88,7 +91,7 @@ function BreakdownTable({ data, group, busy, onPage, profiles }: { data: ReportP
         <table className="team-table report-breakdown-table">
           <caption className="sr-only">{labels.title}</caption>
           <thead><tr>{labels.columns.map(column => <th key={column} scope="col">{column}</th>)}<th scope="col">Czas</th><th scope="col">Wpisy</th></tr></thead>
-          <tbody>{data.content.map(bucket => <tr key={`${bucket.workDate ?? 'none'}|${bucket.userId ?? ''}|${bucket.projectId ?? ''}|${bucket.tagId ?? ''}`}>
+          <tbody>{data.content.map(bucket => <tr key={`${bucket.workDate ?? 'none'}|${bucket.userId ?? ''}|${bucket.projectId ?? ''}|${bucket.tagId ?? ''}|${bucket.jiraIssueKey ?? ''}`}>
             {bucketCells(group, bucket, person).map((cell, index) => <td key={index}>{cell}</td>)}
             <td className="history-duration">{formatDuration(bucket.durationSeconds)}</td><td>{bucket.entryCount}</td>
           </tr>)}</tbody>
@@ -108,6 +111,40 @@ function TagBreakdown({ userId, team, filters }: { userId: string; team: Team; f
   const tags = useReportBreakdown(userId, team.id, filters, 'TAG', page)
   return <section className="report-section" aria-label="Czas według tagów"><h3>Czas według tagów</h3>
     <ReportState query={tags}>{data => <BreakdownTable data={data.data} group="TAG" busy={tags.isFetching} onPage={setPage} />}</ReportState></section>
+}
+
+function JiraBreakdown({ userId, team, filters }: { userId: string; team: Team; filters: ReportFilters }) {
+  const [page, setPage] = useState(0)
+  const filtersKey = JSON.stringify(filters)
+  useEffect(() => setPage(0), [filtersKey])
+  const issues = useReportBreakdown(userId, team.id, filters, 'JIRA_ISSUE', page)
+  return <section className="report-section" aria-label="Czas według zadań Jira"><h3>Czas według zadań Jira</h3>
+    <ReportState query={issues}>{data => <BreakdownTable data={data.data} group="JIRA_ISSUE" busy={issues.isFetching} onPage={setPage} />}</ReportState></section>
+}
+
+const weekdayLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('pl-PL', { weekday: 'short', day: 'numeric', month: 'numeric' })
+
+/** One row per person, one column per day of the chosen range, with totals. */
+function TimesheetPanel({ userId, team, filters }: { userId: string; team: Team; filters: ReportFilters }) {
+  const tooLong = !filters.undated && !!filters.from && !!filters.to && reportRangeDays(filters.from, filters.to) > 31
+  const sheet = useReportTimesheet(userId, team.id, filters, !filters.undated && !tooLong)
+  return <section className="report-section" aria-label="Karta czasu"><h3>Karta czasu</h3>
+    {filters.undated ? <p className="report-empty">Karta czasu wymaga zakresu dat. Odznacz „Bez daty”.</p>
+      : tooLong ? <p className="report-empty">Karta czasu obejmuje najwyżej 31 dni. Zawęź zakres dat.</p>
+      : <ReportState query={sheet}>{data => data.rows.length === 0 ? <p className="report-empty">Brak zapisanego czasu w tym zakresie.</p> : <>
+        <div className="team-table-wrap" tabIndex={0} role="region" aria-label="Tabela karty czasu">
+          <table className="team-table report-timesheet-table"><caption className="sr-only">Czas pracy osób w kolejnych dniach</caption>
+            <thead><tr><th scope="col">Osoba</th>{data.days.map(day => <th key={day} scope="col"><time dateTime={day}>{weekdayLabel(day)}</time></th>)}<th scope="col">Razem</th></tr></thead>
+            <tbody>{data.rows.map(row => <tr key={row.userId}><th scope="row">{row.displayName}</th>
+              {row.seconds.map((seconds, index) => <td key={data.days[index]} className="history-duration">{seconds ? formatHours(seconds) : '–'}</td>)}
+              <td className="history-duration"><strong>{formatHours(row.total)}</strong></td></tr>)}</tbody>
+            <tfoot><tr><th scope="row">Razem</th>{data.dayTotals.map((seconds, index) => <td key={data.days[index]} className="history-duration">{seconds ? formatHours(seconds) : '–'}</td>)}
+              <td className="history-duration"><strong>{formatHours(data.total)}</strong></td></tr></tfoot>
+          </table>
+        </div>
+        {data.truncated && <p className="field-hint">Karta jest niepełna, bo zakres ma bardzo dużo wpisów. Zawęź filtry.</p>}
+      </>}</ReportState>}
+  </section>
 }
 
 function ActivePanel({ userId, team }: { userId: string; team: Team }) {
@@ -158,6 +195,9 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
   const pdf = useDownloadReport(team.id, filters, 'pdf')
   const memberOptions = useReportMembers(userId, team.id)
   const tagOptions = useTags(userId, team.id, true)
+  const jira = useJiraStatus(userId, team.id)
+  const jiraConnected = jira.data?.siteConnected === true
+  const xlsx = useDownloadReport(team.id, filters, 'xlsx')
   const projectOptions = useReportProjects(userId, team.id)
   const queries = [summary, people, projects, days, mixed, entries, memberOptions, projectOptions]
   const accessError = queries.map(query => query.error).find(error => error instanceof ApiError && [401, 403, 404].includes(error.status))
@@ -203,6 +243,9 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
         <button className="button-secondary" disabled={csv.isPending} onClick={() => csv.mutate()}>
           {csv.isPending ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />}Pobierz CSV
         </button>
+        <button className="button-secondary" disabled={xlsx.isPending} onClick={() => xlsx.mutate()}>
+          {xlsx.isPending ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />}Pobierz Excel
+        </button>
         <button className="button-secondary" disabled={pdf.isPending} onClick={() => pdf.mutate()}>
           {pdf.isPending ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />}Pobierz PDF
         </button>
@@ -211,7 +254,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
         </button>
       </div>
     </header>
-    {(csv.isError || pdf.isError) && <p className="form-error" role="alert">{(csv.error ?? pdf.error)?.message}</p>}
+    {(csv.isError || pdf.isError || xlsx.isError) && <p className="form-error" role="alert">{(csv.error ?? pdf.error ?? xlsx.error)?.message}</p>}
     <ActivePanel userId={userId} team={team} />
     <div className="report-ranges" role="group" aria-label="Szybkie zakresy dat">
       <button type="button" className="button-secondary" onClick={() => applyRange(ranges.today)}>Dzisiaj</button>
@@ -239,6 +282,8 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
         <select className="text-input" id="report-tag" value={draft.tagId ?? ''} onChange={event => setDraft({ ...draft, tagId: event.target.value })}>
           <option value="">Wszystkie tagi</option>{tagOptions.data!.map(tag => <option key={tag.id} value={tag.id}>{tag.name}{tag.archivedAt ? ' (archiwalny)' : ''}</option>)}
         </select></div>}
+      {jiraConnected && <div className="field-group"><label htmlFor="report-issue">Zadanie Jira (klucz)</label>
+        <input className="text-input" id="report-issue" maxLength={64} placeholder="np. PROJ-123" value={draft.issueKey ?? ''} onChange={event => setDraft({ ...draft, issueKey: event.target.value })} /></div>}
       <div className="field-group"><label htmlFor="report-type">Rodzaj wpisu</label><select className="text-input" id="report-type" value={draft.entryType} onChange={event => setDraft({ ...draft, entryType: event.target.value as ReportFilters['entryType'] })}>
         <option value="">Wszystkie rodzaje</option><option value="TIMER">Timer</option><option value="MANUAL">Wpis ręczny</option>
       </select></div>
@@ -261,8 +306,10 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
         <section className="report-section" aria-label="Czas według projektów"><h3>Czas według projektów</h3><ReportState query={projects}>{data => <>{complete(data.data) && <BarChart title="Podział czasu na projekty" layout="rows" labelHeading="Projekt" items={projectChart(data.data)} />}<BreakdownTable data={data.data} group="PROJECT" busy={projects.isFetching} onPage={setProjectPage} /></>}</ReportState></section>
         <section className="report-section" aria-label="Czas według dni"><h3>Czas według dni</h3><ReportState query={days}>{data => <>{complete(data.data) && <BarChart title="Czas w kolejnych dniach" labelHeading="Dzień" items={dayChart(data.data)} />}<BreakdownTable data={data.data} group="DAY" busy={days.isFetching} onPage={setDayPage} /></>}</ReportState></section>
         {(tagOptions.data?.length ?? 0) > 0 && <TagBreakdown userId={userId} team={team} filters={filters} />}
+        {jiraConnected && <JiraBreakdown userId={userId} team={team} filters={filters} />}
         <section className="report-section" aria-label="Czas według osób i projektów"><h3>Osoby i projekty</h3><ReportState query={mixed}>{data => <BreakdownTable data={data.data} group="MEMBER_PROJECT" busy={mixed.isFetching} onPage={setMixedPage} profiles={profiles} />}</ReportState></section>
       </div>
+      <TimesheetPanel userId={userId} team={team} filters={filters} />
       <section className="report-section report-history" aria-label="Wpisy zespołu">
         <div className="teams-toolbar"><div><h3>Wpisy zespołu</h3><p>Zakończone wpisy wszystkich osób, wraz z opisami pracy.</p></div>
           <div className="field-group"><label htmlFor="report-sort">Kolejność wpisów</label><select className="text-input" id="report-sort" value={sort} onChange={event => { setSort(event.target.value as ReportSort); setEntryPage(0) }}>

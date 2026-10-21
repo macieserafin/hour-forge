@@ -37,6 +37,12 @@ public class ReportController {
         return reports.breakdown(actor.getUserId(), teamId, filter, groupBy, page, size);
     }
 
+    @GetMapping("/timesheet")
+    public ReportResponse.Timesheet timesheet(@AuthenticationPrincipal AppUserPrincipal actor,
+            @PathVariable UUID teamId, @ModelAttribute ReportFilter filter) {
+        return reports.timesheet(actor.getUserId(), teamId, filter);
+    }
+
     @GetMapping("/entries")
     public ReportResponse.Result<ReportResponse.Entry> entries(@AuthenticationPrincipal AppUserPrincipal actor,
             @PathVariable UUID teamId, @ModelAttribute ReportFilter filter,
@@ -51,6 +57,13 @@ public class ReportController {
             @PathVariable UUID teamId, @ModelAttribute ReportFilter filter) {
         rateLimits.reportExport(actor.getUserId());
         return download(exports.csv(actor.getUserId(), teamId, filter), "text/csv; charset=UTF-8");
+    }
+
+    @GetMapping("/export.xlsx")
+    public ResponseEntity<byte[]> xlsx(@AuthenticationPrincipal AppUserPrincipal actor,
+            @PathVariable UUID teamId, @ModelAttribute ReportFilter filter) {
+        rateLimits.reportExport(actor.getUserId());
+        return download(exports.xlsx(actor.getUserId(), teamId, filter), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     }
 
     @GetMapping("/export.pdf")
