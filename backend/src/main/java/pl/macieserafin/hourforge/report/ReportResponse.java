@@ -25,7 +25,7 @@ public final class ReportResponse {
                         Instant projectArchivedAt, EntryType entryType, LocalDate workDate,
                         Instant startedAt, Instant endedAt, Integer durationSeconds, String description,
                         Instant pausedAt, long pausedDurationMicros, Instant createdAt, Instant updatedAt,
-                        String jiraIssueKey, Instant editedAt, String projectColor) {}
+                        String jiraIssueKey, Instant editedAt, String editedByName, String projectColor) {}
     public record ActiveTimer(Entry entry, long elapsedSeconds) {}
     public record Active(Context context, Instant asOf, Page<ActiveTimer> data) {}
 }

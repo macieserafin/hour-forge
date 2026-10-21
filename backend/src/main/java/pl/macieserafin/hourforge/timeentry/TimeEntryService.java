@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.project.Project;
 import pl.macieserafin.hourforge.project.ProjectRepository;
+import pl.macieserafin.hourforge.team.TeamMember;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
 import pl.macieserafin.hourforge.user.User;
@@ -77,6 +78,26 @@ public class TimeEntryService {
         }
         members.findByTeamIdAndUserId(teamId, userId).filter(member -> member.getLeftAt() == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        return historyOf(userId, teamId, projectId, from, to, page, size, undated, search);
+    }
+
+    /** The entries of one member of the team, for the owner or an admin who corrects them. */
+    @Transactional(readOnly = true)
+    public TimeEntryHistoryResponse memberHistory(UUID actorId, UUID teamId, UUID memberId, UUID projectId,
+                                                  LocalDate from, LocalDate to, int page, int size, boolean undated, String text) {
+        if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        requireManager(teamId, actorId);
+        members.findByTeamIdAndUserId(teamId, memberId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        var search = text == null ? "" : text.strip();
+        if (search.length() > DescriptionSearch.MAX_LENGTH || page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE
+                || (from != null && to != null && from.isAfter(to)) || (undated && (from != null || to != null))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid search, date range or pagination");
+        }
+        return historyOf(memberId, teamId, projectId, from, to, page, size, undated, search);
+    }
+
+    private TimeEntryHistoryResponse historyOf(UUID userId, UUID teamId, UUID projectId, LocalDate from, LocalDate to,
+                                               int page, int size, boolean undated, String search) {
         if (projectId != null && projects.findByIdAndTeamId(projectId, teamId).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
@@ -100,7 +121,7 @@ public class TimeEntryService {
                 entry.getId(), entry.getTeam().getId(), entry.getProject().getId(), entry.getProject().getName(),
                 entry.getEntryType(), entry.getWorkDate(), entry.getDurationSeconds(), entry.getDescription(),
                 entry.getStartedAt(), entry.getEndedAt(), entry.getJiraIssueId(), entry.getJiraIssueKey(),
-                entry.getLastEditedAt(), entry.getProject().getColor() == null ? null : entry.getProject().getColor().name())).toList();
+                entry.getLastEditedAt(), entry.correctedByName(), entry.getProject().getColor() == null ? null : entry.getProject().getColor().name())).toList();
         return new TimeEntryHistoryResponse(content, page, size, result.getTotalElements(), result.getTotalPages());
     }
 
@@ -277,6 +298,10 @@ public class TimeEntryService {
     @Transactional
     public TimeEntryResponse update(UUID userId, UUID entryId, UpdateTimeEntryRequest request, IssueLink link) {
         var entry = editableEntry(userId, entryId);
+        return response(applyUpdate(entry, request, link, entry.getUser()));
+    }
+
+    private TimeEntry applyUpdate(TimeEntry entry, UpdateTimeEntryRequest request, IssueLink link, User editor) {
         var project = projects.findByIdAndTeamId(request.projectId(), entry.getTeam().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (!project.getId().equals(entry.getProject().getId()) && project.getArchivedAt() != null) {
@@ -302,8 +327,81 @@ public class TimeEntryService {
         entry.setDescription(request.description());
         entry.setJiraIssue(link);
         // Saving without any change is not an edit.
-        if (changed) entry.setLastEditedAt(clock.instant().truncatedTo(ChronoUnit.MICROS));
-        return response(save(entry, link));
+        if (changed) markEdited(entry, editor);
+        return save(entry, link);
+    }
+
+    private void markEdited(TimeEntry entry, User editor) {
+        entry.setLastEditedAt(clock.instant().truncatedTo(ChronoUnit.MICROS));
+        entry.setLastEditedBy(editor);
+    }
+
+    /** Adds an entry to a member's time on behalf of an owner or admin. The member's own limits apply. */
+    @Transactional
+    public TimeEntryResponse createFor(UUID actorId, UUID teamId, UUID memberId, UpdateTimeEntryRequest request) {
+        requireNoJiraLink(request);
+        var actor = users.findById(actorId).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        requireManager(teamId, actorId);
+        var member = lockUser(memberId);
+        var team = teams.findLockedById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        requireManager(teamId, actorId);
+        members.findByTeamIdAndUserId(teamId, memberId).filter(m -> m.getLeftAt() == null)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (team.isArchived()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived teams cannot receive new time entries");
+        var project = projects.findByIdAndTeamId(request.projectId(), teamId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        int durationSeconds = request.durationSeconds().intValueExact();
+        requireManualDuration(durationSeconds);
+        requireWorkDateInWindow(request.workDate(), team.getTimezone());
+        var entry = new TimeEntry(member, team, project, EntryType.MANUAL, request.workDate(), null, null, durationSeconds, request.description());
+        markEdited(entry, actor);
+        return response(save(entry, null));
+    }
+
+    /** Changes a member's saved entry on behalf of an owner or admin; a Jira link stays as it is. */
+    @Transactional
+    public TimeEntryResponse correct(UUID actorId, UUID teamId, UUID entryId, UpdateTimeEntryRequest request) {
+        requireNoJiraLink(request);
+        var actor = users.findById(actorId).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        var entry = correctableEntry(actorId, teamId, entryId);
+        var link = entry.getJiraIssueId() == null ? null : new IssueLink(entry.getJiraConnectionId(), entry.getJiraIssueId(), entry.getJiraIssueKey());
+        return response(applyUpdate(entry, request, link, actor));
+    }
+
+    @Transactional
+    public void deleteFor(UUID actorId, UUID teamId, UUID entryId) {
+        entries.delete(correctableEntry(actorId, teamId, entryId));
+        entries.flush();
+    }
+
+    private void requireNoJiraLink(UpdateTimeEntryRequest request) {
+        if (request.jiraIssueId() != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Jira links are changed by the person who owns the entry");
+        }
+    }
+
+    private TeamMember requireManager(UUID teamId, UUID actorId) {
+        var member = members.findByTeamIdAndUserId(teamId, actorId).filter(m -> m.getLeftAt() == null)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (!member.getRole().canManage()) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        return member;
+    }
+
+    /** Takes the same locks as the owner's own edit (person, then team) and checks the actor under them. */
+    private TimeEntry correctableEntry(UUID actorId, UUID teamId, UUID entryId) {
+        if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        requireManager(teamId, actorId);
+        var ownerId = entries.findById(entryId).filter(found -> found.getTeam().getId().equals(teamId))
+                .map(found -> found.getUser().getId()).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        lockUser(ownerId);
+        var team = teams.findLockedById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        requireManager(teamId, actorId);
+        var entry = entries.findByIdAndUserId(entryId, ownerId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (team.isArchived()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Entries of an archived team cannot be changed");
+        if (entry.getEntryType() == EntryType.TIMER && entry.getEndedAt() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only completed entries can be changed");
+        }
+        return entry;
     }
 
     static final int MAX_COPIED_ENTRIES = 100;

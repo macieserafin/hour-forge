@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Crown, LoaderCircle, LogOut, RefreshCw, ShieldCheck, ShieldOff, UserMinus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Crown, LoaderCircle, LogOut, RefreshCw, ShieldCheck, ShieldOff, TimerReset, UserMinus } from 'lucide-react'
 import { Modal } from '../components/Modal'
+import { MemberCorrections } from './MemberCorrections'
 import { canManage, roleLabel, type Team, type TeamMember } from '../lib/api'
 import { useEndMembership, useTeamMembers } from '../lib/members'
 import { useChangeRole, useTransferOwnership } from '../lib/teams'
@@ -54,6 +55,7 @@ export function TeamMembersPanel({ userId, team, onLeft }: { userId: string; tea
   const [notice, setNotice] = useState('')
   const [action, setAction] = useState<{ member: TeamMember | null } | null>(null)
   const [transferTarget, setTransferTarget] = useState<TeamMember | null>(null)
+  const [correcting, setCorrecting] = useState<TeamMember | null>(null)
   const members = useTeamMembers(userId, team.id, includeFormer, page)
   const dateLabel = (date: string) => new Date(date).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short', timeZone: team.timezone })
 
@@ -79,13 +81,16 @@ export function TeamMembersPanel({ userId, team, onLeft }: { userId: string; tea
                 <td data-label="Rola">{roleLabel(member.role)}</td>
                 <td data-label="Dołączono"><time dateTime={member.joinedAt}>{dateLabel(member.joinedAt)}</time></td>
                 <td data-label="Status">{member.leftAt ? <>Były członek<span className="report-meta">Odejście: <time dateTime={member.leftAt}>{dateLabel(member.leftAt)}</time></span></> : 'Aktywny'}</td>
-                {manager && <td data-label="Akcje">{member.userId !== userId && !member.leftAt && member.role !== 'OWNER' && (owner || member.role === 'MEMBER')
-                  ? <div className="history-actions"><button className="text-link" aria-label={`Usuń z zespołu: ${member.displayName}`} onClick={() => { setNotice(''); setAction({ member }) }}><UserMinus size={15} />Usuń z zespołu</button>
+                {manager && <td data-label="Akcje"><div className="history-actions">
+                  {member.userId !== userId && <button className="text-link" aria-label={`Korekty czasu: ${member.displayName}`} onClick={() => { setNotice(''); setCorrecting(member) }}><TimerReset size={15} />Korekty czasu</button>}
+                  {member.userId !== userId && !member.leftAt && member.role !== 'OWNER' && (owner || member.role === 'MEMBER') && <>
+                    <button className="text-link" aria-label={`Usuń z zespołu: ${member.displayName}`} onClick={() => { setNotice(''); setAction({ member }) }}><UserMinus size={15} />Usuń z zespołu</button>
                     {owner && <button className="text-link" disabled={changeRole.isPending} aria-label={`${member.role === 'ADMIN' ? 'Odbierz administratora' : 'Nadaj administratora'}: ${member.displayName}`}
                       onClick={() => { setNotice(''); changeRole.mutate({ targetUserId: member.userId, role: member.role === 'ADMIN' ? 'MEMBER' : 'ADMIN' }, { onSuccess: () => setNotice(member.role === 'ADMIN' ? `Osoba ${member.displayName} nie jest już administratorem.` : `Osoba ${member.displayName} jest administratorem zespołu.`) }) }}>
                       {member.role === 'ADMIN' ? <ShieldOff size={15} /> : <ShieldCheck size={15} />}{member.role === 'ADMIN' ? 'Odbierz administratora' : 'Nadaj administratora'}</button>}
-                    {owner && <button className="text-link" aria-label={`Przekaż własność: ${member.displayName}`} onClick={() => { setNotice(''); setTransferTarget(member) }}><Crown size={15} />Przekaż własność</button>}</div>
-                  : <span className="field-hint">{member.role === 'OWNER' ? 'Właściciel zespołu' : member.leftAt ? 'Dostęp zakończony' : member.userId === userId ? '' : 'Tylko właściciel'}</span>}</td>}
+                    {owner && <button className="text-link" aria-label={`Przekaż własność: ${member.displayName}`} onClick={() => { setNotice(''); setTransferTarget(member) }}><Crown size={15} />Przekaż własność</button>}</>}
+                  {member.leftAt && <span className="field-hint">Dostęp zakończony</span>}
+                  {member.role === 'OWNER' && member.userId === userId && <span className="field-hint">Właściciel zespołu</span>}</div></td>}
               </tr>)}</tbody>
             </table>
           </div>}
@@ -97,6 +102,7 @@ export function TeamMembersPanel({ userId, team, onLeft }: { userId: string; tea
         </nav>}
         {page > 0 && members.data.content.length === 0 && <button className="button-secondary" onClick={() => setPage(0)}>Wróć na pierwszą stronę</button>}
       </>}
+    {correcting && <MemberCorrections userId={userId} team={team} member={correcting} onClose={() => setCorrecting(null)} />}
     {transferTarget && <TransferOwnershipModal userId={userId} team={team} member={transferTarget} onClose={() => setTransferTarget(null)} onComplete={() => setTransferTarget(null)} />}
     {action && <EndMembershipModal userId={userId} team={team} member={action.member} onClose={() => setAction(null)} onComplete={() => {
       setAction(null)

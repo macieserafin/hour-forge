@@ -68,6 +68,10 @@ public class TimeEntry {
     @Column(name = "last_edited_at")
     private Instant lastEditedAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "last_edited_by")
+    private User lastEditedBy;
+
     @Column(name = "long_timer_reminded_at")
     private Instant longTimerRemindedAt;
 
@@ -113,6 +117,19 @@ public class TimeEntry {
 
     public void setLastEditedAt(Instant lastEditedAt) {
         this.lastEditedAt = lastEditedAt;
+    }
+
+    public User getLastEditedBy() {
+        return lastEditedBy;
+    }
+
+    public void setLastEditedBy(User lastEditedBy) {
+        this.lastEditedBy = lastEditedBy;
+    }
+
+    /** The name of whoever corrected the entry, or null when only its owner changed it. */
+    public String correctedByName() {
+        return lastEditedBy == null || lastEditedBy.getId().equals(user.getId()) ? null : lastEditedBy.getDisplayName();
     }
 
     public Instant getLongTimerRemindedAt() {

@@ -147,6 +147,7 @@ export interface TimeEntryHistoryItem {
   jiraIssueId?: string | null
   jiraIssueKey?: string | null
   editedAt?: string | null
+  editedByName?: string | null
   projectColor?: string | null
 }
 
@@ -651,6 +652,7 @@ export interface ReportProject {
 export interface ReportEntry {
   jiraIssueKey?: string | null
   editedAt?: string | null
+  editedByName?: string | null
   projectColor?: string | null
   id: string
   userId: string
@@ -966,3 +968,33 @@ export const getDashboardActivity = (weekStart: Preferences['weekStart'], weeks 
 
 export const getJiraIssue = (teamId: string, issueId: string, signal?: AbortSignal) =>
   jiraRequest<JiraIssue>(`/api/integrations/jira/issues/${encodeURIComponent(issueId)}?${new URLSearchParams({ teamId })}`, 'GET', undefined, signal)
+
+export type CorrectionInput = Omit<UpdateTimeEntryInput, 'jiraIssueId'>
+
+async function correctionRequest<T>(path: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', body?: CorrectionInput, signal?: AbortSignal): Promise<T> {
+  const csrf = method === 'GET' ? null : await getCsrf()
+  const response = await request(path, {
+    method, signal, headers: csrf ? { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token } : undefined,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      400: 'Sprawdź projekt, datę i czas trwania. Wpis może mieć najwyżej 24 godziny, a data pracy musi mieścić się w ostatnich 2 latach i nie może być z przyszłości.',
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Korekty czasu może wykonywać tylko właściciel lub administrator zespołu albo sesja formularza wygasła.',
+      404: 'Wpis, osoba lub projekt są niedostępne. Odśwież listę.',
+      409: 'Zespół jest zarchiwizowany, wpis jest uruchomionym timerem albo projekt jest archiwalny.',
+    }
+    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się zapisać korekty. Odśwież listę przed ponowieniem operacji.')
+  }
+  return (response.status === 204 ? null : await response.json()) as T
+}
+
+export const getMemberTimeEntries = (teamId: string, memberId: string, page: number, signal?: AbortSignal) =>
+  correctionRequest<TimeEntryHistory>(`${teamPath(teamId)}/members/${encodeURIComponent(memberId)}/time-entries?page=${page}&size=10`, 'GET', undefined, signal)
+export const addMemberTimeEntry = ({ teamId, memberId, ...body }: CorrectionInput & { teamId: string; memberId: string }) =>
+  correctionRequest<null>(`${teamPath(teamId)}/members/${encodeURIComponent(memberId)}/time-entries`, 'POST', body)
+export const correctMemberTimeEntry = ({ teamId, id, ...body }: CorrectionInput & { teamId: string; id: string }) =>
+  correctionRequest<null>(`${teamPath(teamId)}/time-entries/${encodeURIComponent(id)}`, 'PATCH', body)
+export const deleteMemberTimeEntry = ({ teamId, id }: { teamId: string; id: string }) =>
+  correctionRequest<null>(`${teamPath(teamId)}/time-entries/${encodeURIComponent(id)}`, 'DELETE')

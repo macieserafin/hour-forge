@@ -177,7 +177,7 @@ public class ReportService {
                 e.getProject().getId(), e.getProject().getName(), e.getProject().getArchivedAt(),
                 e.getEntryType(), e.getWorkDate(), e.getStartedAt(), e.getEndedAt(), e.getDurationSeconds(),
                 e.getDescription(), e.getPausedAt(), e.getPausedDurationMicros(), e.getCreatedAt(), e.getUpdatedAt(),
-                e.getJiraIssueKey(), e.getLastEditedAt(), e.getProject().getColor() == null ? null : e.getProject().getColor().name());
+                e.getJiraIssueKey(), e.getLastEditedAt(), e.correctedByName(), e.getProject().getColor() == null ? null : e.getProject().getColor().name());
     }
 
     private long elapsed(TimeEntry entry, Instant now) {
