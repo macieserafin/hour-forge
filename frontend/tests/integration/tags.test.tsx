@@ -6,7 +6,7 @@ import type { Tag } from '../../src/lib/api'
 import { TeamsPanel } from '../../src/pages/TeamsPanel'
 import { OwnerDashboard } from '../../src/pages/OwnerDashboard'
 import { renderApp } from '../support/render'
-import { entry, history, json, mockApi, team, user } from '../support/api'
+import { entry, history, json, mockApi, team, timer, user } from '../support/api'
 import { reportBucket, reportEntry, reportHandlers, reportPage } from '../support/reports'
 
 const review: Tag = { id: 'review', teamId: 'team', name: 'Przegląd kodu', color: 'TEAL', archivedAt: null }
@@ -96,4 +96,23 @@ it('filters and groups the team report by tag and shows the tag next to entries'
   await userEvent.selectOptions(screen.getByLabelText('Tag'), 'review')
   await userEvent.click(screen.getByRole('button', { name: 'Filtruj raport' }))
   await waitFor(() => expect(requests.some(search => search.includes('tagIds=review'))).toBe(true))
+})
+
+it('points a manager to the place where tags are added when the team has none', async () => {
+  mockApi({ [tagsPath]: () => json([]) })
+  renderApp(<App />, '/time?team=team')
+  expect(await screen.findByRole('link', { name: 'Dodaj tagi w zespole' })).toHaveAttribute('href', '/teams?team=team')
+})
+
+it('does not send a plain member to a page they cannot use', async () => {
+  mockApi({ 'GET /api/teams': () => json([{ ...team, role: 'MEMBER' }]), [tagsPath]: () => json([]) })
+  renderApp(<App />, '/time?team=team')
+  await screen.findByRole('button', { name: 'Dodaj wpis ręczny' })
+  expect(screen.queryByRole('link', { name: 'Dodaj tagi w zespole' })).not.toBeInTheDocument()
+})
+
+it('shows the tag of the running timer', async () => {
+  mockApi({ [tagsPath]: () => json([review]), 'GET /api/timer/active': () => json({ ...timer, tagId: 'review' }) })
+  renderApp(<App />, '/time?team=team')
+  expect(await screen.findByText('Przegląd kodu', { selector: '.tag-mark' })).toBeVisible()
 })

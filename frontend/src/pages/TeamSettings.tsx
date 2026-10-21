@@ -48,19 +48,19 @@ export function TeamSettingsModal({ userId, team, onClose, onSaved, onArchived, 
             <p className="field-hint">Nowa strefa dotyczy nowych wpisów i bieżących dat. Zapisane daty pracy się nie zmieniają.</p></div>
           <div className="field-group"><label><input type="checkbox" checked={liveView} onChange={event => setLiveView(event.target.checked)} /> Pokaż właścicielowi, kto teraz pracuje</label>
             <p className="field-hint">Podgląd aktywnych timerów w raporcie zespołu: osoba, projekt i czas. Wyłączenie ukrywa go także przed właścicielem.</p></div>
-          <fieldset className="color-picker"><legend>Kolor zespołu <span className="optional-label">(opcjonalnie)</span></legend>
-            <label className="color-option"><input type="radio" name="team-color" checked={color === null} onChange={() => setColor(null)} /><span>Bez koloru</span></label>
+          <fieldset className="color-choice"><legend>Kolor zespołu <span className="optional-label">(opcjonalnie)</span></legend>
+            <label className="color-option"><input type="radio" name="team-color" checked={color === null} onChange={() => setColor(null)} /><span className="color-swatch color-none" aria-hidden="true" /><span>Bez koloru</span></label>
             {projectColorKeys.map(key => <label className="color-option" key={key}><input type="radio" name="team-color" checked={color === key} onChange={() => setColor(key)} /><span className="color-swatch" style={{ background: projectColors[key].hex }} aria-hidden="true" /><span>{projectColors[key].label}</span></label>)}
           </fieldset>
-          <div className="field-group"><label><input type="checkbox" checked={weeklyReport} onChange={event => setWeeklyReport(event.target.checked)} /> Wysyłaj cotygodniowy raport PDF e-mailem</label>
-            <p className="field-hint">W poniedziałek od 8:00 (czas zespołu) właściciel i administratorzy dostaną raport z poprzedniego tygodnia. Każda osoba może go wyłączyć u siebie w koncie.</p></div>
           <fieldset className="team-rules"><legend>Reguły zespołu</legend>
-            <label><input type="checkbox" checked={requireDescription} onChange={event => setRequireDescription(event.target.checked)} /> Wymagaj opisu pracy</label>
-            <label><input type="checkbox" checked={requireTagOrIssue} onChange={event => setRequireTagOrIssue(event.target.checked)} /> Wymagaj tagu lub zadania Jira</label>
+            <div className="field-group check-row"><label><input type="checkbox" checked={requireDescription} onChange={event => setRequireDescription(event.target.checked)} /> Wymagaj opisu pracy</label></div>
+            <div className="field-group check-row"><label><input type="checkbox" checked={requireTagOrIssue} onChange={event => setRequireTagOrIssue(event.target.checked)} /> Wymagaj tagu lub zadania Jira</label></div>
             <p className="field-hint">Reguły dotyczą wpisów, które członkowie zapisują sami (zatrzymanie timera, wpis ręczny, edycja). Korekty właściciela i administratora są od nich wolne. Wymóg tagu lub zadania działa, dopóki zespół ma aktywny tag albo połączoną Jirę.</p>
             <div className="field-group"><label htmlFor="settings-week">Pierwszy dzień tygodnia w raportach zespołu</label>
               <select className="text-input" id="settings-week" value={weekStart} onChange={event => setWeekStart(event.target.value as 'MONDAY' | 'SUNDAY')}><option value="MONDAY">Poniedziałek</option><option value="SUNDAY">Niedziela</option></select></div>
           </fieldset>
+          <div className="field-group check-row"><label><input type="checkbox" checked={weeklyReport} onChange={event => setWeeklyReport(event.target.checked)} /> Wysyłaj cotygodniowy raport PDF e-mailem</label>
+            <p className="field-hint">W poniedziałek od 8:00 (czas zespołu) właściciel i administratorzy dostaną raport z poprzedniego tygodnia. Każda osoba może go wyłączyć u siebie w koncie.</p></div>
         </fieldset>
         {archived && <p className="field-hint">Zespół jest zarchiwizowany, więc jego ustawień nie można zmieniać.</p>}
         {(validation || update.isError) && <p className="form-error" role="alert">{validation || update.error?.message}</p>}

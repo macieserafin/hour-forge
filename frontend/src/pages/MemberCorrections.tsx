@@ -86,7 +86,8 @@ export function MemberCorrections({ userId, team, member, onClose }: { userId: s
         : entries.isError ? <div className="dashboard-error" role="alert">{entries.error.message}<button onClick={() => void entries.refetch()}>Wczytaj wpisy ponownie</button></div>
         : entries.data.content.length === 0 ? <p className="report-empty">Ta osoba nie ma jeszcze zapisanych wpisów.</p>
         : <ul className="correction-list" aria-label={`Wpisy osoby ${member.displayName}`}>{entries.data.content.map(entry => <li key={entry.id}>
-          <div><strong className="history-project-name"><ProjectDot color={entry.projectColor} />{entry.projectName}</strong> · {entry.workDate ?? 'bez daty'} · {formatDuration(entry.durationSeconds)}
+          <div className="correction-main"><strong className="history-project-name"><ProjectDot color={entry.projectColor} />{entry.projectName}</strong>{entry.tagName && <span className="tag-mark">{entry.tagName}</span>}
+            <p className="correction-meta"><span>{entry.workDate ?? 'bez daty'}</span><span className="history-duration">{formatDuration(entry.durationSeconds)}</span></p>
             <p className="history-description">{entry.description || 'Bez opisu'}</p>
             {entry.editedAt && <span className="edited-mark">{entry.editedByName ? `poprawił(a): ${entry.editedByName}` : 'edytowano'}</span>}</div>
           {!team.archivedAt && <div className="history-actions">

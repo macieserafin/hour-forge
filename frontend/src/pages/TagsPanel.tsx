@@ -25,8 +25,8 @@ function TagForm({ userId, team, tag, onClose }: { userId: string; team: Team; t
     <form onSubmit={submit} onInput={() => setValidation('')}>
       <fieldset disabled={save.isPending}>
         <div className="field-group"><label htmlFor="tag-name">Nazwa tagu</label><input id="tag-name" className="text-input" maxLength={40} required value={name} onChange={event => setName(event.target.value)} /></div>
-        <fieldset className="color-picker"><legend>Kolor <span className="optional-label">(opcjonalnie)</span></legend>
-          <label className="color-option"><input type="radio" name="tag-color" checked={color === null} onChange={() => setColor(null)} /><span>Bez koloru</span></label>
+        <fieldset className="color-choice"><legend>Kolor <span className="optional-label">(opcjonalnie)</span></legend>
+          <label className="color-option"><input type="radio" name="tag-color" checked={color === null} onChange={() => setColor(null)} /><span className="color-swatch color-none" aria-hidden="true" /><span>Bez koloru</span></label>
           {projectColorKeys.map(key => <label className="color-option" key={key}><input type="radio" name="tag-color" checked={color === key} onChange={() => setColor(key)} /><span className="color-swatch" style={{ background: projectColors[key].hex }} aria-hidden="true" /><span>{projectColors[key].label}</span></label>)}
         </fieldset>
       </fieldset>
