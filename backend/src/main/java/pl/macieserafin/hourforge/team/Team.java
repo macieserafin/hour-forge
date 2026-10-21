@@ -62,6 +62,13 @@ public class Team {
     public java.time.LocalDate getWeeklyReportSentFor() { return weeklyReportSentFor; }
     public void setWeeklyReportSentFor(java.time.LocalDate weeklyReportSentFor) { this.weeklyReportSentFor = weeklyReportSentFor; }
 
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "color", length = 20)
+    private pl.macieserafin.hourforge.project.ProjectColor color;
+
+    public pl.macieserafin.hourforge.project.ProjectColor getColor() { return color; }
+    public void setColor(pl.macieserafin.hourforge.project.ProjectColor color) { this.color = color; }
+
     protected Team() {
     }
 

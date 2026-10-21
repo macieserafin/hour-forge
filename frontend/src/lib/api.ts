@@ -23,6 +23,7 @@ export interface Team {
   requireTagOrIssue: boolean
   weekStart: 'MONDAY' | 'SUNDAY'
   weeklyReport: boolean
+  color?: string | null
 }
 
 export interface TeamSummary {
@@ -439,7 +440,7 @@ async function teamManagementRequest<T>(path: string, method: 'GET' | 'PATCH' | 
 }
 
 const teamPath = (teamId: string) => `/api/teams/${encodeURIComponent(teamId)}`
-export const updateTeam = ({ teamId, ...body }: { teamId: string; name: string; timezone: string; activeTimersVisible?: boolean; requireDescription?: boolean; requireTagOrIssue?: boolean; weekStart?: 'MONDAY' | 'SUNDAY'; weeklyReport?: boolean }) => teamManagementRequest<Team>(teamPath(teamId), 'PATCH', body)
+export const updateTeam = ({ teamId, ...body }: { teamId: string; name: string; timezone: string; activeTimersVisible?: boolean; requireDescription?: boolean; requireTagOrIssue?: boolean; weekStart?: 'MONDAY' | 'SUNDAY'; weeklyReport?: boolean; color?: string; clearColor?: boolean }) => teamManagementRequest<Team>(teamPath(teamId), 'PATCH', body)
 export const transferOwnership = (teamId: string, userId: string) => teamManagementRequest<null>(`${teamPath(teamId)}/transfer-ownership`, 'POST', { userId })
 export const changeMemberRole = (teamId: string, userId: string, role: Exclude<TeamRole, 'OWNER'>) => teamManagementRequest<null>(`${teamPath(teamId)}/members/${encodeURIComponent(userId)}/role`, 'PUT', { role })
 export const updateMemberProfile = (teamId: string, body: { jobTitle: string | null; ftePercent: number | null }) =>

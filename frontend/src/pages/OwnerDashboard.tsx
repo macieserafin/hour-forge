@@ -238,7 +238,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
 
   return <section className="owner-dashboard" aria-label="Raport zespołu">
     <header className="teams-toolbar">
-      <div><h2>Czas zespołu</h2><p>Zapisana praca w zespole {team.name}.</p></div>
+      <div><h2><ProjectDot color={team.color} />Czas zespołu</h2><p>Zapisana praca w zespole {team.name}.</p></div>
       <div className="report-actions">
         <button className="button-secondary" disabled={csv.isPending} onClick={() => csv.mutate()}>
           {csv.isPending ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />}Pobierz CSV

@@ -24,7 +24,7 @@ it('edits the team name and time zone from the settings', async () => {
   await userEvent.selectOptions(modal.getByLabelText('Strefa czasowa'), 'UTC')
   await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
   expect(await screen.findByText('Zapisano ustawienia zespołu Nowa nazwa.')).toBeVisible()
-  expect(sent).toEqual({ name: 'Nowa nazwa', timezone: 'UTC', activeTimersVisible: true, requireDescription: false, requireTagOrIssue: false, weekStart: 'MONDAY', weeklyReport: false })
+  expect(sent).toEqual({ name: 'Nowa nazwa', timezone: 'UTC', activeTimersVisible: true, requireDescription: false, requireTagOrIssue: false, weekStart: 'MONDAY', weeklyReport: false, clearColor: true })
 })
 
 it('turns the live view off for the whole team from the settings', async () => {
@@ -39,7 +39,7 @@ it('turns the live view off for the whole team from the settings', async () => {
   await userEvent.click(toggle)
   await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
   await screen.findByText(/Zapisano ustawienia zespołu/)
-  expect(sent).toEqual({ name: team.name, timezone: team.timezone, activeTimersVisible: false, requireDescription: false, requireTagOrIssue: false, weekStart: 'MONDAY', weeklyReport: false })
+  expect(sent).toEqual({ name: team.name, timezone: team.timezone, activeTimersVisible: false, requireDescription: false, requireTagOrIssue: false, weekStart: 'MONDAY', weeklyReport: false, clearColor: true })
 })
 
 it('archives a team only after showing the irreversible effects', async () => {
@@ -145,4 +145,18 @@ it('turns the weekly e-mailed report on from the settings', async () => {
   await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
   await screen.findByText(/Zapisano ustawienia zespołu/)
   expect(sent).toMatchObject({ weeklyReport: true })
+})
+
+it('gives the team a colour from the palette', async () => {
+  let current = { ...team }
+  let sent: Record<string, unknown> = {}
+  mockApi({ 'GET /api/teams': () => json([current]),
+    'PATCH /api/teams/team': (_url, options) => { sent = JSON.parse(String(options.body)); current = { ...current, color: sent.color as string }; return json(current) } })
+  panel()
+  const modal = await openSettings()
+  await userEvent.click(modal.getByLabelText('Morski'))
+  await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
+  await screen.findByText(/Zapisano ustawienia zespołu/)
+  expect(sent).toMatchObject({ color: 'TEAL' })
+  expect(sent).not.toHaveProperty('clearColor')
 })

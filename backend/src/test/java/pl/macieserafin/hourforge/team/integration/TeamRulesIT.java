@@ -75,6 +75,16 @@ class TeamRulesIT extends ApiIntegrationTestSupport {
     }
 
     @Test
+    void ownersAndAdminsGiveTheTeamAColourFromThePaletteAndTakeItBack() throws Exception {
+        mvc.perform(as(admin, patch(base)).content(settings(",\"color\":\"TEAL\""))).andExpect(status().isOk()).andExpect(jsonPath("$.color").value("TEAL"));
+        mvc.perform(as(member, get("/api/teams"))).andExpect(jsonPath("$[0].color").value("TEAL"));
+        mvc.perform(as(owner, patch(base)).content(settings(""))).andExpect(jsonPath("$.color").value("TEAL"));
+        mvc.perform(as(owner, patch(base)).content(settings(",\"color\":\"PURPLE\""))).andExpect(status().isBadRequest());
+        mvc.perform(as(member, patch(base)).content(settings(",\"color\":\"RED\""))).andExpect(status().isForbidden());
+        mvc.perform(as(owner, patch(base)).content(settings(",\"clearColor\":true"))).andExpect(status().isOk()).andExpect(jsonPath("$.color").doesNotExist());
+    }
+
+    @Test
     void aRequiredDescriptionAppliesToManualEntriesEditsAndStoppingATimerButNotToCorrections() throws Exception {
         mvc.perform(as(owner, patch(base)).content(settings(",\"requireDescription\":true"))).andExpect(status().isOk());
         mvc.perform(as(member, post("/api/time-entries")).content(manual(""))).andExpect(status().isUnprocessableEntity());
