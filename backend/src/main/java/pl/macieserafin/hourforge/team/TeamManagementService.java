@@ -52,14 +52,32 @@ public class TeamManagementService {
 
     @Transactional
     public TeamResponse update(UUID actorId, UUID teamId, CreateTeamRequest request) {
-        var team = ownedTeam(actorId, teamId);
+        var team = lockedTeam(teamId);
+        var role = managerRole(actorId, teamId);
         requireNotArchived(team);
         // Stored work dates keep their original team-local meaning; the zone applies to new entries only.
         team.setName(request.name());
         team.setTimezone(request.timezone());
         // Absent means unchanged, so older clients that only send name and zone do not reset the setting.
         if (request.activeTimersVisible() != null) team.setActiveTimersVisible(request.activeTimersVisible());
-        return TeamResponse.of(teams.saveAndFlush(team), TeamRole.OWNER);
+        return TeamResponse.of(teams.saveAndFlush(team), role);
+    }
+
+    /** Only the owner decides who is an admin; the owner role itself moves only by transferring ownership. */
+    @Transactional
+    public void changeRole(UUID actorId, UUID teamId, UUID targetUserId, TeamRole role) {
+        var team = ownedTeam(actorId, teamId);
+        requireNotArchived(team);
+        if (role == TeamRole.OWNER) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Use ownership transfer to change the owner");
+        }
+        if (actorId.equals(targetUserId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose another active member");
+        }
+        var target = activeMember(teamId, targetUserId);
+        if (target.getRole() == TeamRole.OWNER) throw new ResponseStatusException(HttpStatus.CONFLICT, "The owner role cannot be changed");
+        target.setRole(role);
+        members.saveAndFlush(target);
     }
 
     @Transactional
@@ -81,19 +99,21 @@ public class TeamManagementService {
 
     @Transactional
     public TeamResponse archive(UUID actorId, UUID teamId) {
-        var team = ownedTeam(actorId, teamId);
+        var team = lockedTeam(teamId);
+        var role = managerRole(actorId, teamId);
         if (!team.isArchived()) {
             requireNoActiveTimers(team, "Stop active timers before archiving the team");
             team.setArchivedAt(clock.instant().truncatedTo(ChronoUnit.MICROS));
             teams.saveAndFlush(team);
         }
-        return TeamResponse.of(team, TeamRole.OWNER);
+        return TeamResponse.of(team, role);
     }
 
     @Transactional(readOnly = true)
     public TeamSummaryResponse summary(UUID actorId, UUID teamId) {
         // Read-only: no row lock (SELECT ... FOR UPDATE is rejected in a read-only transaction).
-        var team = ownedTeam(actorId, teamId, false);
+        managerRole(actorId, teamId);
+        var team = teams.findById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         return new TeamSummaryResponse(members.countByTeamIdAndLeftAtIsNull(team.getId()), projects.countByTeamId(team.getId()),
                 entries.countByTeamId(team.getId()),
                 entries.existsByTeamIdAndEntryTypeAndEndedAtIsNull(team.getId(), EntryType.TIMER));
@@ -118,17 +138,25 @@ public class TeamManagementService {
         teams.deleteTeamById(team.getId());
     }
 
+    /** Operations only the owner may do: deleting the team, handing it over and choosing admins. */
     private Team ownedTeam(UUID actorId, UUID teamId) {
-        return ownedTeam(actorId, teamId, true);
-    }
-
-    private Team ownedTeam(UUID actorId, UUID teamId, boolean lock) {
         if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         // Writes take the same team lock as membership, project and time writes, so checks and changes are serialized.
-        var team = (lock ? teams.findLockedById(teamId) : teams.findById(teamId))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        var team = lockedTeam(teamId);
         if (activeMember(teamId, actorId).getRole() != TeamRole.OWNER) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         return team;
+    }
+
+    /** Checks that the actor is an active owner or admin and returns the role. */
+    private TeamRole managerRole(UUID actorId, UUID teamId) {
+        if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        var role = activeMember(teamId, actorId).getRole();
+        if (!role.canManage()) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        return role;
+    }
+
+    private Team lockedTeam(UUID teamId) {
+        return teams.findLockedById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 
     private TeamMember activeMember(UUID teamId, UUID userId) {

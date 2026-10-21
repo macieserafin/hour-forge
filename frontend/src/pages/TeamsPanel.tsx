@@ -2,14 +2,13 @@ import { useState, type FormEvent } from 'react'
 import { Check, Copy, Link2, LoaderCircle, Plus, Settings, Users } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Modal } from '../components/Modal'
-import type { Team } from '../lib/api'
+import { canManage, roleLabel, type Team } from '../lib/api'
 import { useCreateInvitation, useCreateTeam, useTeams } from '../lib/teams'
 import { pickTeam, usePreferences } from '../lib/preferences'
 import { TeamMembersPanel } from './TeamMembersPanel'
 import { TeamSettingsModal } from './TeamSettings'
 import { TeamInvitationsPanel } from './TeamInvitationsPanel'
 
-const roleLabel = (role: Team['role']) => role === 'OWNER' ? 'Właściciel' : 'Członek'
 const dateLabel = (date: string) => new Date(date).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })
 const localDateTime = (days = 0) => {
   const now = new Date(Date.now() + days * 86_400_000)
@@ -112,15 +111,15 @@ export function TeamsPanel({ userId }: { userId: string }) {
         <div className="team-table-wrap"><table className="team-table"><caption className="sr-only">Lista Twoich zespołów</caption><thead><tr><th>Zespół</th><th>Strefa czasowa</th><th>Twoja rola</th></tr></thead><tbody>
           {teams.data.map(team => <tr key={team.id} className={team.id === selected?.id ? 'selected-team-row' : ''}><td><button aria-pressed={team.id === selected?.id} onClick={() => select(team)}>{team.name}{team.id === selected?.id && <Check size={14} aria-label="Wybrany zespół" />}</button>{team.archivedAt && <span className="project-status archived">Zarchiwizowany</span>}</td><td>{team.timezone}</td><td>{roleLabel(team.role)}</td></tr>)}
         </tbody></table></div>
-        {selected && <section className="selected-team" aria-label="Wybrany zespół"><div><h3>{selected.name}</h3><p>Twoja rola: {roleLabel(selected.role)}</p>{selected.archivedAt && <p className="field-hint">Zespół jest zarchiwizowany: historia i raporty pozostają dostępne, a nowe wpisy i zmiany są zablokowane.</p>}</div><div className="team-actions"><Link className="button-secondary" to={`/projects?${new URLSearchParams({ team: selected.id })}`}>Projekty zespołu</Link>{selected.role === 'OWNER' ? <>{!selected.archivedAt && <button className="button-secondary" onClick={() => setModal('invite')}><Link2 size={16} />Zaproś do zespołu</button>}<button className="button-secondary" onClick={() => { setNotice(''); setModal('settings') }}><Settings size={16} />Ustawienia zespołu</button></> : <p className="field-hint">Linki zaproszeniowe generuje właściciel zespołu.</p>}</div></section>}
+        {selected && <section className="selected-team" aria-label="Wybrany zespół"><div><h3>{selected.name}</h3><p>Twoja rola: {roleLabel(selected.role)}</p>{selected.archivedAt && <p className="field-hint">Zespół jest zarchiwizowany: historia i raporty pozostają dostępne, a nowe wpisy i zmiany są zablokowane.</p>}</div><div className="team-actions"><Link className="button-secondary" to={`/projects?${new URLSearchParams({ team: selected.id })}`}>Projekty zespołu</Link>{canManage(selected.role) ? <>{!selected.archivedAt && <button className="button-secondary" onClick={() => setModal('invite')}><Link2 size={16} />Zaproś do zespołu</button>}<button className="button-secondary" onClick={() => { setNotice(''); setModal('settings') }}><Settings size={16} />Ustawienia zespołu</button></> : <p className="field-hint">Linki zaproszeniowe generuje właściciel lub administrator zespołu.</p>}</div></section>}
         {selected ? <TeamMembersPanel key={`${selected.id}:${selected.role}`} userId={userId} team={selected} onLeft={() => {
           setModal(null); setNotice(`Opuszczono zespół ${selected.name}. Historia Twojej pracy została zachowana.`); setSearch({}, { replace: true })
         }} /> : <p className="form-error" role="alert">Ten zespół jest niedostępny. Wybierz inny zespół z listy.</p>}
       </>}
     {modal === 'create' && <CreateTeamModal userId={userId} onClose={() => setModal(null)} onCreated={team => { select(team); setModal(null) }} />}
-    {!teams.isError && selected?.role === 'OWNER' && <TeamInvitationsPanel key={`${selected.id}:${selected.role}`} userId={userId} team={selected} />}
-    {modal === 'invite' && selected?.role === 'OWNER' && !selected.archivedAt && <InviteModal key={selected.id} userId={userId} team={selected} onClose={() => setModal(null)} />}
-    {modal === 'settings' && selected?.role === 'OWNER' && <TeamSettingsModal key={selected.id} userId={userId} team={selected} onClose={() => setModal(null)}
+    {!teams.isError && selected && canManage(selected.role) && <TeamInvitationsPanel key={`${selected.id}:${selected.role}`} userId={userId} team={selected} />}
+    {modal === 'invite' && selected && canManage(selected.role) && !selected.archivedAt && <InviteModal key={selected.id} userId={userId} team={selected} onClose={() => setModal(null)} />}
+    {modal === 'settings' && selected && canManage(selected.role) && <TeamSettingsModal key={selected.id} userId={userId} team={selected} onClose={() => setModal(null)}
       onSaved={team => { setModal(null); setNotice(`Zapisano ustawienia zespołu ${team.name}.`) }}
       onArchived={team => { setModal(null); setNotice(`Zespół ${team.name} został zarchiwizowany.`) }}
       onDeleted={() => { setModal(null); setNotice(`Usunięto zespół ${selected.name}.`); setSearch({}, { replace: true }) }} />}

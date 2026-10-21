@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
@@ -77,6 +78,13 @@ public class TeamController {
     public ResponseEntity<Void> transferOwnership(@AuthenticationPrincipal AppUserPrincipal principal, @PathVariable UUID teamId,
                                                   @Valid @RequestBody TransferOwnershipRequest request) {
         management.transferOwnership(principal.getUserId(), teamId, request.userId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{teamId}/members/{userId}/role")
+    public ResponseEntity<Void> changeRole(@AuthenticationPrincipal AppUserPrincipal principal, @PathVariable UUID teamId,
+                                           @PathVariable UUID userId, @Valid @RequestBody ChangeRoleRequest request) {
+        management.changeRole(principal.getUserId(), teamId, userId, request.role());
         return ResponseEntity.noContent().build();
     }
 

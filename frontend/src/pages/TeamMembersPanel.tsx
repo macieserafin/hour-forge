@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Crown, LoaderCircle, LogOut, RefreshCw, UserMinus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Crown, LoaderCircle, LogOut, RefreshCw, ShieldCheck, ShieldOff, UserMinus } from 'lucide-react'
 import { Modal } from '../components/Modal'
-import type { Team, TeamMember } from '../lib/api'
+import { canManage, roleLabel, type Team, type TeamMember } from '../lib/api'
 import { useEndMembership, useTeamMembers } from '../lib/members'
-import { useTransferOwnership } from '../lib/teams'
+import { useChangeRole, useTransferOwnership } from '../lib/teams'
 
 function TransferOwnershipModal({ userId, team, member, onClose, onComplete }: {
   userId: string; team: Team; member: TeamMember; onClose: () => void; onComplete: () => void
@@ -11,7 +11,7 @@ function TransferOwnershipModal({ userId, team, member, onClose, onComplete }: {
   const transfer = useTransferOwnership(userId, team.id)
   return <Modal title="Przekaż własność zespołu" busy={transfer.isPending} onClose={onClose}>
     <p className="dialog-description">Osoba <strong>{member.displayName}</strong> zostanie właścicielem zespołu <strong>{team.name}</strong>.</p>
-    <p className="field-hint">Zostaniesz zwykłym członkiem: stracisz możliwość zarządzania członkami, projektami, zaproszeniami i raportami zespołu. Później możesz opuścić zespół.</p>
+    <p className="field-hint">Zostaniesz zwykłym członkiem: stracisz możliwość zarządzania członkami, projektami, zaproszeniami i raportami zespołu. Jeśli ta osoba jest administratorem, jej rola zmieni się na właściciela. Później możesz opuścić zespół.</p>
     {transfer.isError && <p role="alert" className="form-error">{transfer.error.message}</p>}
     <footer className="dialog-actions"><button className="button-secondary" disabled={transfer.isPending} onClick={onClose}>Anuluj</button>
       <button className="button-primary button-danger" disabled={transfer.isPending} onClick={() => transfer.mutate(member.userId, { onSuccess: onComplete })}>
@@ -47,6 +47,8 @@ function EndMembershipModal({ userId, team, member, onClose, onComplete }: {
 
 export function TeamMembersPanel({ userId, team, onLeft }: { userId: string; team: Team; onLeft: () => void }) {
   const owner = team.role === 'OWNER'
+  const manager = canManage(team.role)
+  const changeRole = useChangeRole(userId, team.id)
   const [includeFormer, setIncludeFormer] = useState(false)
   const [page, setPage] = useState(0)
   const [notice, setNotice] = useState('')
@@ -56,13 +58,14 @@ export function TeamMembersPanel({ userId, team, onLeft }: { userId: string; tea
   const dateLabel = (date: string) => new Date(date).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short', timeZone: team.timezone })
 
   return <section className="team-members" aria-label="Członkowie zespołu">
-    <header className="teams-toolbar"><div><h2>Członkowie zespołu</h2><p>{owner ? 'Zarządzaj dostępem do wybranego zespołu.' : 'Osoby, z którymi pracujesz w tym zespole.'}</p></div>
+    <header className="teams-toolbar"><div><h2>Członkowie zespołu</h2><p>{manager ? 'Zarządzaj dostępem do wybranego zespołu.' : 'Osoby, z którymi pracujesz w tym zespole.'}</p></div>
       <div className="team-actions"><button className="button-secondary" disabled={members.isFetching} onClick={() => void members.refetch()}><RefreshCw size={15} className={members.isFetching ? 'spin' : ''} />Odśwież członków</button>
         {!owner && <button className="button-secondary" onClick={() => { setNotice(''); setAction({ member: null }) }}><LogOut size={15} />Opuść zespół</button>}
       </div>
     </header>
-    {owner && <div className="projects-filter"><label><input type="checkbox" checked={includeFormer} onChange={event => { setIncludeFormer(event.target.checked); setPage(0); setNotice('') }} />Pokaż również byłych członków</label></div>}
+    {manager && <div className="projects-filter"><label><input type="checkbox" checked={includeFormer} onChange={event => { setIncludeFormer(event.target.checked); setPage(0); setNotice('') }} />Pokaż również byłych członków</label></div>}
     {notice && <p className="project-notice" role="status">{notice}</p>}
+    {changeRole.isError && <p className="form-error" role="alert">{changeRole.error.message}</p>}
     {members.isPending ? <p className="teams-loading" role="status"><LoaderCircle size={18} className="spin" />Wczytywanie członków…</p>
       : members.isError ? <div className="dashboard-error" role="alert">{members.error.message}<button onClick={() => void members.refetch()}>Wczytaj członków ponownie</button></div>
       : <>
@@ -70,16 +73,19 @@ export function TeamMembersPanel({ userId, team, onLeft }: { userId: string; tea
         {members.data.content.length === 0 ? <p className="report-empty">Na tej stronie nie ma członków. Wróć na pierwszą stronę lub odśwież listę.</p>
           : <div className="team-table-wrap" tabIndex={0} role="region" aria-label="Lista członków zespołu" aria-busy={members.isFetching}>
             <table className="team-table members-table"><caption className="sr-only">Członkowie zespołu {team.name}</caption>
-              <thead><tr><th scope="col">Osoba</th><th scope="col">Rola</th><th scope="col">Dołączono</th><th scope="col">Status</th>{owner && <th scope="col">Akcje</th>}</tr></thead>
+              <thead><tr><th scope="col">Osoba</th><th scope="col">Rola</th><th scope="col">Dołączono</th><th scope="col">Status</th>{manager && <th scope="col">Akcje</th>}</tr></thead>
               <tbody>{members.data.content.map(member => <tr key={member.userId}>
                 <td data-label="Osoba">{member.displayName}{member.userId === userId && <span className="report-meta">To Ty</span>}</td>
-                <td data-label="Rola">{member.role === 'OWNER' ? 'Właściciel' : 'Członek'}</td>
+                <td data-label="Rola">{roleLabel(member.role)}</td>
                 <td data-label="Dołączono"><time dateTime={member.joinedAt}>{dateLabel(member.joinedAt)}</time></td>
                 <td data-label="Status">{member.leftAt ? <>Były członek<span className="report-meta">Odejście: <time dateTime={member.leftAt}>{dateLabel(member.leftAt)}</time></span></> : 'Aktywny'}</td>
-                {owner && <td data-label="Akcje">{member.role === 'MEMBER' && member.userId !== userId && !member.leftAt
+                {manager && <td data-label="Akcje">{member.userId !== userId && !member.leftAt && member.role !== 'OWNER' && (owner || member.role === 'MEMBER')
                   ? <div className="history-actions"><button className="text-link" aria-label={`Usuń z zespołu: ${member.displayName}`} onClick={() => { setNotice(''); setAction({ member }) }}><UserMinus size={15} />Usuń z zespołu</button>
-                    <button className="text-link" aria-label={`Przekaż własność: ${member.displayName}`} onClick={() => { setNotice(''); setTransferTarget(member) }}><Crown size={15} />Przekaż własność</button></div>
-                  : <span className="field-hint">{member.role === 'OWNER' ? 'Właściciel zespołu' : 'Dostęp zakończony'}</span>}</td>}
+                    {owner && <button className="text-link" disabled={changeRole.isPending} aria-label={`${member.role === 'ADMIN' ? 'Odbierz administratora' : 'Nadaj administratora'}: ${member.displayName}`}
+                      onClick={() => { setNotice(''); changeRole.mutate({ targetUserId: member.userId, role: member.role === 'ADMIN' ? 'MEMBER' : 'ADMIN' }, { onSuccess: () => setNotice(member.role === 'ADMIN' ? `Osoba ${member.displayName} nie jest już administratorem.` : `Osoba ${member.displayName} jest administratorem zespołu.`) }) }}>
+                      {member.role === 'ADMIN' ? <ShieldOff size={15} /> : <ShieldCheck size={15} />}{member.role === 'ADMIN' ? 'Odbierz administratora' : 'Nadaj administratora'}</button>}
+                    {owner && <button className="text-link" aria-label={`Przekaż własność: ${member.displayName}`} onClick={() => { setNotice(''); setTransferTarget(member) }}><Crown size={15} />Przekaż własność</button>}</div>
+                  : <span className="field-hint">{member.role === 'OWNER' ? 'Właściciel zespołu' : member.leftAt ? 'Dostęp zakończony' : member.userId === userId ? '' : 'Tylko właściciel'}</span>}</td>}
               </tr>)}</tbody>
             </table>
           </div>}

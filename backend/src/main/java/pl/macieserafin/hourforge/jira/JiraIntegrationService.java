@@ -19,7 +19,6 @@ import pl.macieserafin.hourforge.team.TeamMember;
 import pl.macieserafin.hourforge.entrytemplate.EntryTemplateRepository;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
-import pl.macieserafin.hourforge.team.TeamRole;
 import pl.macieserafin.hourforge.timeentry.TimeEntryRepository;
 import pl.macieserafin.hourforge.user.UserRepository;
 
@@ -86,7 +85,7 @@ public class JiraIntegrationService {
         var connected = connection.isPresent()
                 && authorizations.findByUserIdAndCloudId(userId, connection.get().getCloudId()).isPresent();
         return new Status(true, connection.isPresent(), connection.map(JiraConnection::getSiteName).orElse(null),
-                connection.map(JiraConnection::getSiteUrl).orElse(null), connected, member.getRole() == TeamRole.OWNER);
+                connection.map(JiraConnection::getSiteUrl).orElse(null), connected, member.getRole().canManage());
     }
 
     /** Creates a one-time state bound to the person, the session and the team, and returns the Atlassian consent URL. */
@@ -94,7 +93,7 @@ public class JiraIntegrationService {
     public String startAuthorization(UUID userId, UUID teamId, OAuthState.Intent intent, String sessionId) {
         var member = activeMember(teamId, userId);
         if (intent == OAuthState.Intent.SITE) {
-            if (member.getRole() != TeamRole.OWNER) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+            if (!member.getRole().canManage()) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
             requireNotArchived(teamId);
         } else if (connections.findByTeamId(teamId).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "The team owner has not connected a Jira site yet");
@@ -128,7 +127,7 @@ public class JiraIntegrationService {
             return new CallbackResult(Outcome.DENIED, teamId);
         }
         var member = members.findByTeamIdAndUserId(teamId, userId).filter(candidate -> candidate.getLeftAt() == null).orElse(null);
-        if (member == null || stored.getIntent() == OAuthState.Intent.SITE && member.getRole() != TeamRole.OWNER) {
+        if (member == null || stored.getIntent() == OAuthState.Intent.SITE && !member.getRole().canManage()) {
             return new CallbackResult(Outcome.FORBIDDEN, teamId);
         }
         try {
@@ -241,7 +240,7 @@ public class JiraIntegrationService {
     }
 
     private void requireOwner(UUID teamId, UUID userId) {
-        if (activeMember(teamId, userId).getRole() != TeamRole.OWNER) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        if (!activeMember(teamId, userId).getRole().canManage()) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
     }
 
     static String hash(String value) {

@@ -14,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.team.Team;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
-import pl.macieserafin.hourforge.team.TeamRole;
 import pl.macieserafin.hourforge.timeentry.DescriptionSearch;
 import pl.macieserafin.hourforge.timeentry.TimeEntry;
 import pl.macieserafin.hourforge.user.UserRepository;
@@ -129,7 +128,7 @@ public class ReportService {
         if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         var membership = members.findByTeamIdAndUserId(teamId, actorId).filter(m -> m.getLeftAt() == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (membership.getRole() != TeamRole.OWNER) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        if (!membership.getRole().canManage()) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         return membership.getTeam();
     }
 

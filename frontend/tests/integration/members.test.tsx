@@ -121,3 +121,31 @@ it('does not silently select another team when access to the requested team has 
   expect(await screen.findByRole('alert')).toHaveTextContent('Ten zespół jest niedostępny')
   expect(screen.queryByRole('region', { name: 'Członkowie zespołu' })).not.toBeInTheDocument()
 })
+
+it('lets the owner grant and take back the admin role with a confirmation message', async () => {
+  let role: TeamMember['role'] = 'MEMBER'
+  let sent: unknown = null
+  mockApi({ [listPath]: () => json(membersPage([owner, { ...worker, role }])),
+    'PUT /api/teams/team/members/worker/role': (_url, options) => { sent = JSON.parse(String(options.body)); role = (sent as { role: TeamMember['role'] }).role; return json(null, 204) } })
+  panel()
+  await userEvent.click(await screen.findByRole('button', { name: `Nadaj administratora: ${worker.displayName}` }))
+  expect(await screen.findByText(`Osoba ${worker.displayName} jest administratorem zespołu.`)).toBeVisible()
+  expect(sent).toEqual({ role: 'ADMIN' })
+  expect(await screen.findByRole('cell', { name: 'Administrator' })).toBeVisible()
+  await userEvent.click(screen.getByRole('button', { name: `Odbierz administratora: ${worker.displayName}` }))
+  expect(await screen.findByText(`Osoba ${worker.displayName} nie jest już administratorem.`)).toBeVisible()
+  expect(sent).toEqual({ role: 'MEMBER' })
+})
+
+it('shows an admin the team tools but only lets them remove plain members', async () => {
+  const otherAdmin: TeamMember = { ...worker, userId: 'second', displayName: 'Druga Administratorka', role: 'ADMIN' }
+  mockApi({ 'GET /api/teams': () => json([{ ...team, role: 'ADMIN' }]),
+    [listPath]: () => json(membersPage([owner, { ...owner, userId: 'admin-self', displayName: 'Ja', role: 'ADMIN' }, otherAdmin, worker])) })
+  panel()
+  expect(await screen.findByText('Twoja rola: Administrator')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Ustawienia zespołu' })).toBeVisible()
+  expect(screen.getByLabelText('Pokaż również byłych członków')).toBeVisible()
+  expect(await screen.findByRole('button', { name: `Usuń z zespołu: ${worker.displayName}` })).toBeVisible()
+  expect(screen.queryByRole('button', { name: `Usuń z zespołu: ${otherAdmin.displayName}` })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Nadaj administratora|Odbierz administratora|Przekaż własność/ })).not.toBeInTheDocument()
+})

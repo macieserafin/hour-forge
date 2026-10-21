@@ -28,7 +28,7 @@ public class TeamMembershipService {
     public TeamMembersResponse list(UUID actorId, UUID teamId, boolean includeFormer, int page, int size) {
         requireUser(actorId);
         var actor = activeMember(teamId, actorId);
-        if (includeFormer) requireOwner(actor);
+        if (includeFormer) requireManager(actor);
         if (page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid pagination");
         }
@@ -40,9 +40,14 @@ public class TeamMembershipService {
     public void remove(UUID actorId, UUID teamId, UUID targetUserId) {
         requireUser(actorId);
         lockTeam(teamId);
-        requireOwner(activeMember(teamId, actorId));
+        var actor = activeMember(teamId, actorId);
+        requireManager(actor);
         var target = members.findByTeamIdAndUserId(teamId, targetUserId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        // Admins look after members; only the owner may end another admin's access.
+        if (actor.getRole() == TeamRole.ADMIN && target.getRole() != TeamRole.MEMBER && target.getLeftAt() == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
         endMembership(target, true);
     }
 
@@ -78,7 +83,7 @@ public class TeamMembershipService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 
-    private void requireOwner(TeamMember member) {
-        if (member.getRole() != TeamRole.OWNER) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+    private void requireManager(TeamMember member) {
+        if (!member.getRole().canManage()) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
     }
 }

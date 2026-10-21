@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Modal } from '../components/Modal'
 import { ProjectDot } from '../components/ProjectDot'
 import { projectColorKeys, projectColors, type ProjectColor } from '../lib/projectColors'
-import type { Project, Team } from '../lib/api'
+import { canManage, roleLabel, type Project, type Team } from '../lib/api'
 import { useArchiveProject, useRestoreProject, useDeleteProject, useProject, useProjects, useSaveProject } from '../lib/projects'
 import { useTeams } from '../lib/teams'
 import { pickTeam, usePreferences } from '../lib/preferences'
@@ -58,7 +58,7 @@ function ProjectDetailsModal({ userId, team, projectId, onClose, onEdit }: {
         {project.data.repositoryUrl && <a className="text-link" href={project.data.repositoryUrl} target="_blank" rel="noopener noreferrer">Otwórz repozytorium</a>}
         <dl className="invite-summary project-summary"><dt>Zespół</dt><dd>{team.name}</dd><dt>Utworzono</dt><dd>{dateLabel(project.data.createdAt)}</dd><dt>Status</dt><dd>{project.data.archivedAt ? 'Archiwalny' : 'Aktywny'}</dd>{project.data.archivedAt && <><dt>Archiwizacja</dt><dd>{dateLabel(project.data.archivedAt)}</dd></>}</dl>
       </>}
-    <footer className="dialog-actions"><button className="button-secondary" onClick={onClose}>Zamknij</button>{team.role === 'OWNER' && !team.archivedAt && project.data && !project.isError && !project.data.archivedAt && <button className="button-primary" onClick={() => onEdit(project.data)}><Pencil size={16} />Edytuj projekt</button>}</footer>
+    <footer className="dialog-actions"><button className="button-secondary" onClick={onClose}>Zamknij</button>{canManage(team.role) && !team.archivedAt && project.data && !project.isError && !project.data.archivedAt && <button className="button-primary" onClick={() => onEdit(project.data)}><Pencil size={16} />Edytuj projekt</button>}</footer>
   </Modal>
 }
 
@@ -99,7 +99,7 @@ function TeamProjects({ userId, team }: { userId: string; team: Team }) {
   const visible = projects.data?.filter(project => (status !== 'archived' || project.archivedAt)
     && project.name.toLocaleLowerCase('pl-PL').includes(search.trim().toLocaleLowerCase('pl-PL'))) ?? []
   // Projects of an archived team are read-only, also for its owner.
-  const owner = team.role === 'OWNER' && !team.archivedAt
+  const owner = canManage(team.role) && !team.archivedAt
   const close = () => setModal(null)
   const saved = (message: string) => { close(); setNotice(message) }
 
@@ -137,7 +137,7 @@ export function ProjectsPanel({ userId }: { userId: string }) {
     {teams.isPending ? <p role="status" className="teams-loading"><LoaderCircle size={18} className="spin" />Ładowanie zespołów…</p>
       : teams.isError ? <div className="dashboard-error" role="alert">{teams.error.message}<button onClick={() => void teams.refetch()}>Spróbuj ponownie</button></div>
       : teams.data.length === 0 ? <div className="overview-panel empty-state"><Folder size={28} strokeWidth={1.4} /><h3>Najpierw dołącz do zespołu.</h3><p>Projekt zawsze należy do zespołu. Utwórz zespół lub skorzystaj z otrzymanego zaproszenia.</p><Link className="text-link dashboard-teams-link" to="/teams">Przejdź do zespołów</Link></div>
-      : <><div className="project-team-picker"><div className="field-group"><label htmlFor="project-team">Zespół</label><select className="text-input" id="project-team" value={selected?.id ?? ''} onChange={event => setSearch({ team: event.target.value })}>{!selected && <option value="" disabled>Wybierz dostępny zespół</option>}{teams.data.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></div>{selected && <p className="field-hint">Twoja rola: {selected.role === 'OWNER' ? 'Właściciel' : 'Członek'}</p>}</div>
+      : <><div className="project-team-picker"><div className="field-group"><label htmlFor="project-team">Zespół</label><select className="text-input" id="project-team" value={selected?.id ?? ''} onChange={event => setSearch({ team: event.target.value })}>{!selected && <option value="" disabled>Wybierz dostępny zespół</option>}{teams.data.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}</select></div>{selected && <p className="field-hint">Twoja rola: {roleLabel(selected.role)}</p>}</div>
         {selected ? <TeamProjects key={selected.id} userId={userId} team={selected} /> : <p className="form-error" role="alert">Ten zespół nie istnieje lub nie masz do niego dostępu. Wybierz inny zespół.</p>}
       </>}
   </section>

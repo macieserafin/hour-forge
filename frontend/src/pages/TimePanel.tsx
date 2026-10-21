@@ -8,7 +8,7 @@ import { Modal } from '../components/Modal'
 import { pickTeam, usePreferences } from '../lib/preferences'
 import { TimeEntryHistory } from './TimeEntryHistory'
 import { ChangeTimerModal, SwitchTimerModal } from './TimerChange'
-import type { Project, Team, TimeEntry, TimeEntryHistoryItem } from '../lib/api'
+import { canManage, type Project, type Team, type TimeEntry, type TimeEntryHistoryItem } from '../lib/api'
 import { useProject, useProjects } from '../lib/projects'
 import { useTeams } from '../lib/teams'
 import { LONG_TIMER_SECONDS, MAX_MANUAL_DURATION_SECONDS, clearTimerLocalState, dismissLongTimer, formatClock, formatDuration, isLongTimerDismissed, maxDurationMessage, readLastProject, readTimerDraft, saveLastProject, saveTimerDraft, teamToday, useActiveTimer, useChangeTimerState, useDiscardTimer, useManualTimeEntry, useStartTimer, useStopTimer, workDateRange, workDateRangeMessage } from '../lib/time'
@@ -145,7 +145,7 @@ function TeamTimeEntry({ userId, team, start, canStart, onSaved, onStarted }: {
     <header className="teams-toolbar"><div><h2>{team.name}</h2><p>Wybierz projekt i sposób rejestrowania pracy.</p></div></header>
     {projects.isPending ? <p className="teams-loading" role="status"><LoaderCircle size={18} className="spin" />Ładowanie projektów…</p>
       : projects.isError ? <div className="dashboard-error" role="alert">{projects.error.message}<button onClick={() => void projects.refetch()}>Spróbuj ponownie</button></div>
-      : projects.data.length === 0 ? <div className="overview-panel empty-state"><Clock3 size={28} strokeWidth={1.4} /><h3>Brak aktywnych projektów.</h3><p>{team.role === 'OWNER' ? 'Utwórz projekt, aby zacząć rejestrować czas.' : 'Poproś właściciela zespołu o utworzenie projektu.'}</p><Link className="text-link dashboard-teams-link" to={`/projects?${new URLSearchParams({ team: team.id })}`}>Przejdź do projektów</Link></div>
+      : projects.data.length === 0 ? <div className="overview-panel empty-state"><Clock3 size={28} strokeWidth={1.4} /><h3>Brak aktywnych projektów.</h3><p>{canManage(team.role) ? 'Utwórz projekt, aby zacząć rejestrować czas.' : 'Poproś właściciela lub administratora zespołu o utworzenie projektu.'}</p><Link className="text-link dashboard-teams-link" to={`/projects?${new URLSearchParams({ team: team.id })}`}>Przejdź do projektów</Link></div>
       : <div className="overview-panel time-entry-form"><form onSubmit={submit}>
         <fieldset disabled={start.isPending}>
           <div className="field-group"><label htmlFor="time-project">Projekt</label><select className="text-input" id="time-project" required value={selected?.id ?? ''} onChange={event => { setProjectId(event.target.value); setValidation(''); start.reset() }}><option value="" disabled>Wybierz projekt</option>{projects.data.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select></div>

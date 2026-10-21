@@ -5,12 +5,18 @@ export interface User {
   displayName: string
 }
 
+export type TeamRole = 'OWNER' | 'ADMIN' | 'MEMBER'
+
+/** Owners and admins run the team; the server enforces the same rule. */
+export const canManage = (role: TeamRole) => role !== 'MEMBER'
+export const roleLabel = (role: TeamRole) => ({ OWNER: 'Właściciel', ADMIN: 'Administrator', MEMBER: 'Członek' })[role]
+
 export interface Team {
   id: string
   name: string
   timezone: string
   createdAt: string
-  role: 'OWNER' | 'MEMBER'
+  role: TeamRole
   archivedAt: string | null
   activeTimersVisible: boolean
 }
@@ -400,7 +406,7 @@ export async function getInvitationPreview(token: string, signal?: AbortSignal):
   return response.json() as Promise<InvitationPreview>
 }
 
-async function teamManagementRequest<T>(path: string, method: 'GET' | 'PATCH' | 'POST' | 'DELETE', body?: unknown, signal?: AbortSignal): Promise<T> {
+async function teamManagementRequest<T>(path: string, method: 'GET' | 'PATCH' | 'POST' | 'PUT' | 'DELETE', body?: unknown, signal?: AbortSignal): Promise<T> {
   const csrf = method === 'GET' ? null : await getCsrf()
   const response = await request(path, {
     method, signal,
@@ -411,7 +417,7 @@ async function teamManagementRequest<T>(path: string, method: 'GET' | 'PATCH' | 
     const messages: Record<number, string> = {
       400: 'Sprawdź nazwę zespołu, strefę czasową i wybraną osobę.',
       401: 'Sesja wygasła. Zaloguj się ponownie.',
-      403: 'Tę operację może wykonać tylko właściciel zespołu lub sesja formularza wygasła.',
+      403: 'Tej operacji nie możesz wykonać w tym zespole lub sesja formularza wygasła.',
       404: 'Zespół lub wybrana osoba są niedostępne. Odśwież listę.',
       409: method === 'PATCH' ? 'Zarchiwizowanego zespołu nie można zmieniać.'
         : 'W zespole działają timery. Poproś członków o ich zatrzymanie i spróbuj ponownie.',
@@ -424,6 +430,7 @@ async function teamManagementRequest<T>(path: string, method: 'GET' | 'PATCH' | 
 const teamPath = (teamId: string) => `/api/teams/${encodeURIComponent(teamId)}`
 export const updateTeam = ({ teamId, ...body }: { teamId: string; name: string; timezone: string; activeTimersVisible?: boolean }) => teamManagementRequest<Team>(teamPath(teamId), 'PATCH', body)
 export const transferOwnership = (teamId: string, userId: string) => teamManagementRequest<null>(`${teamPath(teamId)}/transfer-ownership`, 'POST', { userId })
+export const changeMemberRole = (teamId: string, userId: string, role: Exclude<TeamRole, 'OWNER'>) => teamManagementRequest<null>(`${teamPath(teamId)}/members/${encodeURIComponent(userId)}/role`, 'PUT', { role })
 export const archiveTeam = (teamId: string) => teamManagementRequest<Team>(`${teamPath(teamId)}/archive`, 'POST')
 export const getTeamSummary = (teamId: string, signal?: AbortSignal) => teamManagementRequest<TeamSummary>(`${teamPath(teamId)}/summary`, 'GET', undefined, signal)
 export const deleteTeam = (teamId: string) => teamManagementRequest<null>(teamPath(teamId), 'DELETE')
@@ -588,7 +595,7 @@ export interface ReportBucket {
 export interface TeamMember {
   userId: string
   displayName: string
-  role: 'OWNER' | 'MEMBER'
+  role: TeamRole
   joinedAt: string
   leftAt: string | null
 }
@@ -791,7 +798,7 @@ async function jiraRequest<T>(path: string, method = 'GET', body?: unknown, sign
   if (!response.ok) {
     const messages: Record<number, string> = {
       401: 'Sesja wygasła. Zaloguj się ponownie.',
-      403: 'Tę operację może wykonać tylko właściciel zespołu lub sesja formularza wygasła.',
+      403: 'Tej operacji nie możesz wykonać w tym zespole lub sesja formularza wygasła.',
       404: 'Nie znaleziono zespołu lub witryny Jira albo nie masz już do nich dostępu.',
       409: 'Najpierw połącz konto Jira. Właściciel zespołu musi też wybrać witrynę Jira.',
       502: 'Jira jest teraz niedostępna. Spróbuj ponownie za chwilę.',

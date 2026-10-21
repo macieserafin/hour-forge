@@ -65,7 +65,7 @@ public class InvitationService {
         var membership = members.findByTeamIdAndUserId(teamId, currentUserId)
                 .filter(member -> member.getLeftAt() == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (membership.getRole() != TeamRole.OWNER) {
+        if (!membership.getRole().canManage()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
         if (team.isArchived()) {
@@ -205,7 +205,7 @@ public class InvitationService {
         if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         var member = members.findByTeamIdAndUserId(teamId, actorId).filter(m -> m.getLeftAt() == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (member.getRole() != TeamRole.OWNER) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        if (!member.getRole().canManage()) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         return member.getTeam();
     }
 

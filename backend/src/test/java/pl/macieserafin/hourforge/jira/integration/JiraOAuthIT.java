@@ -191,6 +191,21 @@ class JiraOAuthIT extends JiraIntegrationTestSupport {
     }
 
     @Test
+    void anAdminManagesTheTeamSiteLikeTheOwner() throws Exception {
+        var admin = fixtures.user("admin@example.com", "Admin");
+        fixtures.member(team, admin, TeamRole.ADMIN, Instant.now());
+        var adminPrincipal = new AppUserPrincipal(admin.getId(), admin.getEmail(), "unused");
+        var adminSession = new MockHttpSession();
+        mvc.perform(get(BASE + "/status").param("teamId", team.getId().toString()).with(user(adminPrincipal)))
+                .andExpect(jsonPath("$.canManage").value(true));
+        var state = authorize(adminPrincipal, adminSession, "SITE");
+        callback(adminPrincipal, adminSession, "good-code", state)
+                .andExpect(redirectedUrl("http://localhost:5173/integrations?jira=connected&team=" + team.getId()));
+        assertThat(db.queryForObject("select count(*) from jira_connections where team_id = ? and connected_by = ?",
+                Integer.class, team.getId(), admin.getId())).isEqualTo(1);
+    }
+
+    @Test
     void aMemberWhoseJiraAccountCannotSeeTheTeamSiteIsToldSo() throws Exception {
         connectOwner();
         ATLASSIAN.sites = List.of(new FakeAtlassian.Site("cloud-9", "https://other.atlassian.net", "Other"));

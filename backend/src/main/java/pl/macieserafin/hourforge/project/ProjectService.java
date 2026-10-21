@@ -7,7 +7,6 @@ import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.team.TeamMember;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
-import pl.macieserafin.hourforge.team.TeamRole;
 import pl.macieserafin.hourforge.timeentry.EntryType;
 import pl.macieserafin.hourforge.timeentry.TimeEntryRepository;
 import pl.macieserafin.hourforge.user.UserRepository;
@@ -119,7 +118,7 @@ public class ProjectService {
         var membership = members.findByTeamIdAndUserId(teamId, userId)
                 .filter(member -> member.getLeftAt() == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (ownerRequired && membership.getRole() != TeamRole.OWNER) {
+        if (ownerRequired && !membership.getRole().canManage()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
         if (team != null && team.isArchived()) {

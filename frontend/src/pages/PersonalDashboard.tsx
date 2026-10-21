@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Clock3, Download, LoaderCircle } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
-import type { Team, TimeEntry } from '../lib/api'
+import { canManage, type Team, type TimeEntry } from '../lib/api'
 import { useDashboardSummary } from '../lib/dashboard'
 import { useProject } from '../lib/projects'
 import { reportRanges, useDownloadReport } from '../lib/reports'
@@ -109,7 +109,7 @@ export function PersonalDashboard({ userId }: { userId: string }) {
   const selectedId = search.get('team')
   const defaultTeamId = usePreferences(userId).data?.defaultTeamId
   const selected = pickTeam(teams.data, selectedId, defaultTeamId)
-  const teamView = selected?.role === 'OWNER' && search.get('view') === 'team'
+  const teamView = selected && canManage(selected.role) && search.get('view') === 'team'
   return <div className="personal-dashboard">
     {teams.isPending ? <p className="teams-loading" role="status"><LoaderCircle size={18} className="spin" />Ładowanie zespołów…</p>
       : teams.isError ? <div className="dashboard-error" role="alert">{teams.error.message}<button onClick={() => void teams.refetch()}>Wczytaj zespoły ponownie</button></div>
@@ -118,7 +118,7 @@ export function PersonalDashboard({ userId }: { userId: string }) {
         <div className="project-team-picker"><div className="field-group"><label htmlFor="dashboard-team">Zespół na pulpicie</label><select id="dashboard-team" className="text-input" value={selected?.id ?? ''} onChange={event => setSearch({ team: event.target.value, ...(search.get('view') === 'team' ? { view: 'team' } : {}) })}>
           {!selected && <option value="" disabled>Wybierz dostępny zespół</option>}{teams.data.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
         </select></div></div>
-        {selected?.role === 'OWNER' && <div className="dashboard-view-switch" role="group" aria-label="Widok pulpitu">
+        {selected && canManage(selected.role) && <div className="dashboard-view-switch" role="group" aria-label="Widok pulpitu">
           <button className="button-secondary" aria-pressed={!teamView} onClick={() => setSearch({ team: selected.id })}>Mój czas</button>
           <button className="button-secondary" aria-pressed={teamView} onClick={() => setSearch({ team: selected.id, view: 'team' })}>Zespół</button>
         </div>}
