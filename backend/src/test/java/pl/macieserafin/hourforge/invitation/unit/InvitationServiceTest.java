@@ -33,7 +33,7 @@ class InvitationServiceTest {
     private InvitationService service;
     private final User actor = user();
     private final Team team = team();
-    @BeforeEach void setup() { service = new InvitationService(invites, teams, members, users, "https://hourforge.test", CLOCK); }
+    @BeforeEach void setup() { service = new InvitationService(invites, teams, members, users, "https://hourforge.test", CLOCK, org.mockito.Mockito.mock(pl.macieserafin.hourforge.team.TeamMailService.class)); }
     private void creator(TeamRole role) {
         when(users.findById(actor.getId())).thenReturn(Optional.of(actor));
         when(teams.findLockedById(team.getId())).thenReturn(Optional.of(team));
@@ -80,6 +80,6 @@ class InvitationServiceTest {
     }
     @ParameterizedTest @ValueSource(strings = {"ftp://host", "https://host?token=secret", "https://user:pass@host", "/relative"})
     void rejectsUnsafeFrontendAddresses(String url) {
-        assertThatThrownBy(() -> new InvitationService(invites, teams, members, users, url, CLOCK)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new InvitationService(invites, teams, members, users, url, CLOCK, org.mockito.Mockito.mock(pl.macieserafin.hourforge.team.TeamMailService.class))).isInstanceOf(IllegalArgumentException.class);
     }
 }

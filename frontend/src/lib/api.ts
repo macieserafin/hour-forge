@@ -362,7 +362,7 @@ async function teamRequest<T>(path: string, body?: unknown, signal?: AbortSignal
   })
   if (!response.ok) {
     const messages: Record<number, string> = {
-      400: path.endsWith('/invites') ? 'Sprawdź datę wygaśnięcia (najwyżej 30 dni w przyszłości) i dodatni limit użyć.' : 'Sprawdź nazwę zespołu i strefę czasową.',
+      400: path.endsWith('/invites') ? 'Sprawdź datę wygaśnięcia (najwyżej 30 dni w przyszłości), dodatni limit użyć i adres e-mail.' : 'Sprawdź nazwę zespołu i strefę czasową.',
       401: 'Sesja wygasła. Zaloguj się ponownie.',
       403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
       404: path.startsWith('/api/invites/') ? 'Nie znaleziono zaproszenia. Sprawdź, czy link jest kompletny.' : 'Nie znaleziono zespołu lub nie masz już do niego dostępu.',
@@ -377,7 +377,7 @@ async function teamRequest<T>(path: string, body?: unknown, signal?: AbortSignal
 
 export const getTeams = (signal?: AbortSignal) => teamRequest<Team[]>('/api/teams', undefined, signal)
 export const createTeam = (body: { name: string; timezone: string }) => teamRequest<Team>('/api/teams', body)
-export const createInvitation = ({ teamId, ...body }: { teamId: string; expiresAt: string; maxUses: number | null }) =>
+export const createInvitation = ({ teamId, ...body }: { teamId: string; expiresAt: string; maxUses: number | null; email?: string }) =>
   teamRequest<Invitation>(`/api/teams/${encodeURIComponent(teamId)}/invites`, body)
 
 export async function getInvitations(teamId: string, page: number, signal?: AbortSignal): Promise<InvitationsPage> {

@@ -24,7 +24,7 @@ class TeamMembershipServiceTest {
     private User actor;
 
     @BeforeEach void setup() {
-        service = new TeamMembershipService(teams, members, users, CLOCK);
+        service = new TeamMembershipService(teams, members, users, CLOCK, org.mockito.Mockito.mock(TeamMailService.class));
         team = team();
         actor = user();
     }

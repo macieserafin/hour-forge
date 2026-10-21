@@ -39,10 +39,13 @@ public class InvitationService {
     private final UserRepository users;
     private final String frontendUrl;
     private final Clock clock;
+    private final pl.macieserafin.hourforge.team.TeamMailService mail;
     private final SecureRandom random = new SecureRandom();
 
     public InvitationService(TeamInviteRepository invites, TeamRepository teams, TeamMemberRepository members,
-                             UserRepository users, @Value("${app.frontend-url}") String frontendUrl, Clock clock) {
+                             UserRepository users, @Value("${app.frontend-url}") String frontendUrl, Clock clock,
+                             pl.macieserafin.hourforge.team.TeamMailService mail) {
+        this.mail = mail;
         this.clock = clock;
         this.invites = invites;
         this.teams = teams;
@@ -84,6 +87,14 @@ public class InvitationService {
         var invite = invites.saveAndFlush(new TeamInvite(team, creator, hash(token), maxUses, expiry, now));
         String url = UriComponentsBuilder.fromUriString(frontendUrl).pathSegment("invite", token).build().toUriString();
         return new InviteResponse(invite.getId(), teamId, url, token, invite.getExpiresAt(), invite.getMaxUses());
+    }
+
+    /** Mails the link of a freshly created invitation. The address is not stored and is never logged. */
+    @Transactional(readOnly = true)
+    public void sendByEmail(UUID currentUserId, UUID teamId, String email, InviteResponse invite) {
+        var inviter = users.findById(currentUserId).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        var team = teams.findById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        mail.sendInvitation(email, team.getName(), inviter.getDisplayName(), invite.invitationUrl(), invite.expiresAt(), invite.maxUses());
     }
 
     @Transactional

@@ -45,6 +45,8 @@ function InviteModal({ userId, team, onClose }: { userId: string; team: Team; on
   const invite = useCreateInvitation(userId)
   const [expires, setExpires] = useState(() => localDateTime(7))
   const [limit, setLimit] = useState('1')
+  const [email, setEmail] = useState('')
+  const [mailedTo, setMailedTo] = useState('')
   const [validation, setValidation] = useState('')
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState('')
@@ -60,7 +62,9 @@ function InviteModal({ userId, team, onClose }: { userId: string; team: Team; on
       setValidation('Limit użyć musi być dodatnią liczbą całkowitą.'); return
     }
     setValidation('')
-    invite.mutate({ teamId: team.id, expiresAt: date.toISOString(), maxUses })
+    const address = email.trim()
+    setMailedTo(address)
+    invite.mutate({ teamId: team.id, expiresAt: date.toISOString(), maxUses, ...(address ? { email: address } : {}) })
   }
 
   async function copy() {
@@ -77,7 +81,8 @@ function InviteModal({ userId, team, onClose }: { userId: string; team: Team; on
       <label htmlFor="invite-link">Link zaproszeniowy</label>
       <input className="text-input" id="invite-link" value={invite.data.invitationUrl} readOnly onFocus={event => event.currentTarget.select()} />
       <dl className="invite-summary"><dt>Ważny do</dt><dd>{dateLabel(invite.data.expiresAt)}</dd><dt>Limit użyć</dt><dd>{invite.data.maxUses ?? 'Bez limitu'}</dd></dl>
-      <p className="field-hint">Przekaż link osobom, które chcesz zaprosić. Skopiuj go przed zamknięciem tego okna.</p>
+      {mailedTo && <p className="field-hint" role="status">Wysłaliśmy zaproszenie na adres {mailedTo}.</p>}
+      <p className="field-hint">Możesz też przekazać link osobom, które chcesz zaprosić. Skopiuj go przed zamknięciem tego okna.</p>
       {copyError && <p role="alert" className="form-error">{copyError}</p>}
       <footer className="dialog-actions"><button className="button-secondary" onClick={onClose}>Zamknij</button><button className="button-primary" aria-label={copied ? 'Skopiowano link' : 'Kopiuj link'} onClick={() => void copy()}>{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? 'Skopiowano' : 'Kopiuj link'}</button></footer>
       <p className="sr-only" role="status">{copied ? 'Skopiowano link do schowka.' : ''}</p>
@@ -85,6 +90,8 @@ function InviteModal({ userId, team, onClose }: { userId: string; team: Team; on
       <fieldset disabled={invite.isPending}>
         <div className="field-group"><label htmlFor="invite-expiration">Data wygaśnięcia</label><input className="text-input" id="invite-expiration" type="datetime-local" min={localDateTime()} max={localDateTime(30)} required value={expires} onChange={event => setExpires(event.target.value)} /><p className="field-hint">Domyślnie 7 dni, najwyżej 30 dni. Data i godzina w Twojej lokalnej strefie czasowej.</p></div>
         <div className="field-group"><label htmlFor="invite-limit">Limit użyć</label><input className="text-input" id="invite-limit" type="number" min={1} max={2147483647} step={1} value={limit} onChange={event => setLimit(event.target.value)} placeholder="1" /><p className="field-hint">Domyślnie jedno użycie. Możesz podać większy dodatni limit.</p></div>
+        <div className="field-group"><label htmlFor="invite-email">Adres e-mail osoby <span className="optional-label">(opcjonalnie)</span></label><input className="text-input" id="invite-email" type="email" maxLength={255} autoComplete="off" value={email} onChange={event => setEmail(event.target.value)} />
+          <p className="field-hint">Wyślemy na ten adres wiadomość z linkiem. Zaproszenie nie jest przypisane do adresu: kto ma link, może go użyć.</p></div>
       </fieldset>
       {(validation || invite.isError) && <p role="alert" className="form-error">{validation || invite.error?.message}</p>}
       <footer className="dialog-actions"><button type="button" className="button-secondary" disabled={invite.isPending} onClick={onClose}>Anuluj</button><button type="submit" className="button-primary" disabled={invite.isPending}>{invite.isPending ? <LoaderCircle size={16} className="spin" /> : <Link2 size={16} />}{invite.isPending ? 'Generowanie…' : 'Generuj link'}</button></footer>

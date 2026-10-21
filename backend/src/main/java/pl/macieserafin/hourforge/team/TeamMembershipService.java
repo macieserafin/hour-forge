@@ -16,8 +16,10 @@ public class TeamMembershipService {
     private final TeamMemberRepository members;
     private final UserRepository users;
     private final Clock clock;
+    private final TeamMailService mail;
 
-    public TeamMembershipService(TeamRepository teams, TeamMemberRepository members, UserRepository users, Clock clock) {
+    public TeamMembershipService(TeamRepository teams, TeamMemberRepository members, UserRepository users, Clock clock, TeamMailService mail) {
+        this.mail = mail;
         this.teams = teams;
         this.members = members;
         this.users = users;
@@ -50,7 +52,9 @@ public class TeamMembershipService {
         if (actor.getRole() == TeamRole.ADMIN && target.getRole() != TeamRole.MEMBER && target.getLeftAt() == null) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
+        boolean wasActive = target.getLeftAt() == null;
         endMembership(target, true);
+        if (wasActive) mail.sendRemoved(target.getUser(), target.getTeam().getName());
     }
 
     /** A person describes themselves in one team; it is not edited for them. */

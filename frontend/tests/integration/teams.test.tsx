@@ -41,3 +41,16 @@ it('creates a team and generates an invitation through the shared API boundary',
   await userEvent.click(modal.getByRole('button', { name: 'Generuj link' }))
   expect(await modal.findByLabelText('Link zaproszeniowy')).toHaveValue('https://example.test/invite/token')
 })
+
+it('also mails the invitation when an address is given', async () => {
+  let sent: Record<string, unknown> = {}
+  mockApi({ 'POST /api/teams/team/invites': (_url, options) => { sent = JSON.parse(String(options.body))
+    return json({ id: 'invite', teamId: team.id, invitationUrl: 'https://example.test/invite/token', token: 'token', maxUses: 1, expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString() }, 201) } })
+  renderApp(<App />, '/teams?team=team')
+  await userEvent.click(await screen.findByRole('button', { name: 'Zaproś do zespołu' }))
+  const modal = within(screen.getByRole('dialog'))
+  await userEvent.type(modal.getByLabelText(/Adres e-mail osoby/), 'gosc@example.com')
+  await userEvent.click(modal.getByRole('button', { name: 'Generuj link' }))
+  expect(await screen.findByText('Wysłaliśmy zaproszenie na adres gosc@example.com.')).toBeVisible()
+  expect(sent).toMatchObject({ email: 'gosc@example.com', maxUses: 1 })
+})

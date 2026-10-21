@@ -21,6 +21,8 @@ public class RequestRateLimits {
 
     public void invitationCreation(UUID userId) { acquire("invitation-creation:" + userId, limits.invitationCreation()); }
 
+    public void invitationEmail(UUID userId) { acquire("invitation-email:" + userId, limits.invitationEmail()); }
+
     public void projectCreation(UUID userId) { acquire("project-creation:" + userId, limits.projectCreation()); }
 
     public void reportExport(UUID userId) { acquire("report-export:" + userId, limits.reportExport()); }

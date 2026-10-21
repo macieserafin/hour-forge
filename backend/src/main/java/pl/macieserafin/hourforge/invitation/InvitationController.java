@@ -45,7 +45,10 @@ public class InvitationController {
                                                 @PathVariable UUID teamId,
                                                 @Valid @RequestBody CreateInviteRequest request) {
         rateLimits.invitationCreation(principal.getUserId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(invitations.create(principal.getUserId(), teamId, request));
+        if (request.email() != null) rateLimits.invitationEmail(principal.getUserId());
+        var invite = invitations.create(principal.getUserId(), teamId, request);
+        if (request.email() != null) invitations.sendByEmail(principal.getUserId(), teamId, request.email(), invite);
+        return ResponseEntity.status(HttpStatus.CREATED).body(invite);
     }
 
     @GetMapping("/api/invites/{token}")

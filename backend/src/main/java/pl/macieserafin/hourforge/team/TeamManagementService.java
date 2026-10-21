@@ -34,11 +34,14 @@ public class TeamManagementService {
     private final JiraUserAuthorizationRepository jiraAuthorizations;
     private final OAuthStateRepository oauthStates;
     private final Clock clock;
+    private final TeamMailService mail;
 
     public TeamManagementService(TeamRepository teams, TeamMemberRepository members, UserRepository users,
                                  ProjectRepository projects, TimeEntryRepository entries, TeamInviteRepository invites,
                                  JiraConnectionRepository jiraConnections, JiraUserAuthorizationRepository jiraAuthorizations,
-                                 OAuthStateRepository oauthStates, EntryTemplateRepository entryTemplates, TagRepository tags, Clock clock) {
+                                 OAuthStateRepository oauthStates, EntryTemplateRepository entryTemplates, TagRepository tags, Clock clock,
+                                 TeamMailService mail) {
+        this.mail = mail;
         this.teams = teams;
         this.members = members;
         this.users = users;
@@ -88,8 +91,10 @@ public class TeamManagementService {
         }
         var target = activeMember(teamId, targetUserId);
         if (target.getRole() == TeamRole.OWNER) throw new ResponseStatusException(HttpStatus.CONFLICT, "The owner role cannot be changed");
+        boolean wasAdmin = target.getRole() == TeamRole.ADMIN;
         target.setRole(role);
         members.saveAndFlush(target);
+        if (wasAdmin != (role == TeamRole.ADMIN)) mail.sendRoleChange(target.getUser(), team.getName(), role == TeamRole.ADMIN);
     }
 
     @Transactional
@@ -107,6 +112,8 @@ public class TeamManagementService {
         members.saveAndFlush(owner);
         target.setRole(TeamRole.OWNER);
         members.saveAndFlush(target);
+        mail.sendOwnershipChange(target.getUser(), team.getName(), true);
+        mail.sendOwnershipChange(owner.getUser(), team.getName(), false);
     }
 
     @Transactional
@@ -117,6 +124,9 @@ public class TeamManagementService {
             requireNoActiveTimers(team, "Stop active timers before archiving the team");
             team.setArchivedAt(clock.instant().truncatedTo(ChronoUnit.MICROS));
             teams.saveAndFlush(team);
+            members.findMembers(teamId, false, org.springframework.data.domain.Pageable.unpaged()).forEach(member -> {
+                if (!member.userId().equals(actorId)) users.findById(member.userId()).ifPresent(person -> mail.sendArchived(person, team.getName()));
+            });
         }
         return TeamResponse.of(team, role);
     }
