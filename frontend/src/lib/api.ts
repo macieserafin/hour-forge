@@ -441,6 +441,8 @@ const teamPath = (teamId: string) => `/api/teams/${encodeURIComponent(teamId)}`
 export const updateTeam = ({ teamId, ...body }: { teamId: string; name: string; timezone: string; activeTimersVisible?: boolean; requireDescription?: boolean; requireTagOrIssue?: boolean; weekStart?: 'MONDAY' | 'SUNDAY' }) => teamManagementRequest<Team>(teamPath(teamId), 'PATCH', body)
 export const transferOwnership = (teamId: string, userId: string) => teamManagementRequest<null>(`${teamPath(teamId)}/transfer-ownership`, 'POST', { userId })
 export const changeMemberRole = (teamId: string, userId: string, role: Exclude<TeamRole, 'OWNER'>) => teamManagementRequest<null>(`${teamPath(teamId)}/members/${encodeURIComponent(userId)}/role`, 'PUT', { role })
+export const updateMemberProfile = (teamId: string, body: { jobTitle: string | null; ftePercent: number | null }) =>
+  teamManagementRequest<null>(`${teamPath(teamId)}/members/me/profile`, 'PUT', body)
 export const archiveTeam = (teamId: string) => teamManagementRequest<Team>(`${teamPath(teamId)}/archive`, 'POST')
 export const getTeamSummary = (teamId: string, signal?: AbortSignal) => teamManagementRequest<TeamSummary>(`${teamPath(teamId)}/summary`, 'GET', undefined, signal)
 export const deleteTeam = (teamId: string) => teamManagementRequest<null>(teamPath(teamId), 'DELETE')
@@ -615,6 +617,8 @@ export interface TeamMember {
   role: TeamRole
   joinedAt: string
   leftAt: string | null
+  jobTitle?: string | null
+  ftePercent?: number | null
 }
 
 export type ReportMember = TeamMember

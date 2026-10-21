@@ -55,6 +55,13 @@ public class TeamController {
         return ResponseEntity.noContent().build();
     }
 
+    @PutMapping("/{teamId}/members/me/profile")
+    public ResponseEntity<Void> updateProfile(@AuthenticationPrincipal AppUserPrincipal principal, @PathVariable UUID teamId,
+            @Valid @RequestBody MemberProfileRequest request) {
+        memberships.updateProfile(principal.getUserId(), teamId, request);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{teamId}/leave")
     public ResponseEntity<Void> leave(@AuthenticationPrincipal AppUserPrincipal principal, @PathVariable UUID teamId) {
         memberships.leave(principal.getUserId(), teamId);

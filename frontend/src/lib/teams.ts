@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, acceptInvitation, archiveTeam, createInvitation, createTeam, deleteTeam, getInvitationPreview, getInvitations, revokeInvitation, getTeamSummary, getTeams,
-  changeMemberRole, transferOwnership, updateTeam, type Team } from './api'
+  changeMemberRole, updateMemberProfile, transferOwnership, updateTeam, type Team } from './api'
 import { sessionOptions } from './auth'
 
 export const teamsKey = (userId: string) => ['teams', userId] as const
@@ -86,6 +86,13 @@ export function useChangeRole(userId: string, teamId: string) {
   const onError = useAuthError()
   return useMutation({ mutationFn: ({ targetUserId, role }: { targetUserId: string; role: 'ADMIN' | 'MEMBER' }) => changeMemberRole(teamId, targetUserId, role), onError, retry: false,
     // A lost response may follow a committed change: reconcile instead of repeating the write.
+    onSettled: () => client.invalidateQueries({ queryKey: ['team-members', userId, teamId] }) })
+}
+
+export function useUpdateProfile(userId: string, teamId: string) {
+  const client = useQueryClient()
+  const onError = useAuthError()
+  return useMutation({ mutationFn: (body: { jobTitle: string | null; ftePercent: number | null }) => updateMemberProfile(teamId, body), onError, retry: false,
     onSettled: () => client.invalidateQueries({ queryKey: ['team-members', userId, teamId] }) })
 }
 

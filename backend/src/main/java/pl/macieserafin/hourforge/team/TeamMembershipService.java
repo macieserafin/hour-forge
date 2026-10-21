@@ -33,7 +33,9 @@ public class TeamMembershipService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid pagination");
         }
         var result = members.findMembers(teamId, includeFormer, PageRequest.of(page, size));
-        return new TeamMembersResponse(result.getContent(), page, size, result.getTotalElements(), result.getTotalPages());
+        var content = actor.getRole().canManage() ? result.getContent()
+                : result.getContent().stream().map(member -> member.userId().equals(actorId) ? member : member.withoutProfile()).toList();
+        return new TeamMembersResponse(content, page, size, result.getTotalElements(), result.getTotalPages());
     }
 
     @Transactional
@@ -51,6 +53,17 @@ public class TeamMembershipService {
         endMembership(target, true);
     }
 
+    /** A person describes themselves in one team; it is not edited for them. */
+    @Transactional
+    public void updateProfile(UUID actorId, UUID teamId, MemberProfileRequest request) {
+        requireUser(actorId);
+        var team = teams.findLockedById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        var member = activeMember(teamId, actorId);
+        if (team.isArchived()) throw new ResponseStatusException(HttpStatus.CONFLICT, "The profile of an archived team cannot be changed");
+        member.setProfile(request.jobTitle(), request.ftePercent());
+        members.save(member);
+    }
+
     @Transactional
     public void leave(UUID actorId, UUID teamId) {
         requireUser(actorId);
@@ -63,6 +76,8 @@ public class TeamMembershipService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "The owner cannot leave or be removed");
         }
         if (member.getLeftAt() == null) {
+            // The description of one's place in a team has no use once the access ends.
+            member.setProfile(null, null);
             member.setLeftAt(clock.instant().truncatedTo(ChronoUnit.MICROS));
             member.setRemovedAt(removed ? member.getLeftAt() : null);
             members.save(member);

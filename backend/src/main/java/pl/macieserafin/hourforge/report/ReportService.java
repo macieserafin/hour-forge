@@ -75,7 +75,7 @@ public class ReportService {
         var team = owner(actorId, teamId);
         pagination(page, size);
         var rows = reports.members(teamId, page, size).stream().map(m -> new ReportResponse.Member(
-                m.getUser().getId(), m.getUser().getDisplayName(), m.getRole(), m.getJoinedAt(), m.getLeftAt())).toList();
+                m.getUser().getId(), m.getUser().getDisplayName(), m.getRole(), m.getJoinedAt(), m.getLeftAt(), m.getJobTitle(), m.getFtePercent())).toList();
         return new ReportResponse.Result<>(context(team), ReportRepository.page(rows, page, size));
     }
 

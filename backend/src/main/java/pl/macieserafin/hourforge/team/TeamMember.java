@@ -44,6 +44,16 @@ public class TeamMember {
     @Column(name = "removed_at")
     private Instant removedAt;
 
+    @Column(name = "job_title", length = 80)
+    private String jobTitle;
+
+    @Column(name = "fte_percent")
+    private Integer ftePercent;
+
+    public String getJobTitle() { return jobTitle; }
+    public Integer getFtePercent() { return ftePercent; }
+    public void setProfile(String jobTitle, Integer ftePercent) { this.jobTitle = jobTitle; this.ftePercent = ftePercent; }
+
     public Instant getRemovedAt() { return removedAt; }
     public void setRemovedAt(Instant removedAt) { this.removedAt = removedAt; }
 

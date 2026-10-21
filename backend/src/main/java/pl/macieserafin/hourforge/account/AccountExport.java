@@ -11,7 +11,8 @@ public record AccountExport(Instant exportedAt, Profile profile, List<Membership
     public record Profile(UUID id, String email, String displayName, Instant createdAt, Instant emailVerifiedAt) {
     }
 
-    public record Membership(UUID teamId, String teamName, String role, Instant joinedAt, Instant leftAt, Instant removedAt) {
+    public record Membership(UUID teamId, String teamName, String role, Instant joinedAt, Instant leftAt, Instant removedAt,
+                            String jobTitle, Integer ftePercent) {
     }
 
     public record Entry(UUID id, UUID teamId, String teamName, UUID projectId, String projectName, String type,

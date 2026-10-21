@@ -86,7 +86,8 @@ public class AccountDataService {
                 .ifPresent(retryAfter -> { throw new TooManyRequestsException(retryAfter); });
         var teamsOfUser = members.findAllByUserId(userId).stream()
                 .map(member -> new AccountExport.Membership(member.getTeam().getId(), member.getTeam().getName(),
-                        member.getRole().name(), member.getJoinedAt(), member.getLeftAt(), member.getRemovedAt())).toList();
+                        member.getRole().name(), member.getJoinedAt(), member.getLeftAt(), member.getRemovedAt(),
+                        member.getJobTitle(), member.getFtePercent())).toList();
         var timeEntries = entries.findByUserIdOrderByCreatedAtAscIdAsc(userId).stream()
                 .map(entry -> new AccountExport.Entry(entry.getId(), entry.getTeam().getId(), entry.getTeam().getName(),
                         entry.getProject().getId(), entry.getProject().getName(), entry.getEntryType().name(),
@@ -125,7 +126,7 @@ public class AccountDataService {
         }
         var now = clock.instant();
         entries.findByUserIdAndEntryTypeAndEndedAtIsNull(userId, EntryType.TIMER).ifPresent(entries::delete);
-        active.forEach(member -> member.setLeftAt(now));
+        active.forEach(member -> { member.setLeftAt(now); member.setProfile(null, null); });
         invites.revokeActiveCreatedBy(userId, now);
         tokens.deleteByUserId(userId);
         jiraAuthorizations.deleteAllByUserId(userId);

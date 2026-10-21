@@ -69,18 +69,19 @@ function projectChart(data: ReportPage<ReportBucket>): ChartItem[] {
 
 const archivedNote = (bucket: ReportBucket) => bucket.projectArchivedAt && <span className="report-meta">Projekt archiwalny</span>
 
-function bucketCells(group: ReportGroup, bucket: ReportBucket): ReactNode[] {
+function bucketCells(group: ReportGroup, bucket: ReportBucket, person: (bucket: ReportBucket) => ReactNode): ReactNode[] {
   switch (group) {
-    case 'MEMBER': return [bucket.displayName]
+    case 'MEMBER': return [person(bucket)]
     case 'PROJECT': return [<>{bucket.projectName}{archivedNote(bucket)}</>]
     case 'DAY': return [bucket.workDate ? <time dateTime={bucket.workDate}>{dateLabel(bucket.workDate)}</time> : 'Bez daty']
-    case 'MEMBER_PROJECT': return [bucket.displayName, <>{bucket.projectName}{archivedNote(bucket)}</>]
+    case 'MEMBER_PROJECT': return [person(bucket), <>{bucket.projectName}{archivedNote(bucket)}</>]
     case 'TAG': return [bucket.tagName ?? 'Bez tagu']
   }
 }
 
-function BreakdownTable({ data, group, busy, onPage }: { data: ReportPage<ReportBucket>; group: ReportGroup; busy: boolean; onPage: (page: number) => void }) {
+function BreakdownTable({ data, group, busy, onPage, profiles }: { data: ReportPage<ReportBucket>; group: ReportGroup; busy: boolean; onPage: (page: number) => void; profiles?: Map<string, string> }) {
   const labels = breakdowns[group]
+  const person = (bucket: ReportBucket) => <>{bucket.displayName}{bucket.userId && profiles?.get(bucket.userId) && <span className="report-meta">{profiles.get(bucket.userId)}</span>}</>
   return <>
     {data.content.length === 0 ? <p className="report-empty">Brak zapisanego czasu dla wybranych filtrów.</p>
       : <div className="team-table-wrap" tabIndex={0} role="region" aria-label={labels.table}>
@@ -88,7 +89,7 @@ function BreakdownTable({ data, group, busy, onPage }: { data: ReportPage<Report
           <caption className="sr-only">{labels.title}</caption>
           <thead><tr>{labels.columns.map(column => <th key={column} scope="col">{column}</th>)}<th scope="col">Czas</th><th scope="col">Wpisy</th></tr></thead>
           <tbody>{data.content.map(bucket => <tr key={`${bucket.workDate ?? 'none'}|${bucket.userId ?? ''}|${bucket.projectId ?? ''}|${bucket.tagId ?? ''}`}>
-            {bucketCells(group, bucket).map((cell, index) => <td key={index}>{cell}</td>)}
+            {bucketCells(group, bucket, person).map((cell, index) => <td key={index}>{cell}</td>)}
             <td className="history-duration">{formatDuration(bucket.durationSeconds)}</td><td>{bucket.entryCount}</td>
           </tr>)}</tbody>
         </table>
@@ -163,6 +164,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
   const busy = queries.some(query => query.isFetching)
   // A failed background refresh must never leave previously authorized data visible.
   const members = accessError || memberOptions.isError ? [] : memberOptions.data?.pages.flatMap(page => page.data.content) ?? []
+  const profiles = new Map(members.flatMap(member => { const text = [member.jobTitle, member.ftePercent ? `${member.ftePercent}% etatu` : null].filter(Boolean).join(' · '); return text ? [[member.userId, text] as [string, string]] : [] }))
   const options = accessError || projectOptions.isError ? [] : projectOptions.data?.pages.flatMap(page => page.data.content) ?? []
 
   function resetPages() { setMemberPage(0); setProjectPage(0); setEntryPage(0); setDayPage(0); setMixedPage(0) }
@@ -255,11 +257,11 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
         <p className="field-hint dashboard-summary-note">{data.context.filter!.undated ? 'Wpisy bez daty · Nie są wliczane do podsumowań dnia ani tygodnia.' : `${dateLabel(data.context.filter!.from)} – ${dateLabel(data.context.filter!.to)} · ${data.context.timezone}. Według daty pracy, z uwzględnieniem danych historycznych. Czas w toku nie jest wliczany.`}</p>
       </>}</ReportState>
       <div className="report-breakdowns">
-        <section className="report-section" aria-label="Czas według osób"><h3>Czas według osób</h3><ReportState query={people}>{data => <BreakdownTable data={data.data} group="MEMBER" busy={people.isFetching} onPage={setMemberPage} />}</ReportState></section>
+        <section className="report-section" aria-label="Czas według osób"><h3>Czas według osób</h3><ReportState query={people}>{data => <BreakdownTable data={data.data} group="MEMBER" busy={people.isFetching} onPage={setMemberPage} profiles={profiles} />}</ReportState></section>
         <section className="report-section" aria-label="Czas według projektów"><h3>Czas według projektów</h3><ReportState query={projects}>{data => <>{complete(data.data) && <BarChart title="Podział czasu na projekty" layout="rows" labelHeading="Projekt" items={projectChart(data.data)} />}<BreakdownTable data={data.data} group="PROJECT" busy={projects.isFetching} onPage={setProjectPage} /></>}</ReportState></section>
         <section className="report-section" aria-label="Czas według dni"><h3>Czas według dni</h3><ReportState query={days}>{data => <>{complete(data.data) && <BarChart title="Czas w kolejnych dniach" labelHeading="Dzień" items={dayChart(data.data)} />}<BreakdownTable data={data.data} group="DAY" busy={days.isFetching} onPage={setDayPage} /></>}</ReportState></section>
         {(tagOptions.data?.length ?? 0) > 0 && <TagBreakdown userId={userId} team={team} filters={filters} />}
-        <section className="report-section" aria-label="Czas według osób i projektów"><h3>Osoby i projekty</h3><ReportState query={mixed}>{data => <BreakdownTable data={data.data} group="MEMBER_PROJECT" busy={mixed.isFetching} onPage={setMixedPage} />}</ReportState></section>
+        <section className="report-section" aria-label="Czas według osób i projektów"><h3>Osoby i projekty</h3><ReportState query={mixed}>{data => <BreakdownTable data={data.data} group="MEMBER_PROJECT" busy={mixed.isFetching} onPage={setMixedPage} profiles={profiles} />}</ReportState></section>
       </div>
       <section className="report-section report-history" aria-label="Wpisy zespołu">
         <div className="teams-toolbar"><div><h3>Wpisy zespołu</h3><p>Zakończone wpisy wszystkich osób, wraz z opisami pracy.</p></div>

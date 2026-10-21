@@ -149,3 +149,19 @@ it('shows an admin the team tools but only lets them remove plain members', asyn
   expect(screen.queryByRole('button', { name: `Usuń z zespołu: ${otherAdmin.displayName}` })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /Nadaj administratora|Odbierz administratora|Przekaż własność/ })).not.toBeInTheDocument()
 })
+
+it('lets a person describe their place in the team and shows managers the title and part of the job', async () => {
+  let sent: unknown = null
+  let stored = { ...worker, jobTitle: null as string | null, ftePercent: null as number | null }
+  mockApi({ [listPath]: () => json(membersPage([owner, stored])),
+    'PUT /api/teams/team/members/me/profile': (_url, options) => { sent = JSON.parse(String(options.body)); stored = { ...stored, ...(sent as object) }; return json(null, 204) } })
+  panel()
+  await userEvent.click(await screen.findByRole('button', { name: 'Mój profil w zespole' }))
+  const modal = within(screen.getByRole('dialog'))
+  await userEvent.type(modal.getByLabelText(/Stanowisko/), 'Programistka')
+  await userEvent.type(modal.getByLabelText(/Wymiar etatu/), '50')
+  await userEvent.click(modal.getByRole('button', { name: 'Zapisz profil' }))
+  expect(await screen.findByText('Zapisano Twój profil w zespole.')).toBeVisible()
+  expect(sent).toEqual({ jobTitle: 'Programistka', ftePercent: 50 })
+  expect(await screen.findByText('Programistka · 50% etatu')).toBeVisible()
+})

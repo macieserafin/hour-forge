@@ -1,10 +1,36 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Crown, LoaderCircle, LogOut, RefreshCw, ShieldCheck, ShieldOff, TimerReset, UserMinus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Crown, LoaderCircle, LogOut, RefreshCw, ShieldCheck, ShieldOff, TimerReset, UserMinus, UserRound } from 'lucide-react'
 import { Modal } from '../components/Modal'
 import { MemberCorrections } from './MemberCorrections'
 import { canManage, roleLabel, type Team, type TeamMember } from '../lib/api'
 import { useEndMembership, useTeamMembers } from '../lib/members'
-import { useChangeRole, useTransferOwnership } from '../lib/teams'
+import { useChangeRole, useTransferOwnership, useUpdateProfile } from '../lib/teams'
+
+function ProfileModal({ userId, team, current, onClose, onSaved }: { userId: string; team: Team; current: TeamMember | undefined; onClose: () => void; onSaved: () => void }) {
+  const save = useUpdateProfile(userId, team.id)
+  const [title, setTitle] = useState(current?.jobTitle ?? '')
+  const [fte, setFte] = useState(current?.ftePercent ? String(current.ftePercent) : '')
+  const [validation, setValidation] = useState('')
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const percent = fte.trim() === '' ? null : Number(fte)
+    if (percent !== null && (!Number.isInteger(percent) || percent < 1 || percent > 100)) { setValidation('Wymiar etatu to liczba całkowita od 1 do 100 procent.'); return }
+    setValidation('')
+    save.mutate({ jobTitle: title.trim() || null, ftePercent: percent }, { onSuccess: onSaved })
+  }
+  return <Modal title="Mój profil w zespole" busy={save.isPending} onClose={onClose}>
+    <p className="dialog-description">Zespół: <strong>{team.name}</strong>. Stanowisko i wymiar etatu widzą tylko właściciel i administratorzy zespołu.</p>
+    <form onSubmit={submit} onInput={() => setValidation('')}>
+      <fieldset disabled={save.isPending}>
+        <div className="field-group"><label htmlFor="profile-title">Stanowisko <span className="optional-label">(opcjonalnie)</span></label><input id="profile-title" className="text-input" maxLength={80} value={title} onChange={event => setTitle(event.target.value)} /></div>
+        <div className="field-group"><label htmlFor="profile-fte">Wymiar etatu w procentach <span className="optional-label">(opcjonalnie)</span></label><input id="profile-fte" className="text-input" type="number" min={1} max={100} step={1} value={fte} onChange={event => setFte(event.target.value)} /></div>
+      </fieldset>
+      {(validation || save.isError) && <p className="form-error" role="alert">{validation || save.error?.message}</p>}
+      <footer className="dialog-actions"><button type="button" className="button-secondary" disabled={save.isPending} onClick={onClose}>Anuluj</button>
+        <button className="button-primary" disabled={save.isPending}>{save.isPending && <LoaderCircle size={16} className="spin" />}{save.isPending ? 'Zapisywanie…' : 'Zapisz profil'}</button></footer>
+    </form>
+  </Modal>
+}
 
 function TransferOwnershipModal({ userId, team, member, onClose, onComplete }: {
   userId: string; team: Team; member: TeamMember; onClose: () => void; onComplete: () => void
@@ -56,12 +82,14 @@ export function TeamMembersPanel({ userId, team, onLeft }: { userId: string; tea
   const [action, setAction] = useState<{ member: TeamMember | null } | null>(null)
   const [transferTarget, setTransferTarget] = useState<TeamMember | null>(null)
   const [correcting, setCorrecting] = useState<TeamMember | null>(null)
+  const [profiling, setProfiling] = useState(false)
   const members = useTeamMembers(userId, team.id, includeFormer, page)
   const dateLabel = (date: string) => new Date(date).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short', timeZone: team.timezone })
 
   return <section className="team-members" aria-label="Członkowie zespołu">
     <header className="teams-toolbar"><div><h2>Członkowie zespołu</h2><p>{manager ? 'Zarządzaj dostępem do wybranego zespołu.' : 'Osoby, z którymi pracujesz w tym zespole.'}</p></div>
       <div className="team-actions"><button className="button-secondary" disabled={members.isFetching} onClick={() => void members.refetch()}><RefreshCw size={15} className={members.isFetching ? 'spin' : ''} />Odśwież członków</button>
+        {!team.archivedAt && <button className="button-secondary" onClick={() => { setNotice(''); setProfiling(true) }}><UserRound size={15} />Mój profil w zespole</button>}
         {!owner && <button className="button-secondary" onClick={() => { setNotice(''); setAction({ member: null }) }}><LogOut size={15} />Opuść zespół</button>}
       </div>
     </header>
@@ -75,10 +103,11 @@ export function TeamMembersPanel({ userId, team, onLeft }: { userId: string; tea
         {members.data.content.length === 0 ? <p className="report-empty">Na tej stronie nie ma członków. Wróć na pierwszą stronę lub odśwież listę.</p>
           : <div className="team-table-wrap" tabIndex={0} role="region" aria-label="Lista członków zespołu" aria-busy={members.isFetching}>
             <table className="team-table members-table"><caption className="sr-only">Członkowie zespołu {team.name}</caption>
-              <thead><tr><th scope="col">Osoba</th><th scope="col">Rola</th><th scope="col">Dołączono</th><th scope="col">Status</th>{manager && <th scope="col">Akcje</th>}</tr></thead>
+              <thead><tr><th scope="col">Osoba</th><th scope="col">Rola</th>{manager && <th scope="col">Stanowisko i etat</th>}<th scope="col">Dołączono</th><th scope="col">Status</th>{manager && <th scope="col">Akcje</th>}</tr></thead>
               <tbody>{members.data.content.map(member => <tr key={member.userId}>
                 <td data-label="Osoba">{member.displayName}{member.userId === userId && <span className="report-meta">To Ty</span>}</td>
                 <td data-label="Rola">{roleLabel(member.role)}</td>
+                {manager && <td data-label="Stanowisko i etat">{[member.jobTitle, member.ftePercent ? `${member.ftePercent}% etatu` : null].filter(Boolean).join(' · ') || '—'}</td>}
                 <td data-label="Dołączono"><time dateTime={member.joinedAt}>{dateLabel(member.joinedAt)}</time></td>
                 <td data-label="Status">{member.leftAt ? <>Były członek<span className="report-meta">Odejście: <time dateTime={member.leftAt}>{dateLabel(member.leftAt)}</time></span></> : 'Aktywny'}</td>
                 {manager && <td data-label="Akcje"><div className="history-actions">
@@ -102,6 +131,7 @@ export function TeamMembersPanel({ userId, team, onLeft }: { userId: string; tea
         </nav>}
         {page > 0 && members.data.content.length === 0 && <button className="button-secondary" onClick={() => setPage(0)}>Wróć na pierwszą stronę</button>}
       </>}
+    {profiling && <ProfileModal userId={userId} team={team} current={members.data?.content.find(member => member.userId === userId)} onClose={() => setProfiling(false)} onSaved={() => { setProfiling(false); setNotice('Zapisano Twój profil w zespole.') }} />}
     {correcting && <MemberCorrections userId={userId} team={team} member={correcting} onClose={() => setCorrecting(null)} />}
     {transferTarget && <TransferOwnershipModal userId={userId} team={team} member={transferTarget} onClose={() => setTransferTarget(null)} onComplete={() => setTransferTarget(null)} />}
     {action && <EndMembershipModal userId={userId} team={team} member={action.member} onClose={() => setAction(null)} onComplete={() => {
