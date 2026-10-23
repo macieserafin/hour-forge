@@ -12,7 +12,7 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.mock.web.MockHttpSession;
+import pl.macieserafin.hourforge.support.BrowserSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -49,8 +49,8 @@ class JiraOAuthIT extends JiraIntegrationTestSupport {
     private Team team;
     private AppUserPrincipal ownerPrincipal;
     private AppUserPrincipal memberPrincipal;
-    private MockHttpSession ownerSession;
-    private MockHttpSession memberSession;
+    private BrowserSession ownerSession;
+    private BrowserSession memberSession;
 
     /** JDBC sees only flushed rows and bypasses the persistence context, so it is synchronized around each use. */
     private final class Db {
@@ -88,8 +88,8 @@ class JiraOAuthIT extends JiraIntegrationTestSupport {
         fixtures.member(team, member, TeamRole.MEMBER, Instant.now());
         ownerPrincipal = new AppUserPrincipal(owner.getId(), owner.getEmail(), "unused");
         memberPrincipal = new AppUserPrincipal(member.getId(), member.getEmail(), "unused");
-        ownerSession = new MockHttpSession();
-        memberSession = new MockHttpSession();
+        ownerSession = new BrowserSession(mvc);
+        memberSession = new BrowserSession(mvc);
     }
 
     @Test
@@ -132,7 +132,7 @@ class JiraOAuthIT extends JiraIntegrationTestSupport {
 
     @Test
     void theAuthorizationUrlCarriesTheConfiguredClientAndAStateThatIsOnlyStoredAsAHash() throws Exception {
-        var url = mvc.perform(post(BASE + "/authorize").with(user(ownerPrincipal)).with(csrf()).session(ownerSession)
+        var url = ownerSession.perform(post(BASE + "/authorize").with(user(ownerPrincipal)).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(authorizeBody("SITE")))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         var link = UriComponentsBuilder.fromUriString(JsonPath.<String>read(url, "$.url")).build();
@@ -175,7 +175,7 @@ class JiraOAuthIT extends JiraIntegrationTestSupport {
     @Test
     void membersCannotChooseTheSiteButCanConnectTheirOwnAccountToIt() throws Exception {
         connectOwner();
-        mvc.perform(post(BASE + "/authorize").with(user(memberPrincipal)).with(csrf()).session(memberSession)
+        memberSession.perform(post(BASE + "/authorize").with(user(memberPrincipal)).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(authorizeBody("SITE")))
                 .andExpect(status().isForbidden());
         mvc.perform(get(BASE + "/sites").param("teamId", team.getId().toString()).with(user(memberPrincipal)))
@@ -195,7 +195,7 @@ class JiraOAuthIT extends JiraIntegrationTestSupport {
         var admin = fixtures.user("admin@example.com", "Admin");
         fixtures.member(team, admin, TeamRole.ADMIN, Instant.now());
         var adminPrincipal = new AppUserPrincipal(admin.getId(), admin.getEmail(), "unused");
-        var adminSession = new MockHttpSession();
+        var adminSession = new BrowserSession(mvc);
         mvc.perform(get(BASE + "/status").param("teamId", team.getId().toString()).with(user(adminPrincipal)))
                 .andExpect(jsonPath("$.canManage").value(true));
         var state = authorize(adminPrincipal, adminSession, "SITE");
@@ -218,7 +218,7 @@ class JiraOAuthIT extends JiraIntegrationTestSupport {
 
     @Test
     void connectingAMemberNeedsAChosenSiteAndMembership() throws Exception {
-        mvc.perform(post(BASE + "/authorize").with(user(memberPrincipal)).with(csrf()).session(memberSession)
+        memberSession.perform(post(BASE + "/authorize").with(user(memberPrincipal)).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(authorizeBody("MEMBER")))
                 .andExpect(status().isConflict());
         mvc.perform(post(BASE + "/authorize").with(user(new AppUserPrincipal(outsider.getId(), outsider.getEmail(), "unused")))
@@ -232,7 +232,7 @@ class JiraOAuthIT extends JiraIntegrationTestSupport {
     @Test
     void aStateWorksOnceOnlyForItsOwnPersonAndSession() throws Exception {
         var state = authorize(ownerPrincipal, ownerSession, "SITE");
-        callback(ownerPrincipal, new MockHttpSession(), "good-code", state)
+        callback(ownerPrincipal, new BrowserSession(mvc), "good-code", state)
                 .andExpect(redirectedUrl("http://localhost:5173/integrations?jira=invalid-state"));
         callback(memberPrincipal, memberSession, "good-code", state)
                 .andExpect(redirectedUrl("http://localhost:5173/integrations?jira=invalid-state"));
@@ -248,9 +248,9 @@ class JiraOAuthIT extends JiraIntegrationTestSupport {
     void forgedExpiredAndMissingStatesAreRefusedWithoutCallingAtlassian() throws Exception {
         callback(ownerPrincipal, ownerSession, "good-code", "forged-state-value")
                 .andExpect(redirectedUrl("http://localhost:5173/integrations?jira=invalid-state"));
-        mvc.perform(get(BASE + "/callback").param("code", "good-code").with(user(ownerPrincipal)).session(ownerSession))
+        ownerSession.perform(get(BASE + "/callback").param("code", "good-code").with(user(ownerPrincipal)))
                 .andExpect(redirectedUrl("http://localhost:5173/integrations?jira=invalid-state"));
-        mvc.perform(get(BASE + "/callback").param("code", "good-code").param("state", "x".repeat(500)).with(user(ownerPrincipal)).session(ownerSession))
+        ownerSession.perform(get(BASE + "/callback").param("code", "good-code").param("state", "x".repeat(500)).with(user(ownerPrincipal)))
                 .andExpect(redirectedUrl("http://localhost:5173/integrations?jira=invalid-state"));
 
         var state = authorize(ownerPrincipal, ownerSession, "SITE");
@@ -264,8 +264,8 @@ class JiraOAuthIT extends JiraIntegrationTestSupport {
     @Test
     void aRefusedConsentOrCodeOrAnAtlassianOutageEndsInAFixedResultAndSpendsTheState() throws Exception {
         var denied = authorize(ownerPrincipal, ownerSession, "SITE");
-        mvc.perform(get(BASE + "/callback").param("error", "access_denied").param("state", denied)
-                        .with(user(ownerPrincipal)).session(ownerSession))
+        ownerSession.perform(get(BASE + "/callback").param("error", "access_denied").param("state", denied)
+                        .with(user(ownerPrincipal)))
                 .andExpect(redirectedUrl("http://localhost:5173/integrations?jira=denied&team=" + team.getId()));
         callback(ownerPrincipal, ownerSession, "good-code", denied)
                 .andExpect(redirectedUrl("http://localhost:5173/integrations?jira=invalid-state"));
@@ -329,7 +329,7 @@ class JiraOAuthIT extends JiraIntegrationTestSupport {
                         .content(authorizeBody("SITE")))
                 .andExpect(status().isForbidden());
         for (int i = 0; i < 20; i++) authorize(ownerPrincipal, ownerSession, "SITE");
-        mvc.perform(post(BASE + "/authorize").with(user(ownerPrincipal)).with(csrf()).session(ownerSession)
+        ownerSession.perform(post(BASE + "/authorize").with(user(ownerPrincipal)).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(authorizeBody("SITE")))
                 .andExpect(status().isTooManyRequests());
     }
@@ -342,14 +342,14 @@ class JiraOAuthIT extends JiraIntegrationTestSupport {
         return "{\"teamId\":\"" + team.getId() + "\",\"intent\":\"" + intent + "\"}";
     }
 
-    private String authorize(AppUserPrincipal principal, MockHttpSession session, String intent) throws Exception {
-        var body = mvc.perform(post(BASE + "/authorize").with(user(principal)).with(csrf()).session(session)
+    private String authorize(AppUserPrincipal principal, BrowserSession session, String intent) throws Exception {
+        var body = session.perform(post(BASE + "/authorize").with(user(principal)).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(authorizeBody(intent)))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         return UriComponentsBuilder.fromUriString(JsonPath.<String>read(body, "$.url")).build().getQueryParams().getFirst("state");
     }
 
-    private ResultActions callback(AppUserPrincipal principal, MockHttpSession session, String code, String state) throws Exception {
-        return mvc.perform(get(BASE + "/callback").param("code", code).param("state", state).with(user(principal)).session(session));
+    private ResultActions callback(AppUserPrincipal principal, BrowserSession session, String code, String state) throws Exception {
+        return session.perform(get(BASE + "/callback").param("code", code).param("state", state).with(user(principal)));
     }
 }

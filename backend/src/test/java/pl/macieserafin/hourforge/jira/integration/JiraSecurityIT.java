@@ -18,6 +18,8 @@ import pl.macieserafin.hourforge.team.TeamRepository;
 import pl.macieserafin.hourforge.team.TeamRole;
 import pl.macieserafin.hourforge.user.User;
 
+import pl.macieserafin.hourforge.support.BrowserSession;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -56,9 +58,9 @@ class JiraSecurityIT extends JiraIntegrationTestSupport {
         return "{\"teamId\":\"" + team.getId() + "\",\"intent\":\"" + intent + "\"}";
     }
 
-    private String authorize(Team team, org.springframework.mock.web.MockHttpSession session) throws Exception {
+    private String authorize(Team team, BrowserSession session) throws Exception {
         entityManager.flush();
-        var response = mvc.perform(post(BASE + "/authorize").with(user(principal)).with(csrf()).session(session)
+        var response = session.perform(post(BASE + "/authorize").with(user(principal)).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(body(team, "SITE")))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         return UriComponentsBuilder.fromUriString(JsonPath.<String>read(response, "$.url")).build().getQueryParams().getFirst("state");
@@ -88,19 +90,19 @@ class JiraSecurityIT extends JiraIntegrationTestSupport {
 
     @Test
     void theCallbackAlwaysReturnsToTheConfiguredAppWhateverTheRequestSays() throws Exception {
-        var session = new org.springframework.mock.web.MockHttpSession();
+        var session = new BrowserSession(mvc);
         var state = authorize(teamA, session);
-        mvc.perform(get(BASE + "/callback").param("code", "good-code").param("state", state).param("redirect_uri", "https://evil.test/steal")
-                        .param("returnTo", "https://evil.test").param("next", "//evil.test").with(user(principal)).session(session))
+        session.perform(get(BASE + "/callback").param("code", "good-code").param("state", state).param("redirect_uri", "https://evil.test/steal")
+                        .param("returnTo", "https://evil.test").param("next", "//evil.test").with(user(principal)))
                 .andExpect(status().isFound())
                 .andExpect(header().string("Location", startsWith("http://localhost:5173/integrations?jira=")));
     }
 
     @Test
     void aStateStartedForOneTeamOnlyConnectsThatTeam() throws Exception {
-        var session = new org.springframework.mock.web.MockHttpSession();
+        var session = new BrowserSession(mvc);
         var state = authorize(teamA, session);
-        mvc.perform(get(BASE + "/callback").param("code", "good-code").param("state", state).with(user(principal)).session(session))
+        session.perform(get(BASE + "/callback").param("code", "good-code").param("state", state).with(user(principal)))
                 .andExpect(status().isFound());
         entityManager.flush();
         assertThat(jdbc.queryForList("select team_id from jira_connections", UUID.class)).containsExactly(teamA.getId());
@@ -108,7 +110,7 @@ class JiraSecurityIT extends JiraIntegrationTestSupport {
 
     @Test
     void anArchivedTeamKeepsItsJiraSiteFrozen() throws Exception {
-        var session = new org.springframework.mock.web.MockHttpSession();
+        var session = new BrowserSession(mvc);
         callbackConnect(teamA, session);
         var team = teams.findById(teamA.getId()).orElseThrow();
         team.setArchivedAt(Instant.now());
@@ -124,9 +126,9 @@ class JiraSecurityIT extends JiraIntegrationTestSupport {
         assertThat(jdbc.queryForObject("select count(*) from jira_connections", Integer.class)).isEqualTo(1);
     }
 
-    private void callbackConnect(Team team, org.springframework.mock.web.MockHttpSession session) throws Exception {
+    private void callbackConnect(Team team, BrowserSession session) throws Exception {
         var state = authorize(team, session);
-        mvc.perform(get(BASE + "/callback").param("code", "good-code").param("state", state).with(user(principal)).session(session))
+        session.perform(get(BASE + "/callback").param("code", "good-code").param("state", state).with(user(principal)))
                 .andExpect(status().isFound());
         entityManager.flush();
     }

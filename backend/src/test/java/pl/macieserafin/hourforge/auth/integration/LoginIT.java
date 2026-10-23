@@ -8,8 +8,10 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpSession;
+import pl.macieserafin.hourforge.support.BrowserSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.session.FindByIndexNameSessionRepository;
+import org.springframework.session.Session;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import pl.macieserafin.hourforge.auth.UserCredential;
@@ -35,6 +37,7 @@ class LoginIT extends ApiIntegrationTestSupport {
     @Autowired UserCredentialRepository credentials;
     @Autowired PasswordEncoder encoder;
     @Autowired ApplicationContext context;
+    @Autowired FindByIndexNameSessionRepository<? extends Session> sessions;
 
     private User user;
 
@@ -54,17 +57,18 @@ class LoginIT extends ApiIntegrationTestSupport {
     @ParameterizedTest
     @ValueSource(strings = {"/me", "/api/me"})
     void csrfLoginSessionAndLogoutFlow(String profilePath) throws Exception {
-        var session = new MockHttpSession();
-        String originalSessionId = session.getId();
+        var session = new BrowserSession(mvc);
         String token = csrfToken(session);
-        mvc.perform(post("/api/auth/login").session(session)
+        String originalSessionId = session.sessionId();
+        assertThat(originalSessionId).isNotNull();
+        session.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                         .header("X-CSRF-TOKEN", token)
                         .param("email", EMAIL.toUpperCase()).param("password", PASSWORD))
                 .andExpect(status().isNoContent());
-        assertThat(session.getId()).isNotEqualTo(originalSessionId);
+        assertThat(session.sessionId()).isNotEqualTo(originalSessionId);
 
-        mvc.perform(get(profilePath).session(session))
+        session.perform(get(profilePath))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(user.getId().toString()))
                 .andExpect(jsonPath("$.email").value(EMAIL))
@@ -72,11 +76,12 @@ class LoginIT extends ApiIntegrationTestSupport {
                 .andExpect(jsonPath("$.password").doesNotExist())
                 .andExpect(jsonPath("$.passwordHash").doesNotExist());
 
-        mvc.perform(post("/api/auth/logout").session(session)
+        var signedIn = session.cookie();
+        session.perform(post("/api/auth/logout")
                         .header("X-CSRF-TOKEN", csrfToken(session)))
                 .andExpect(status().isNoContent());
-        assertThat(session.isInvalid()).isTrue();
-        mvc.perform(get(profilePath)).andExpect(status().isUnauthorized());
+        assertThat(session.sessionId()).isNull();
+        mvc.perform(get(profilePath).cookie(signedIn)).andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -101,12 +106,12 @@ class LoginIT extends ApiIntegrationTestSupport {
 
     @Test
     void rejectsLogoutWithoutCsrfAndKeepsSessionAuthenticated() throws Exception {
-        var session = new MockHttpSession();
-        mvc.perform(post("/api/auth/login").session(session).with(csrf())
+        var session = new BrowserSession(mvc);
+        session.perform(post("/api/auth/login").with(csrf())
                         .param("email", EMAIL).param("password", PASSWORD))
                 .andExpect(status().isNoContent());
-        mvc.perform(post("/api/auth/logout").session(session)).andExpect(status().isForbidden());
-        mvc.perform(get("/api/me").session(session)).andExpect(status().isOk());
+        session.perform(post("/api/auth/logout")).andExpect(status().isForbidden());
+        session.perform(get("/api/me")).andExpect(status().isOk());
     }
 
     @Test
@@ -122,12 +127,12 @@ class LoginIT extends ApiIntegrationTestSupport {
         var credential = credentials.findById(user.getId()).orElseThrow();
         assertThat(credential.getPasswordHash()).isNotEqualTo(PASSWORD);
         assertThat(encoder.matches(PASSWORD, credential.getPasswordHash())).isTrue();
-        var session = new MockHttpSession();
-        mvc.perform(post("/api/auth/login").session(session).with(csrf())
+        var session = new BrowserSession(mvc);
+        session.perform(post("/api/auth/login").with(csrf())
                         .param("email", EMAIL).param("password", PASSWORD))
                 .andExpect(status().isNoContent());
         var securityContext = (org.springframework.security.core.context.SecurityContext)
-                session.getAttribute("SPRING_SECURITY_CONTEXT");
+                sessions.findById(session.sessionId()).getAttribute("SPRING_SECURITY_CONTEXT");
         assertThat(securityContext.getAuthentication().getAuthorities())
                 .noneMatch(authority -> authority.getAuthority().startsWith("ROLE_"));
     }
@@ -150,16 +155,16 @@ class LoginIT extends ApiIntegrationTestSupport {
     }
 
     private ResultActions login(String password, String address) throws Exception {
-        var session = new MockHttpSession();
-        return mvc.perform(post("/api/auth/login").session(session)
+        var session = new BrowserSession(mvc);
+        return session.perform(post("/api/auth/login")
                 .with(request -> { request.setRemoteAddr(address); return request; })
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .header("X-CSRF-TOKEN", csrfToken(session))
                 .param("email", EMAIL).param("password", password));
     }
 
-    private String csrfToken(MockHttpSession session) throws Exception {
-        var response = mvc.perform(get("/api/auth/csrf").session(session))
+    private String csrfToken(BrowserSession session) throws Exception {
+        var response = session.perform(get("/api/auth/csrf"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.headerName").value("X-CSRF-TOKEN"))
                 .andReturn().getResponse();

@@ -5,7 +5,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.mock.web.MockHttpSession;
+import pl.macieserafin.hourforge.support.BrowserSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
@@ -28,9 +28,9 @@ class RegistrationIT extends ApiIntegrationTestSupport {
             """;
 
     @Test void registersAnAnonymousAccountAndAllowsLoginOnlyAfterConfirmationWithoutGrantingTeamAccess() throws Exception {
-        var session = new MockHttpSession();
+        var session = new BrowserSession(mvc);
         long membershipCount = members.count();
-        mvc.perform(post("/api/auth/register").session(session).with(csrf()).contentType("application/json").content(BODY))
+        session.perform(post("/api/auth/register").with(csrf()).contentType("application/json").content(BODY))
                 .andExpect(status().isCreated()).andExpect(content().string(""));
         var user = users.findByEmailIgnoreCase("new@example.test").orElseThrow();
         assertThat(user.getDisplayName()).isEqualTo("New User");
@@ -38,20 +38,20 @@ class RegistrationIT extends ApiIntegrationTestSupport {
         assertThat(hash).isNotEqualTo("Valid-password-2026!");
         assertThat(encoder.matches("Valid-password-2026!", hash)).isTrue();
         assertThat(members.count()).isEqualTo(membershipCount);
-        mvc.perform(get("/api/me").session(session)).andExpect(status().isUnauthorized());
-        mvc.perform(post("/api/auth/login").session(session).with(csrf()).param("email", " NEW@EXAMPLE.TEST ")
+        session.perform(get("/api/me")).andExpect(status().isUnauthorized());
+        session.perform(post("/api/auth/login").with(csrf()).param("email", " NEW@EXAMPLE.TEST ")
                         .param("password", "Valid-password-2026!"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("EMAIL_NOT_VERIFIED"));
         mvc.perform(post("/api/auth/email-verification/confirm").with(csrf()).contentType("application/json")
                         .content("{\"token\":\"" + mail.lastToken("verify-email") + "\"}"))
                 .andExpect(status().isNoContent());
-        session = new MockHttpSession();
-        mvc.perform(post("/api/auth/login").session(session).with(csrf()).param("email", " NEW@EXAMPLE.TEST ")
+        session = new BrowserSession(mvc);
+        session.perform(post("/api/auth/login").with(csrf()).param("email", " NEW@EXAMPLE.TEST ")
                         .param("password", "Valid-password-2026!"))
                 .andExpect(status().isNoContent());
-        mvc.perform(get("/api/me").session(session)).andExpect(status().isOk())
+        session.perform(get("/api/me")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.displayName").value("New User")).andExpect(jsonPath("$.password").doesNotExist());
-        mvc.perform(get("/api/teams").session(session)).andExpect(status().isOk()).andExpect(content().json("[]"));
+        session.perform(get("/api/teams")).andExpect(status().isOk()).andExpect(content().json("[]"));
     }
 
     @Test void duplicateEmailLooksLikeSuccessPreservesTheExistingPasswordAndWarnsTheOwner() throws Exception {

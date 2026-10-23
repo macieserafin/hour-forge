@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pl.macieserafin.hourforge.auth.AuthController.MeResponse;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
+import pl.macieserafin.hourforge.session.DeviceSessions;
+import pl.macieserafin.hourforge.session.SessionConfig;
 
 import java.util.List;
 
@@ -28,10 +30,12 @@ import java.util.List;
 public class AccountController {
     private final AccountService account;
     private final AccountDataService data;
+    private final DeviceSessions devices;
 
-    public AccountController(AccountService account, AccountDataService data) {
+    public AccountController(AccountService account, AccountDataService data, DeviceSessions devices) {
         this.account = account;
         this.data = data;
+        this.devices = devices;
     }
 
     @PatchMapping("/profile")
@@ -46,6 +50,8 @@ public class AccountController {
                                                @RequestBody PasswordChangeRequest request,
                                                HttpServletRequest httpRequest, HttpServletResponse response) {
         int version = account.changePassword(principal.getUserId(), request);
+        // The other devices are signed out; removed before the id changes, while the stored row still has the old id.
+        devices.endAllExcept(principal.getUserId(), httpRequest.getSession().getId());
         // Keep this device signed in: a fresh session id and a principal carrying the new version.
         httpRequest.changeSessionId();
         var refreshed = new AppUserPrincipal(principal.getUserId(), principal.getUsername(), "", version, principal.isEmailVerified());
@@ -70,8 +76,9 @@ public class AccountController {
     public ResponseEntity<Void> delete(@AuthenticationPrincipal AppUserPrincipal principal, @RequestBody DeleteAccountRequest request,
                                        Authentication authentication, HttpServletRequest httpRequest, HttpServletResponse response) {
         data.deleteAccount(principal.getUserId(), request.currentPassword());
+        devices.endAllExcept(principal.getUserId(), null);
         new SecurityContextLogoutHandler().logout(httpRequest, response, authentication);
-        new CookieClearingLogoutHandler("JSESSIONID").logout(httpRequest, response, authentication);
+        new CookieClearingLogoutHandler(SessionConfig.COOKIE_NAME).logout(httpRequest, response, authentication);
         return ResponseEntity.noContent().build();
     }
 
@@ -80,8 +87,9 @@ public class AccountController {
                                                   Authentication authentication, HttpServletRequest request,
                                                   HttpServletResponse response) {
         account.signOutEverywhere(principal.getUserId());
+        devices.endAllExcept(principal.getUserId(), null);
         new SecurityContextLogoutHandler().logout(request, response, authentication);
-        new CookieClearingLogoutHandler("JSESSIONID").logout(request, response, authentication);
+        new CookieClearingLogoutHandler(SessionConfig.COOKIE_NAME).logout(request, response, authentication);
         return ResponseEntity.noContent().build();
     }
 }

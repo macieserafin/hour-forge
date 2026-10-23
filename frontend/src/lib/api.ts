@@ -355,6 +355,33 @@ export async function signOutEverywhere(): Promise<void> {
   await accountRequest('/api/account/sign-out-everywhere', 'POST', {}, {}, 'Nie udało się wylogować ze wszystkich urządzeń. Spróbuj ponownie.')
 }
 
+/** A signed-in device. `id` is a handle for ending it, not the session id; the address is shortened by the server. */
+export interface DeviceSession {
+  id: string
+  browser: string | null
+  system: string | null
+  address: string | null
+  signedInAt: string
+  lastActiveAt: string
+  current: boolean
+  remembered: boolean
+}
+
+export async function getSessions(signal?: AbortSignal): Promise<DeviceSession[]> {
+  const response = await request('/api/account/sessions', { signal })
+  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.' : 'Nie udało się wczytać listy urządzeń.')
+  return response.json() as Promise<DeviceSession[]>
+}
+
+export async function endSession(id: string): Promise<void> {
+  const csrf = await getCsrf()
+  const response = await request(`/api/account/sessions/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { [csrf.headerName]: csrf.token } })
+  if (!response.ok) {
+    throw new ApiError(response.status, { 401: 'Sesja wygasła. Zaloguj się ponownie.', 403: 'Sesja formularza wygasła. Spróbuj ponownie.',
+      404: 'To urządzenie jest już wylogowane. Odśwież listę.' }[response.status] ?? 'Nie udało się wylogować urządzenia. Spróbuj ponownie.')
+  }
+}
+
 async function teamRequest<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const csrf = body === undefined ? null : await getCsrf()
   const response = await request(path, {

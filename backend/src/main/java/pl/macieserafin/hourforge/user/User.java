@@ -34,6 +34,9 @@ public class User {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(name = "last_active_at")
+    private Instant lastActiveAt;
+
     protected User() {
     }
 
@@ -56,6 +59,11 @@ public class User {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    /** The last day (UTC midnight) the person used the app; null for accounts that never signed in since V27. */
+    public Instant getLastActiveAt() {
+        return lastActiveAt;
     }
 
     public Instant getEmailVerifiedAt() {

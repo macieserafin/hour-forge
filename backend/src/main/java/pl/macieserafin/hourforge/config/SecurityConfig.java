@@ -5,7 +5,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,8 +25,13 @@ import pl.macieserafin.hourforge.security.LoginAttemptService;
 import pl.macieserafin.hourforge.security.SessionVersionFilter;
 import pl.macieserafin.hourforge.security.RateLimitProperties;
 import pl.macieserafin.hourforge.security.TooManyRequestsException;
+import pl.macieserafin.hourforge.session.ActivityFilter;
+import pl.macieserafin.hourforge.session.DeviceSessions;
+import pl.macieserafin.hourforge.session.SessionConfig;
+import pl.macieserafin.hourforge.user.UserRepository;
 
 import java.io.IOException;
+import java.time.Clock;
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(RateLimitProperties.class)
@@ -44,8 +48,8 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, LoginAttemptService loginAttempts,
-                                            UserCredentialRepository credentials,
-                                            @Value("${server.servlet.session.cookie.secure:false}") boolean secureCookie) throws Exception {
+                                            UserCredentialRepository credentials, DeviceSessions devices,
+                                            UserRepository users, Clock clock) throws Exception {
         return http
                 .headers(headers -> headers.referrerPolicy(policy -> policy.policy(
                         org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
@@ -64,6 +68,7 @@ public class SecurityConfig {
                 // After CSRF validation, before credentials are checked: a blocked login never reaches BCrypt.
                 .addFilterBefore(new LoginRateLimitFilter(loginAttempts), UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new SessionVersionFilter(credentials), AuthorizationFilter.class)
+                .addFilterAfter(new ActivityFilter(users, clock), SessionVersionFilter.class)
                 .formLogin(form -> form
                         .loginPage(LOGIN_URL)
                         .loginProcessingUrl(LOGIN_URL)
@@ -78,7 +83,9 @@ public class SecurityConfig {
                                 return;
                             }
                             loginAttempts.recordSuccess(request.getParameter(EMAIL_PARAMETER), request.getRemoteAddr());
-                            if ("true".equals(request.getParameter(REMEMBER_PARAMETER))) rememberDevice(request, response, secureCookie);
+                            var remembered = "true".equals(request.getParameter(REMEMBER_PARAMETER));
+                            if (remembered) rememberDevice(request);
+                            devices.recordSignIn(request, remembered);
                             response.setStatus(HttpServletResponse.SC_NO_CONTENT);
                         })
                         .failureHandler((request, response, exception) -> {
@@ -88,22 +95,19 @@ public class SecurityConfig {
                         .permitAll())
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")
-                        .deleteCookies("JSESSIONID")
+                        .deleteCookies(SessionConfig.COOKIE_NAME)
                         .logoutSuccessHandler((request, response, authentication) ->
                                 response.setStatus(HttpServletResponse.SC_NO_CONTENT)))
                 .build();
     }
 
     /**
-     * "Remember me": this session may stay idle for 30 days, and the cookie is made persistent so it survives closing
-     * the browser. The cookie is re-issued with the same name and attributes, so only its lifetime changes.
+     * "Remember me": this session may stay idle for 30 days, and its cookie is made persistent so it survives closing
+     * the browser (see {@link SessionConfig}).
      */
-    private static void rememberDevice(HttpServletRequest request, HttpServletResponse response, boolean secure) {
-        var session = request.getSession();
-        session.setMaxInactiveInterval((int) REMEMBER_FOR.toSeconds());
-        var path = request.getContextPath().isEmpty() ? "/" : request.getContextPath();
-        response.addHeader(HttpHeaders.SET_COOKIE, org.springframework.http.ResponseCookie.from("JSESSIONID", session.getId())
-                .path(path).httpOnly(true).secure(secure).sameSite("Lax").maxAge(REMEMBER_FOR).build().toString());
+    private static void rememberDevice(HttpServletRequest request) {
+        request.getSession().setMaxInactiveInterval((int) SessionConfig.REMEMBER_FOR.toSeconds());
+        request.setAttribute(SessionConfig.REMEMBER_ATTRIBUTE, Boolean.TRUE);
     }
 
     // Not a bean: a Filter bean would also be registered in the servlet container outside the security chain.

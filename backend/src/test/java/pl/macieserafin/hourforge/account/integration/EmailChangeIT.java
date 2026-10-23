@@ -7,7 +7,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpSession;
+import pl.macieserafin.hourforge.support.BrowserSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -49,7 +49,7 @@ class EmailChangeIT extends ApiIntegrationTestSupport {
         assertThat(mail.last().to()).isEqualTo(NEW_EMAIL);
         assertThat(mail.last().body()).contains("/confirm-email-change/");
         assertThat(users.findById(user.getId()).orElseThrow().getEmail()).isEqualTo(EMAIL);
-        mvc.perform(get("/api/me").session(session)).andExpect(status().isOk());
+        session.perform(get("/api/me")).andExpect(status().isOk());
     }
 
     @Test
@@ -63,9 +63,9 @@ class EmailChangeIT extends ApiIntegrationTestSupport {
         var changed = users.findById(user.getId()).orElseThrow();
         assertThat(changed.getEmail()).isEqualTo(NEW_EMAIL);
         assertThat(changed.isEmailVerified()).isTrue();
-        mvc.perform(get("/api/me").session(session)).andExpect(status().isUnauthorized());
-        login(EMAIL, PASSWORD, new MockHttpSession()).andExpect(status().isUnauthorized());
-        login(NEW_EMAIL, PASSWORD, new MockHttpSession()).andExpect(status().isNoContent());
+        session.perform(get("/api/me")).andExpect(status().isUnauthorized());
+        login(EMAIL, PASSWORD, new BrowserSession(mvc)).andExpect(status().isUnauthorized());
+        login(NEW_EMAIL, PASSWORD, new BrowserSession(mvc)).andExpect(status().isNoContent());
         assertThat(mail.sent()).hasSize(1);
         assertThat(mail.last().to()).isEqualTo(EMAIL);
         assertThat(mail.last().body()).contains(NEW_EMAIL);
@@ -118,8 +118,8 @@ class EmailChangeIT extends ApiIntegrationTestSupport {
                 .andExpect(status().isForbidden());
     }
 
-    private ResultActions change(MockHttpSession session, String address, String password) throws Exception {
-        return mvc.perform(post("/api/account/email").session(session).header("X-CSRF-TOKEN", csrfToken(session))
+    private ResultActions change(BrowserSession session, String address, String password) throws Exception {
+        return session.send(post("/api/account/email")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"newEmail\":\"" + address + "\",\"currentPassword\":\"" + password + "\"}"));
     }
@@ -129,18 +129,13 @@ class EmailChangeIT extends ApiIntegrationTestSupport {
                 .content("{\"token\":\"" + token + "\"}"));
     }
 
-    private MockHttpSession signIn(String email) throws Exception {
-        var session = new MockHttpSession();
+    private BrowserSession signIn(String email) throws Exception {
+        var session = new BrowserSession(mvc);
         login(email, PASSWORD, session).andExpect(status().isNoContent());
         return session;
     }
 
-    private ResultActions login(String email, String password, MockHttpSession session) throws Exception {
-        return mvc.perform(post("/api/auth/login").session(session).contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .header("X-CSRF-TOKEN", csrfToken(session)).param("email", email).param("password", password));
-    }
-
-    private String csrfToken(MockHttpSession session) throws Exception {
-        return JsonPath.read(mvc.perform(get("/api/auth/csrf").session(session)).andReturn().getResponse().getContentAsString(), "$.token");
+    private ResultActions login(String email, String password, BrowserSession session) throws Exception {
+        return session.login(email, password);
     }
 }

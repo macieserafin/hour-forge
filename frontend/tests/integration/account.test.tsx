@@ -3,7 +3,7 @@ import { screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../../src/App'
 import { renderApp } from '../support/render'
-import { mockApi, json, user } from '../support/api'
+import { mockApi, json, user, deviceSession } from '../support/api'
 
 const fill = async (label: string, value: string) => userEvent.type(screen.getByLabelText(label), value)
 
@@ -107,4 +107,38 @@ it('keeps the dialog open with an error when signing out everywhere fails', asyn
   await userEvent.click(await screen.findByRole('button', { name: 'Wyloguj ze wszystkich urządzeń' }))
   await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Wyloguj wszędzie' }))
   expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('Nie udało się wylogować ze wszystkich urządzeń')
+})
+
+it('lists the signed-in devices and signs out another one without touching this one', async () => {
+  let devices = [deviceSession, { ...deviceSession, id: 'phone', browser: 'Safari', system: 'iOS', address: null, current: false, remembered: true }]
+  let ended = ''
+  mockApi({ 'GET /api/account/sessions': () => json(devices),
+    'DELETE /api/account/sessions/phone': (_url, options) => {
+      ended = new Headers(options.headers).get('X-CSRF-TOKEN') ?? ''
+      devices = devices.filter(device => device.id !== 'phone'); return json(null, 204) } })
+  renderApp(<App />, '/account')
+  const list = await screen.findByRole('list', { name: 'Zalogowane urządzenia' })
+  const items = within(list).getAllByRole('listitem')
+  expect(items).toHaveLength(2)
+  expect(items[0]).toHaveTextContent('Firefox · Windows · to urządzenie')
+  expect(items[0]).toHaveTextContent('adres 83.24.x.x')
+  expect(within(items[0]).queryByRole('button')).toBeNull()
+  expect(items[1]).toHaveTextContent('Safari · iOS')
+  expect(items[1]).toHaveTextContent('zapamiętane')
+
+  await userEvent.click(within(items[1]).getByRole('button', { name: /^Wyloguj Safari · iOS/ }))
+  expect(await screen.findByText('Urządzenie zostało wylogowane.')).toBeVisible()
+  expect(ended).toBe('csrf')
+  await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(1))
+})
+
+it('names an unknown browser plainly and explains a device that is already gone', async () => {
+  mockApi({ 'GET /api/account/sessions': () => json([deviceSession, { ...deviceSession, id: 'gone', browser: null, system: null, current: false }]),
+    'DELETE /api/account/sessions/gone': () => json(null, 404) })
+  renderApp(<App />, '/account')
+  const list = await screen.findByRole('list', { name: 'Zalogowane urządzenia' })
+  const unknown = within(list).getAllByRole('listitem')[1]
+  expect(unknown).toHaveTextContent('Nieznana przeglądarka')
+  await userEvent.click(within(unknown).getByRole('button'))
+  expect(await screen.findByText('To urządzenie jest już wylogowane. Odśwież listę.')).toBeVisible()
 })

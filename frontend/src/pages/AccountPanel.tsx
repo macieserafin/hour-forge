@@ -5,7 +5,7 @@ import { Modal } from '../components/Modal'
 import type { Preferences, User } from '../lib/api'
 import { defaultPreferences, usePreferences, useSavePreferences } from '../lib/preferences'
 import { useTeams } from '../lib/teams'
-import { passwordChangeError, useChangePassword, useDeleteAccount, useDownloadAccountData, useRequestEmailChange, useSignOutEverywhere, useUpdateProfile } from '../lib/account'
+import { deviceLabel, passwordChangeError, useChangePassword, useDeleteAccount, useDownloadAccountData, useEndSession, useRequestEmailChange, useSessions, useSignOutEverywhere, useUpdateProfile } from '../lib/account'
 
 function ProfileSection({ user }: { user: User }) {
   const save = useUpdateProfile()
@@ -171,12 +171,40 @@ function PasswordSection() {
   </section>
 }
 
-function SignOutSection() {
+const dateTime = (value: string) => new Date(value).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' })
+
+function DeviceList({ userId }: { userId: string }) {
+  const sessions = useSessions(userId)
+  const end = useEndSession(userId)
+  if (sessions.isPending) return <p role="status"><LoaderCircle size={18} className="spin" />Wczytywanie urządzeń…</p>
+  if (sessions.isError) return <div role="alert" className="dashboard-error">{sessions.error.message}
+    <button type="button" onClick={() => void sessions.refetch()}>Wczytaj ponownie</button></div>
+  return <>
+    <ul className="session-list" aria-label="Zalogowane urządzenia">
+      {sessions.data.map(session => <li key={session.id}>
+        <div>
+          <strong>{deviceLabel(session)}</strong>{session.current && <span className="session-current"> · to urządzenie</span>}
+          <p className="field-hint">Zalogowano {dateTime(session.signedInAt)} · ostatnia aktywność {dateTime(session.lastActiveAt)}
+            {session.address && <> · adres {session.address}</>}{session.remembered && <> · zapamiętane</>}</p>
+        </div>
+        {!session.current && <button type="button" className="button-secondary" disabled={end.isPending}
+          aria-label={`Wyloguj ${deviceLabel(session)}, zalogowane ${dateTime(session.signedInAt)}`}
+          onClick={() => end.mutate(session.id)}>Wyloguj</button>}
+      </li>)}
+    </ul>
+    {end.isError && <p className="form-error" role="alert">{end.error.message}</p>}
+    {end.isSuccess && <p className="project-notice" role="status">Urządzenie zostało wylogowane.</p>}
+  </>
+}
+
+function SignOutSection({ userId }: { userId: string }) {
   const signOut = useSignOutEverywhere()
   const [confirm, setConfirm] = useState(false)
   return <section className="overview-panel account-section" aria-labelledby="account-sessions-title">
-    <h2 id="account-sessions-title">Sesje</h2>
-    <p className="field-hint">Wyloguj konto na wszystkich urządzeniach, także na tym. Użyj tego, gdy zgubisz urządzenie lub podejrzewasz, że ktoś ma dostęp do Twojego konta.</p>
+    <h2 id="account-sessions-title">Zalogowane urządzenia</h2>
+    <p className="field-hint">Wyloguj urządzenie, którego nie rozpoznajesz. Adres jest skrócony, a czasy są przybliżone.</p>
+    <DeviceList userId={userId} />
+    <p className="field-hint">Możesz też wylogować konto na wszystkich urządzeniach, także na tym. Użyj tego, gdy zgubisz urządzenie lub podejrzewasz, że ktoś ma dostęp do Twojego konta.</p>
     <button className="button-secondary" type="button" onClick={() => { signOut.reset(); setConfirm(true) }}>Wyloguj ze wszystkich urządzeń</button>
     {confirm && <Modal title="Wyloguj ze wszystkich urządzeń" busy={signOut.isPending} onClose={() => setConfirm(false)}>
       <p className="dialog-description">Wszystkie sesje, także ta, zostaną zakończone i trzeba będzie zalogować się ponownie. Aktywny timer nie zostanie zatrzymany.</p>
@@ -227,7 +255,7 @@ export function AccountPanel({ user }: { user: User }) {
     <PreferencesSection userId={user.id} />
     <EmailChangeSection />
     <PasswordSection />
-    <SignOutSection />
+    <SignOutSection userId={user.id} />
     <DataSection />
     <DeleteSection />
   </div>

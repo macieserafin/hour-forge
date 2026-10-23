@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.mock.web.MockHttpSession;
+import pl.macieserafin.hourforge.support.BrowserSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -60,22 +60,22 @@ class PasswordResetIT extends ApiIntegrationTestSupport {
         var token = mail.lastToken("reset-password");
 
         confirm(token, NEW_PASSWORD).andExpect(status().isNoContent());
-        mvc.perform(get("/api/me").session(session)).andExpect(status().isUnauthorized());
-        login(PASSWORD, new MockHttpSession()).andExpect(status().isUnauthorized());
-        login(NEW_PASSWORD, new MockHttpSession()).andExpect(status().isNoContent());
+        session.perform(get("/api/me")).andExpect(status().isUnauthorized());
+        login(PASSWORD, new BrowserSession(mvc)).andExpect(status().isUnauthorized());
+        login(NEW_PASSWORD, new BrowserSession(mvc)).andExpect(status().isNoContent());
         confirm(token, "Yet-another-password-2026").andExpect(status().isBadRequest());
-        login(NEW_PASSWORD, new MockHttpSession()).andExpect(status().isNoContent());
+        login(NEW_PASSWORD, new BrowserSession(mvc)).andExpect(status().isNoContent());
     }
 
     @Test
     void resettingTheFlowOfAnUnconfirmedAccountAlsoConfirmsItsAddress() throws Exception {
         user.setEmailVerifiedAt(null);
         users.flush();
-        login(PASSWORD, new MockHttpSession()).andExpect(status().isForbidden());
+        login(PASSWORD, new BrowserSession(mvc)).andExpect(status().isForbidden());
         request(EMAIL).andExpect(status().isNoContent());
         confirm(mail.lastToken("reset-password"), NEW_PASSWORD).andExpect(status().isNoContent());
         assertThat(users.findById(user.getId()).orElseThrow().isEmailVerified()).isTrue();
-        login(NEW_PASSWORD, new MockHttpSession()).andExpect(status().isNoContent());
+        login(NEW_PASSWORD, new BrowserSession(mvc)).andExpect(status().isNoContent());
     }
 
     @Test
@@ -84,7 +84,7 @@ class PasswordResetIT extends ApiIntegrationTestSupport {
         var token = mail.lastToken("reset-password");
         confirm(token, "short").andExpect(status().isBadRequest());
         confirm(token, "              ").andExpect(status().isBadRequest());
-        login(PASSWORD, new MockHttpSession()).andExpect(status().isNoContent());
+        login(PASSWORD, new BrowserSession(mvc)).andExpect(status().isNoContent());
         confirm(token, NEW_PASSWORD).andExpect(status().isNoContent());
     }
 
@@ -107,7 +107,7 @@ class PasswordResetIT extends ApiIntegrationTestSupport {
         em.flush();
         em.clear();
         confirm(other, NEW_PASSWORD).andExpect(status().isBadRequest());
-        login(PASSWORD, new MockHttpSession()).andExpect(status().isNoContent());
+        login(PASSWORD, new BrowserSession(mvc)).andExpect(status().isNoContent());
     }
 
     @Test
@@ -152,15 +152,13 @@ class PasswordResetIT extends ApiIntegrationTestSupport {
                 .content("{\"token\":\"" + token + "\",\"newPassword\":\"" + password + "\"}"));
     }
 
-    private MockHttpSession signIn(String password) throws Exception {
-        var session = new MockHttpSession();
+    private BrowserSession signIn(String password) throws Exception {
+        var session = new BrowserSession(mvc);
         login(password, session).andExpect(status().isNoContent());
         return session;
     }
 
-    private ResultActions login(String password, MockHttpSession session) throws Exception {
-        var token = JsonPath.<String>read(mvc.perform(get("/api/auth/csrf").session(session)).andReturn().getResponse().getContentAsString(), "$.token");
-        return mvc.perform(post("/api/auth/login").session(session).contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .header("X-CSRF-TOKEN", token).param("email", EMAIL).param("password", password));
+    private ResultActions login(String password, BrowserSession session) throws Exception {
+        return session.login(EMAIL, password);
     }
 }

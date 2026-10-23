@@ -1,5 +1,5 @@
 import { vi } from 'vitest'
-import type { Project, Team, TimeEntry, TimeEntryHistoryItem, User } from '../../src/lib/api'
+import type { DeviceSession, Project, Team, TimeEntry, TimeEntryHistoryItem, User } from '../../src/lib/api'
 
 export const user: User = { id: 'actor', email: 'actor@example.test', displayName: 'Test Actor' }
 export const team: Team = { id: 'team', name: 'Studio', timezone: 'Europe/Warsaw', role: 'OWNER', createdAt: '2026-10-19T10:00:00Z', archivedAt: null, activeTimersVisible: true, requireDescription: false, requireTagOrIssue: false, weekStart: 'MONDAY', weeklyReport: false }
@@ -8,6 +8,8 @@ export const entry: TimeEntryHistoryItem = { id: 'entry', teamId: team.id, proje
   entryType: 'MANUAL', workDate: '2026-10-19', durationSeconds: 900, description: 'Original work', startedAt: null, endedAt: null }
 export const timer: TimeEntry = { ...entry, userId: user.id, entryType: 'TIMER', startedAt: '2026-10-19T10:00:00Z', endedAt: null,
   durationSeconds: null, createdAt: team.createdAt, updatedAt: team.createdAt, pausedAt: null, pausedDurationSeconds: 0 }
+export const deviceSession: DeviceSession = { id: 'this-device', browser: 'Firefox', system: 'Windows', address: '83.24.x.x',
+  signedInAt: '2026-10-19T08:00:00Z', lastActiveAt: '2026-10-19T10:00:00Z', current: true, remembered: false }
 export const history = (content = [entry]) => ({ content, page: 0, size: 20, totalElements: content.length, totalPages: content.length ? 1 : 0 })
 export const json = (data: unknown, status = 200) => new Response(status === 204 ? null : JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
 type Handler = (url: URL, options: RequestInit) => Response | Promise<Response>
@@ -27,6 +29,7 @@ export function mockApi(overrides: Record<string, Handler> = {}) {
     'GET /api/integrations/jira/status': () => json({ available: false, siteConnected: false, siteName: null, siteUrl: null, userConnected: false, canManage: false }),
     'GET /api/account/preferences': () => json({ defaultTeamId: null, startPage: 'DASHBOARD', timeFormat: 'CLOCK', weekStart: 'MONDAY', longTimerEmail: true,
       browserNotifications: false, longTimerHours: 10, titleTimer: true }),
+    'GET /api/account/sessions': () => json([deviceSession]),
     'GET /api/dashboard/overview': () => json({ todaySeconds: 900, weekSeconds: 3600, teams: [{ teamId: 'team', teamName: 'Studio', archived: false, todaySeconds: 900, weekSeconds: 3600 }] }),
     'GET /api/dashboard/activity': () => json({ from: '2026-08-03', to: '2026-10-25', today: '2026-10-19', maxSeconds: 0, days: Array.from({ length: 84 }, (_, index) => ({ workDate: new Date(Date.UTC(2026, 7, 3 + index)).toISOString().slice(0, 10), seconds: 0 })) }),
     'GET /api/timer/active': () => json(null, 204),

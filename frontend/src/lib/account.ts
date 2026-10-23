@@ -1,5 +1,6 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { changePassword, deleteAccount, downloadAccountData, requestEmailChange, signOutEverywhere, updateProfile } from './api'
+import { useEffect } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ApiError, changePassword, deleteAccount, downloadAccountData, endSession, getSessions, requestEmailChange, signOutEverywhere, updateProfile } from './api'
 import { saveBlob } from './download'
 import { sessionOptions } from './auth'
 import { useAuthError } from './teams'
@@ -29,6 +30,28 @@ export function useSignOutEverywhere() {
       client.removeQueries({ predicate: query => query.queryKey[0] !== 'session' })
       client.setQueryData(sessionOptions.queryKey, null)
     } })
+}
+
+export const sessionsKey = (userId: string) => ['account-sessions', userId] as const
+
+export function useSessions(userId: string) {
+  const handleError = useAuthError()
+  const query = useQuery({ queryKey: sessionsKey(userId), queryFn: ({ signal }) => getSessions(signal),
+    retry: (count, error) => count < 1 && error instanceof ApiError && (error.status === 0 || error.status >= 500) })
+  useEffect(() => { if (query.error) handleError(query.error) }, [query.error, handleError])
+  return query
+}
+
+export function useEndSession(userId: string) {
+  const client = useQueryClient()
+  const handleError = useAuthError()
+  return useMutation({ mutationFn: endSession, retry: false, onError: handleError,
+    onSettled: () => client.invalidateQueries({ queryKey: sessionsKey(userId) }) })
+}
+
+/** "Firefox · Windows", with a plain label when the browser could not be recognised. */
+export function deviceLabel(session: { browser: string | null; system: string | null }) {
+  return [session.browser ?? 'Nieznana przeglądarka', session.system].filter(Boolean).join(' · ')
 }
 
 export function passwordChangeError(current: string, next: string, confirmation: string): string {

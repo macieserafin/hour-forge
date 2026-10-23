@@ -7,7 +7,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpSession;
+import pl.macieserafin.hourforge.support.BrowserSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -52,7 +52,7 @@ class AccountIT extends ApiIntegrationTestSupport {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.displayName").value("New Name"))
                 .andExpect(jsonPath("$.email").value(EMAIL));
         assertThat(users.findById(user.getId()).orElseThrow().getDisplayName()).isEqualTo("New Name");
-        mvc.perform(get("/api/me").session(session)).andExpect(jsonPath("$.displayName").value("New Name"));
+        session.perform(get("/api/me")).andExpect(jsonPath("$.displayName").value("New Name"));
         send(patch("/api/account/profile"), session, "{\"displayName\":\"" + "x".repeat(255) + "\"}").andExpect(status().isOk());
     }
 
@@ -76,7 +76,7 @@ class AccountIT extends ApiIntegrationTestSupport {
         mvc.perform(request.with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isUnauthorized());
         var session = signIn(PASSWORD);
-        mvc.perform((path.endsWith("profile") ? patch(path) : post(path)).session(session)
+        session.perform((path.endsWith("profile") ? patch(path) : post(path))
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isForbidden());
     }
@@ -87,11 +87,10 @@ class AccountIT extends ApiIntegrationTestSupport {
         var other = signIn(PASSWORD);
         changePassword(current, PASSWORD, NEW_PASSWORD).andExpect(status().isNoContent()).andExpect(content().string(""));
 
-        mvc.perform(get("/api/me").session(current)).andExpect(status().isOk());
-        mvc.perform(get("/api/me").session(other)).andExpect(status().isUnauthorized());
-        assertThat(other.isInvalid()).isTrue();
-        login(PASSWORD, new MockHttpSession()).andExpect(status().isUnauthorized());
-        login(NEW_PASSWORD, new MockHttpSession()).andExpect(status().isNoContent());
+        current.perform(get("/api/me")).andExpect(status().isOk());
+        other.perform(get("/api/me")).andExpect(status().isUnauthorized());
+        login(PASSWORD, new BrowserSession(mvc)).andExpect(status().isUnauthorized());
+        login(NEW_PASSWORD, new BrowserSession(mvc)).andExpect(status().isNoContent());
         assertThat(encoder.matches(NEW_PASSWORD, credentials.findById(user.getId()).orElseThrow().getPasswordHash())).isTrue();
     }
 
@@ -100,7 +99,7 @@ class AccountIT extends ApiIntegrationTestSupport {
         var current = signIn(PASSWORD);
         changePassword(current, PASSWORD, NEW_PASSWORD).andExpect(status().isNoContent());
         changePassword(current, NEW_PASSWORD, "Another-password-2027").andExpect(status().isNoContent());
-        mvc.perform(get("/api/me").session(current)).andExpect(status().isOk());
+        current.perform(get("/api/me")).andExpect(status().isOk());
         assertThat(credentials.findById(user.getId()).orElseThrow().getSessionVersion()).isEqualTo(2);
     }
 
@@ -123,7 +122,7 @@ class AccountIT extends ApiIntegrationTestSupport {
     void unacceptableNewPasswordsAreRejected(String newPassword) throws Exception {
         var session = signIn(PASSWORD);
         changePassword(session, PASSWORD, newPassword).andExpect(status().isBadRequest());
-        login(PASSWORD, new MockHttpSession()).andExpect(status().isNoContent());
+        login(PASSWORD, new BrowserSession(mvc)).andExpect(status().isNoContent());
     }
 
     @Test
@@ -139,10 +138,10 @@ class AccountIT extends ApiIntegrationTestSupport {
         var current = signIn(PASSWORD);
         var other = signIn(PASSWORD);
         send(post("/api/account/sign-out-everywhere"), current, null).andExpect(status().isNoContent());
-        assertThat(current.isInvalid()).isTrue();
-        mvc.perform(get("/api/me").session(other)).andExpect(status().isUnauthorized());
-        mvc.perform(get("/api/me").session(current)).andExpect(status().isUnauthorized());
-        login(PASSWORD, new MockHttpSession()).andExpect(status().isNoContent());
+        assertThat(current.sessionId()).isNull();
+        other.perform(get("/api/me")).andExpect(status().isUnauthorized());
+        current.perform(get("/api/me")).andExpect(status().isUnauthorized());
+        login(PASSWORD, new BrowserSession(mvc)).andExpect(status().isNoContent());
     }
 
     @Test
@@ -150,34 +149,27 @@ class AccountIT extends ApiIntegrationTestSupport {
         var session = signIn(PASSWORD);
         credentials.delete(credentials.findById(user.getId()).orElseThrow());
         credentials.flush();
-        mvc.perform(get("/api/me").session(session)).andExpect(status().isUnauthorized());
+        session.perform(get("/api/me")).andExpect(status().isUnauthorized());
     }
 
-    private MockHttpSession signIn(String password) throws Exception {
-        var session = new MockHttpSession();
+    private BrowserSession signIn(String password) throws Exception {
+        var session = new BrowserSession(mvc);
         login(password, session).andExpect(status().isNoContent());
         return session;
     }
 
-    private ResultActions login(String password, MockHttpSession session) throws Exception {
-        return mvc.perform(post("/api/auth/login").session(session).contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .header("X-CSRF-TOKEN", csrfToken(session)).param("email", EMAIL).param("password", password));
+    private ResultActions login(String password, BrowserSession session) throws Exception {
+        return session.login(EMAIL, password);
     }
 
-    private ResultActions changePassword(MockHttpSession session, String current, String next) throws Exception {
+    private ResultActions changePassword(BrowserSession session, String current, String next) throws Exception {
         return send(post("/api/account/password"), session,
                 "{\"currentPassword\":\"" + current + "\",\"newPassword\":\"" + next + "\"}");
     }
 
     private ResultActions send(org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder builder,
-                               MockHttpSession session, String body) throws Exception {
-        builder.session(session).header("X-CSRF-TOKEN", csrfToken(session));
+                               BrowserSession session, String body) throws Exception {
         if (body != null) builder.contentType(MediaType.APPLICATION_JSON).content(body);
-        return mvc.perform(builder);
-    }
-
-    private String csrfToken(MockHttpSession session) throws Exception {
-        var response = mvc.perform(get("/api/auth/csrf").session(session)).andExpect(status().isOk()).andReturn().getResponse();
-        return JsonPath.read(response.getContentAsString(), "$.token");
+        return session.send(builder);
     }
 }

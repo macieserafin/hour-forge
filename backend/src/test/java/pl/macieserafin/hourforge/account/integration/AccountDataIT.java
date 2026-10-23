@@ -5,7 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpSession;
+import pl.macieserafin.hourforge.support.BrowserSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -85,7 +85,7 @@ class AccountDataIT extends ApiIntegrationTestSupport {
                 Instant.now().minusSeconds(60).truncatedTo(ChronoUnit.MICROS), null, null, "Running"));
 
         var session = signIn();
-        mvc.perform(get("/api/account/export").session(session))
+        session.perform(get("/api/account/export"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition", containsString("attachment; filename=\"hourforge-export-")))
                 .andExpect(header().string("Cache-Control", containsString("no-store")))
@@ -106,8 +106,8 @@ class AccountDataIT extends ApiIntegrationTestSupport {
     void exportNeedsAuthenticationAndIsLimited() throws Exception {
         mvc.perform(get("/api/account/export")).andExpect(status().isUnauthorized());
         var session = signIn();
-        for (int i = 0; i < 5; i++) mvc.perform(get("/api/account/export").session(session)).andExpect(status().isOk());
-        mvc.perform(get("/api/account/export").session(session)).andExpect(status().isTooManyRequests());
+        for (int i = 0; i < 5; i++) session.perform(get("/api/account/export")).andExpect(status().isOk());
+        session.perform(get("/api/account/export")).andExpect(status().isTooManyRequests());
     }
 
     @Test
@@ -135,12 +135,12 @@ class AccountDataIT extends ApiIntegrationTestSupport {
         em.flush();
         em.clear();
         assertThat(invites.findById(invite.getId()).orElseThrow().getRevokedAt()).isNotNull();
-        mvc.perform(get("/api/me").session(session)).andExpect(status().isUnauthorized());
+        session.perform(get("/api/me")).andExpect(status().isUnauthorized());
         assertThat(mail.sent()).hasSize(1);
         assertThat(mail.last().to()).isEqualTo(EMAIL);
         assertThat(mail.last().body()).doesNotContain(PASSWORD);
 
-        login(EMAIL, PASSWORD, new MockHttpSession()).andExpect(status().isUnauthorized());
+        login(EMAIL, PASSWORD, new BrowserSession(mvc)).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/auth/register").with(csrf()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"displayName\":\"Again\",\"email\":\"" + EMAIL + "\",\"password\":\"Brand-new-password-2026\"}"))
                 .andExpect(status().isCreated());
@@ -157,7 +157,7 @@ class AccountDataIT extends ApiIntegrationTestSupport {
         assertThat(same.getEmail()).isEqualTo(EMAIL);
         assertThat(same.getDeletedAt()).isNull();
         assertThat(credentials.findById(user.getId())).isPresent();
-        mvc.perform(get("/api/me").session(session)).andExpect(status().isOk());
+        session.perform(get("/api/me")).andExpect(status().isOk());
     }
 
     @Test
@@ -182,7 +182,7 @@ class AccountDataIT extends ApiIntegrationTestSupport {
         mvc.perform(post("/api/account/delete").with(csrf()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"currentPassword\":\"" + PASSWORD + "\"}")).andExpect(status().isUnauthorized());
         var session = signIn();
-        mvc.perform(post("/api/account/delete").session(session).contentType(MediaType.APPLICATION_JSON)
+        session.perform(post("/api/account/delete").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"currentPassword\":\"" + PASSWORD + "\"}")).andExpect(status().isForbidden());
         postDelete(session, "{}").andExpect(status().isBadRequest());
         assertThat(users.findById(user.getId()).orElseThrow().getDeletedAt()).isNull();
@@ -192,28 +192,22 @@ class AccountDataIT extends ApiIntegrationTestSupport {
         return entries.saveAndFlush(new TimeEntry(owner, inTeam, inProject, EntryType.MANUAL, date, null, null, seconds, description));
     }
 
-    private ResultActions delete(MockHttpSession session, String password) throws Exception {
+    private ResultActions delete(BrowserSession session, String password) throws Exception {
         return postDelete(session, "{\"currentPassword\":\"" + password + "\"}");
     }
 
-    private ResultActions postDelete(MockHttpSession session, String body) throws Exception {
-        return mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/account/delete")
-                .session(session).header("X-CSRF-TOKEN", csrfToken(session)).contentType(MediaType.APPLICATION_JSON).content(body));
+    private ResultActions postDelete(BrowserSession session, String body) throws Exception {
+        return session.send(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/account/delete")
+                .contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
-    private MockHttpSession signIn() throws Exception {
-        var session = new MockHttpSession();
+    private BrowserSession signIn() throws Exception {
+        var session = new BrowserSession(mvc);
         login(EMAIL, PASSWORD, session).andExpect(status().isNoContent());
         return session;
     }
 
-    private ResultActions login(String email, String password, MockHttpSession session) throws Exception {
-        return mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/auth/login").session(session)
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED).header("X-CSRF-TOKEN", csrfToken(session))
-                .param("email", email).param("password", password));
-    }
-
-    private String csrfToken(MockHttpSession session) throws Exception {
-        return JsonPath.read(mvc.perform(get("/api/auth/csrf").session(session)).andReturn().getResponse().getContentAsString(), "$.token");
+    private ResultActions login(String email, String password, BrowserSession session) throws Exception {
+        return session.login(email, password);
     }
 }

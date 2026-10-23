@@ -279,6 +279,11 @@ fieldset:disabled { opacity: .65; }
 .projects-filter .field-group { flex: 1 1 180px; margin: 0; }
 .projects-filter > span { display: inline-flex; align-items: center; gap: 7px; }
 .project-notice { margin-bottom: 20px; padding: 12px 15px; border-left: 3px solid #55846b; background: #eef5f0; color: #356349; font-size: 13px; line-height: 1.6; }
+.session-list { display: grid; gap: 10px; margin: 14px 0 18px; }
+.session-list li { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; }
+.session-list .field-hint { margin-top: 2px; }
+.session-current { color: var(--muted); font-weight: 500; }
+@media (max-width: 640px) { .session-list li { align-items: flex-start; flex-direction: column; } }
 .project-table td:first-child { width: 100%; min-width: 180px; max-width: 520px; }
 .project-table .project-name-button { overflow-wrap: anywhere; font-weight: 550; }
 .project-row-description { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; margin-top: 7px; color: var(--muted); font-size: 12px; line-height: 1.7; white-space: normal; }

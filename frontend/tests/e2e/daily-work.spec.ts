@@ -56,7 +56,7 @@ test('remembers the device for 30 days and applies the chosen preferences', asyn
   await page.getByLabel('Zapamiętaj mnie na tym urządzeniu (30 dni)').check()
   await submitLogin(page)
   await expect(page).toHaveURL(/\/dashboard$/)
-  const cookie = (await context.cookies()).find(item => item.name === 'JSESSIONID')!
+  const cookie = (await context.cookies()).find(item => item.name === 'SESSION')!
   expect(cookie.expires).toBeGreaterThan(Date.now() / 1000 + 29 * 86400)
 
   await page.goto('/account')
