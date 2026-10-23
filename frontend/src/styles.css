@@ -553,3 +553,4 @@ a.jira-key:hover, a.jira-key:focus-visible { border-color: var(--accent); text-d
 .two-factor-secret, .backup-codes code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.04em; }
 .backup-codes ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 12px 0 16px; }
 .backup-codes li { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; text-align: center; }
+.bot-check { margin: 4px 0 14px; min-height: 65px; }

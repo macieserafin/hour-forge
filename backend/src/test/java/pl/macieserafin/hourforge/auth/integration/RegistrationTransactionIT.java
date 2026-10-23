@@ -42,7 +42,7 @@ class RegistrationTransactionIT extends IntegrationTestSupport {
 
     @Test void credentialFailureRollsBackTheAlreadyInsertedUser() {
         doThrow(new DataIntegrityViolationException("Simulated credential failure")).when(credentials).saveAndFlush(any(UserCredential.class));
-        assertThatThrownBy(() -> registration.register(new RegistrationRequest("User", email, PASSWORD)))
+        assertThatThrownBy(() -> registration.register(new RegistrationRequest("User", email, PASSWORD, null)))
                 .isInstanceOf(DataIntegrityViolationException.class);
         assertThat(users.findByEmailIgnoreCase(email)).isEmpty();
         assertThat(jdbc.queryForObject("select count(*) from user_credentials c join users u on u.id = c.user_id where lower(u.email) = ?", Long.class, email)).isZero();
@@ -57,7 +57,7 @@ class RegistrationTransactionIT extends IntegrationTestSupport {
         }).when(encoder).encode(PASSWORD);
         try (var executor = Executors.newFixedThreadPool(2)) {
             var futures = List.of(email, email.toUpperCase(java.util.Locale.ROOT)).stream().map(address -> executor.submit(() -> {
-                try { registration.register(new RegistrationRequest("User", address, PASSWORD)); return 201; }
+                try { registration.register(new RegistrationRequest("User", address, PASSWORD, null)); return 201; }
                 catch (ResponseStatusException exception) { return exception.getStatusCode().value(); }
             })).toList();
             assertThat(List.of(futures.get(0).get(15, TimeUnit.SECONDS), futures.get(1).get(15, TimeUnit.SECONDS)))

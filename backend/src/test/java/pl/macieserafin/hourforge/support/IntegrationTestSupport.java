@@ -14,11 +14,13 @@ public abstract class IntegrationTestSupport {
     @Autowired protected TestData fixtures;
     @Autowired protected RecordingEmailSender mail;
     @Autowired private RateLimiter rateLimiter;
+    @Autowired protected TestBotCheck botCheck;
 
-    // Rate limits and recorded mail live in context-wide beans; each test starts empty.
+    // Rate limits, recorded mail and the bot check live in context-wide beans; each test starts from a clean state.
     @BeforeEach
     void resetRateLimits() {
         rateLimiter.clear();
         mail.clear();
+        botCheck.turnOff();
     }
 }

@@ -11,4 +11,10 @@ public class TestMailConfig {
     RecordingEmailSender recordingEmailSender() {
         return new RecordingEmailSender();
     }
+
+    @Bean
+    @Primary
+    TestBotCheck testBotCheck() {
+        return new TestBotCheck();
+    }
 }

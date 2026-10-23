@@ -312,15 +312,31 @@ export interface RegistrationInput {
   displayName: string
   email: string
   password: string
+  /** Token from the bot check widget, when the server asks for one. */
+  botCheckToken?: string | null
+}
+
+/** Settings the server shares before sign-in. */
+export interface PublicConfig {
+  botCheckSiteKey: string | null
+}
+
+export async function getPublicConfig(signal?: AbortSignal): Promise<PublicConfig> {
+  const response = await request('/api/config', { signal })
+  if (!response.ok) throw new ApiError(response.status, 'Nie udało się wczytać ustawień serwera. Odśwież stronę.')
+  return response.json() as Promise<PublicConfig>
 }
 
 export async function register(input: RegistrationInput): Promise<void> {
   const csrf = await getCsrf()
   const response = await request('/api/auth/register', {
     method: 'POST', headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
-    body: JSON.stringify({ displayName: input.displayName.trim(), email: input.email.trim(), password: input.password }),
+    body: JSON.stringify({ displayName: input.displayName.trim(), email: input.email.trim(), password: input.password,
+      ...(input.botCheckToken ? { botCheckToken: input.botCheckToken } : {}) }),
   })
   if (!response.ok) {
+    const body = response.status === 400 ? await response.json().catch(() => null) as { code?: string } | null : null
+    if (body?.code === 'BOT_CHECK_FAILED') throw new ApiError(400, 'Nie udało się potwierdzić, że formularz wypełnia człowiek. Spróbuj ponownie.', 'BOT_CHECK_FAILED')
     const messages: Record<number, string> = {
       400: 'Sprawdź nazwę, adres e-mail i hasło. Hasło musi mieć co najmniej 12 znaków i mieścić się w dozwolonej długości.',
       403: 'Sesja formularza wygasła. Spróbuj ponownie.',

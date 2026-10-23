@@ -30,7 +30,7 @@ class RegistrationServiceTest {
     @BeforeEach void setup() { service = new RegistrationService(users, credentials, encoder, verification, accountMail); }
 
     @Test void normalizesIdentityAndPersistsOnlyTheEncodedPasswordWithoutTrimmingIt() {
-        var request = new RegistrationRequest("  New User  ", "  New@Example.test  ", " password 2026! ");
+        var request = new RegistrationRequest("  New User  ", "  New@Example.test  ", " password 2026! ", null);
         when(encoder.encode(request.password())).thenReturn("encoded-password");
         when(users.saveAndFlush(any())).thenAnswer(call -> identified(call.getArgument(0)));
         service.register(request);
@@ -47,14 +47,14 @@ class RegistrationServiceTest {
     @NullAndEmptySource
     @ValueSource(strings = {"short", "            ", "😀😀😀😀😀😀😀😀😀😀😀"})
     void rejectsInvalidPasswordsBeforeAccessingTheDatabase(String password) {
-        assertThatThrownBy(() -> service.register(new RegistrationRequest("New User", "new@example.test", password)))
+        assertThatThrownBy(() -> service.register(new RegistrationRequest("New User", "new@example.test", password, null)))
                 .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode().value()).isEqualTo(400));
         verifyNoInteractions(users, credentials, encoder);
     }
 
     @Test void enforcesTheBcryptByteLimitForUnicodeAndAscii() {
         for (String password : new String[]{"a".repeat(73), "ą".repeat(37), "😀".repeat(19)}) {
-            assertThatThrownBy(() -> service.register(new RegistrationRequest("New User", "new@example.test", password)))
+            assertThatThrownBy(() -> service.register(new RegistrationRequest("New User", "new@example.test", password, null)))
                     .isInstanceOfSatisfying(ResponseStatusException.class, e -> assertThat(e.getStatusCode().value()).isEqualTo(400));
         }
         verifyNoInteractions(users, credentials, encoder);
@@ -63,7 +63,7 @@ class RegistrationServiceTest {
     @Test void anExistingAddressLooksLikeSuccessAndTheOwnerIsTold() {
         var existing = user();
         when(users.findByEmailIgnoreCase("new@example.test")).thenReturn(Optional.of(existing));
-        service.register(new RegistrationRequest("New User", "new@example.test", "Valid-password-2026!"));
+        service.register(new RegistrationRequest("New User", "new@example.test", "Valid-password-2026!", null));
         verify(accountMail).sendRegistrationAttempt(existing);
         verify(encoder).encode("Valid-password-2026!");
         verify(users, never()).saveAndFlush(any());

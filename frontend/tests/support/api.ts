@@ -18,6 +18,7 @@ export function mockApi(overrides: Record<string, Handler> = {}) {
   const handlers: Record<string, Handler> = {
     'GET /api/me': () => json(user),
     'GET /api/auth/csrf': () => json({ token: 'csrf', headerName: 'X-CSRF-TOKEN', parameterName: '_csrf' }),
+    'GET /api/config': () => json({ botCheckSiteKey: null }),
     'GET /api/teams': () => json([team]),
     [`GET /api/teams/${team.id}/members`]: () => json({ content: [{ userId: user.id, displayName: user.displayName,
       role: team.role, joinedAt: team.createdAt, leftAt: null }], page: 0, size: 20, totalElements: 1, totalPages: 1 }),
