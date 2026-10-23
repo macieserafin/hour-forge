@@ -5,7 +5,9 @@ import { Modal } from '../components/Modal'
 import type { Preferences, User } from '../lib/api'
 import { defaultPreferences, usePreferences, useSavePreferences } from '../lib/preferences'
 import { useTeams } from '../lib/teams'
-import { deviceLabel, passwordChangeError, useChangePassword, useDeleteAccount, useDownloadAccountData, useEndSession, useLoginHistory, useRequestEmailChange, useSessions, useSignOutEverywhere, useTwoFactorActions, useTwoFactorStatus, useUpdateProfile } from '../lib/account'
+import { deviceLabel, passwordChangeError, useChangePassword, useDeleteAccount, useDownloadAccountData, useEndSession, useLoginHistory, useRequestEmailChange, useSessions, useSignOutEverywhere, useProfilePicture, useTwoFactorActions, useTwoFactorStatus, useUpdateProfile } from '../lib/account'
+import { Avatar } from '../components/Avatar'
+import { PictureEditor } from '../components/PictureEditor'
 import { QrCode } from '../components/QrCode'
 
 function ProfileSection({ user }: { user: User }) {
@@ -33,6 +35,24 @@ function ProfileSection({ user }: { user: User }) {
       <button className="button-primary" type="submit" disabled={save.isPending || name.trim() === user.displayName}>
         {save.isPending && <LoaderCircle size={16} className="spin" />}{save.isPending ? 'Zapisywanie…' : 'Zapisz nazwę'}</button>
     </form>
+  </section>
+}
+
+function PictureSection({ user }: { user: User }) {
+  const { upload, remove } = useProfilePicture()
+  const [editing, setEditing] = useState(false)
+  return <section className="overview-panel account-section" aria-labelledby="account-picture-title">
+    <h2 id="account-picture-title">Zdjęcie profilowe</h2>
+    <p className="field-hint">Widzą je osoby z Twoich zespołów. Zapisujemy tylko mały, przycięty obraz bez danych o miejscu i aparacie.</p>
+    {editing
+      ? <PictureEditor label="Nowe zdjęcie profilowe" saving={upload.isPending} error={upload.error?.message}
+        onSave={picture => upload.mutate(picture, { onSuccess: () => setEditing(false) })} onCancel={() => { upload.reset(); setEditing(false) }} />
+      : <div className="picture-current">
+        <Avatar user={user} />
+        <button type="button" className="button-secondary" onClick={() => { remove.reset(); setEditing(true) }}>{user.avatarUpdatedAt ? 'Zmień zdjęcie' : 'Dodaj zdjęcie'}</button>
+        {user.avatarUpdatedAt && <button type="button" className="button-secondary" disabled={remove.isPending} onClick={() => remove.mutate()}>Usuń zdjęcie</button>}
+      </div>}
+    {remove.isError && <p className="form-error" role="alert">{remove.error.message}</p>}
   </section>
 }
 
@@ -375,6 +395,7 @@ export function AccountPanel({ user }: { user: User }) {
   useEffect(() => { if (hash) document.getElementById(hash.slice(1))?.scrollIntoView?.() }, [hash])
   return <div className="account-panel">
     <ProfileSection user={user} />
+    <PictureSection user={user} />
     <PreferencesSection userId={user.id} />
     <EmailChangeSection />
     <PasswordSection />

@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.invitation.TeamInviteRepository;
 import pl.macieserafin.hourforge.entrytemplate.EntryTemplateRepository;
+import pl.macieserafin.hourforge.image.ImageStore;
 import pl.macieserafin.hourforge.jira.JiraConnectionRepository;
 import pl.macieserafin.hourforge.jira.JiraUserAuthorizationRepository;
 import pl.macieserafin.hourforge.jira.OAuthStateRepository;
@@ -35,13 +36,15 @@ public class TeamManagementService {
     private final OAuthStateRepository oauthStates;
     private final Clock clock;
     private final TeamMailService mail;
+    private final ImageStore logos;
 
     public TeamManagementService(TeamRepository teams, TeamMemberRepository members, UserRepository users,
                                  ProjectRepository projects, TimeEntryRepository entries, TeamInviteRepository invites,
                                  JiraConnectionRepository jiraConnections, JiraUserAuthorizationRepository jiraAuthorizations,
                                  OAuthStateRepository oauthStates, EntryTemplateRepository entryTemplates, TagRepository tags, Clock clock,
-                                 TeamMailService mail) {
+                                 TeamMailService mail, ImageStore logos) {
         this.mail = mail;
+        this.logos = logos;
         this.teams = teams;
         this.members = members;
         this.users = users;
@@ -151,6 +154,22 @@ public class TeamManagementService {
         remove(team);
     }
 
+    /** Changes the logo (owners and admins of a team that is not archived); a null {@code updatedAt} means removed. */
+    @Transactional
+    public void changeLogo(UUID actorId, UUID teamId, java.time.Instant updatedAt, Runnable store) {
+        var team = lockedTeam(teamId);
+        managerRole(actorId, teamId);
+        requireNotArchived(team);
+        store.run();
+        team.setLogoUpdatedAt(updatedAt);
+    }
+
+    /** Only active members see what belongs to a team; anyone else gets "not found". */
+    @Transactional(readOnly = true)
+    public void requireActiveMember(UUID actorId, UUID teamId) {
+        activeMember(teamId, actorId);
+    }
+
     /** Removal of an abusive team by the instance operator: everything goes, running timers included. */
     @Transactional
     public void deleteByOperator(UUID teamId) {
@@ -170,6 +189,7 @@ public class TeamManagementService {
             // Grants for a site are only needed while some team still uses that site.
             if (!jiraConnections.existsByCloudId(connection.getCloudId())) jiraAuthorizations.deleteAllByCloudId(connection.getCloudId());
         });
+        logos.deleteTeamLogo(team.getId());
         members.deleteAllByTeamId(team.getId());
         teams.deleteTeamById(team.getId());
     }

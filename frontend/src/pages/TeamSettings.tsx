@@ -2,10 +2,35 @@ import { projectColorKeys, projectColors, type ProjectColor } from '../lib/proje
 import { useState, type FormEvent } from 'react'
 import { Archive, LoaderCircle, Trash2 } from 'lucide-react'
 import { Modal } from '../components/Modal'
+import { PictureEditor } from '../components/PictureEditor'
+import { TeamMark } from '../components/Avatar'
+import { useTeamLogo } from '../lib/account'
 import type { Team } from '../lib/api'
 import { useArchiveTeam, useDeleteTeam, useTeamSummary, useUpdateTeam } from '../lib/teams'
 
 type View = 'edit' | 'archive' | 'delete'
+
+function TeamLogoSection({ userId, team }: { userId: string; team: Team }) {
+  const { upload, remove } = useTeamLogo(userId)
+  const [editing, setEditing] = useState(false)
+  // The list refreshes after a change; until then the dialog shows what this session just did.
+  const [version, setVersion] = useState(team.logoUpdatedAt ?? null)
+  return <section className="team-logo-settings" aria-labelledby="team-logo-title">
+    <h3 id="team-logo-title">Logo zespołu <span className="optional-label">(opcjonalnie)</span></h3>
+    <p className="field-hint">Logo widać na liście zespołów i w nagłówku raportu zespołu, zamiast kropki z kolorem.</p>
+    {editing
+      ? <PictureEditor label="Nowe logo zespołu" saving={upload.isPending} error={upload.error?.message}
+        onSave={picture => upload.mutate({ teamId: team.id, picture }, { onSuccess: () => { setVersion(new Date().toISOString()); setEditing(false) } })}
+        onCancel={() => { upload.reset(); setEditing(false) }} />
+      : <div className="picture-current">
+        {version && <TeamMark team={{ ...team, logoUpdatedAt: version }} />}
+        <button type="button" className="button-secondary" onClick={() => { remove.reset(); setEditing(true) }}>{version ? 'Zmień logo' : 'Dodaj logo'}</button>
+        {version && <button type="button" className="button-secondary" disabled={remove.isPending}
+          onClick={() => remove.mutate(team.id, { onSuccess: () => setVersion(null) })}>Usuń logo</button>}
+      </div>}
+    {remove.isError && <p className="form-error" role="alert">{remove.error.message}</p>}
+  </section>
+}
 
 // Deleting removes the team from the cache, which unmounts this dialog before mutate callbacks would run;
 // the mutateAsync promise still settles, so the parent learns about the deletion.
@@ -67,6 +92,7 @@ export function TeamSettingsModal({ userId, team, onClose, onSaved, onArchived, 
         <footer className="dialog-actions"><button type="button" className="button-secondary" disabled={busy} onClick={onClose}>Zamknij</button>
           {!archived && <button type="submit" className="button-primary" disabled={busy}>{update.isPending && <LoaderCircle size={16} className="spin" />}{update.isPending ? 'Zapisywanie…' : 'Zapisz zmiany'}</button>}</footer>
       </form>
+      {!archived && <TeamLogoSection userId={userId} team={team} />}
       <section className="danger-zone" aria-labelledby="danger-zone-title">
         <h3 id="danger-zone-title">Operacje nieodwracalne</h3>
         <div className="team-actions">

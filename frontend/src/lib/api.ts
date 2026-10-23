@@ -5,6 +5,8 @@ export interface User {
   displayName: string
   /** Listed by the server as an operator of this instance; only decides whether the panel is offered. */
   operator?: boolean
+  /** When the profile picture last changed; absent or null without a picture. */
+  avatarUpdatedAt?: string | null
 }
 
 export type TeamRole = 'OWNER' | 'ADMIN' | 'MEMBER'
@@ -26,6 +28,7 @@ export interface Team {
   weekStart: 'MONDAY' | 'SUNDAY'
   weeklyReport: boolean
   color?: string | null
+  logoUpdatedAt?: string | null
 }
 
 export interface TeamSummary {
@@ -1283,3 +1286,29 @@ export const deleteTeamAsOperator = (id: string) => operatorRequest<null>(`/api/
 export const saveAnnouncement = (input: { message: string; level: 'INFO' | 'WARNING' }) =>
   operatorRequest<Announcement>('/api/operator/announcement', 'PUT', { message: input.message.trim(), level: input.level })
 export const clearAnnouncement = () => operatorRequest<null>('/api/operator/announcement', 'DELETE')
+
+/** The stored picture; the version makes the browser fetch a changed picture at once. */
+export const avatarUrl = (userId: string, version: string) => `/api/users/${encodeURIComponent(userId)}/avatar?v=${encodeURIComponent(version)}`
+export const teamLogoUrl = (teamId: string, version: string) => `/api/teams/${encodeURIComponent(teamId)}/logo?v=${encodeURIComponent(version)}`
+
+async function pictureRequest(path: string, picture: Blob | null): Promise<void> {
+  const csrf = await getCsrf()
+  let body: FormData | undefined
+  if (picture) { body = new FormData(); body.append('image', picture, 'picture.jpg') }
+  const response = await request(path, { method: picture ? 'PUT' : 'DELETE', headers: { [csrf.headerName]: csrf.token }, body })
+  if (!response.ok) {
+    throw new ApiError(response.status, {
+      400: 'Wybierz zdjęcie JPEG lub PNG do 2 MB i najwyżej 4096 × 4096 pikseli.',
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Logo mogą zmieniać właściciel i administratorzy zespołu albo sesja formularza wygasła.',
+      404: 'Nie znaleziono zespołu.',
+      409: 'Zarchiwizowanego zespołu nie można zmieniać.',
+      413: 'Plik jest za duży. Wybierz zdjęcie do 2 MB.',
+    }[response.status] ?? 'Nie udało się zapisać zdjęcia. Spróbuj ponownie.')
+  }
+}
+
+export const uploadAvatar = (picture: Blob) => pictureRequest('/api/account/avatar', picture)
+export const removeAvatar = () => pictureRequest('/api/account/avatar', null)
+export const uploadTeamLogo = ({ teamId, picture }: { teamId: string; picture: Blob }) => pictureRequest(`/api/teams/${encodeURIComponent(teamId)}/logo`, picture)
+export const removeTeamLogo = (teamId: string) => pictureRequest(`/api/teams/${encodeURIComponent(teamId)}/logo`, null)

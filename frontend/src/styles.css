@@ -567,3 +567,11 @@ a.jira-key:hover, a.jira-key:focus-visible { border-color: var(--accent); text-d
 .operator-search .text-input { flex: 1; }
 .operator-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 @media (max-width: 640px) { .announcement-banner { padding: 10px 16px; } }
+.avatar-picture { object-fit: cover; padding: 0; }
+.team-logo { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; margin-right: 8px; vertical-align: -3px; }
+.picture-current { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 10px; }
+.picture-editor { margin-top: 10px; }
+.picture-crop { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; margin: 10px 0; }
+.picture-crop canvas { width: 160px; height: 160px; border-radius: 50%; border: 1px solid var(--border); }
+.picture-crop input[type="range"] { width: 200px; }
+.team-logo-settings { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }

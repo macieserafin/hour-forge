@@ -44,7 +44,7 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, UUID> {
     @Query("""
             select new pl.macieserafin.hourforge.team.TeamResponse(
                 team.id, team.name, team.timezone, team.createdAt, member.role, team.archivedAt, team.activeTimersVisible,
-                team.requireDescription, team.requireTagOrIssue, team.weekStart, team.weeklyReportEnabled, team.color)
+                team.requireDescription, team.requireTagOrIssue, team.weekStart, team.weeklyReportEnabled, team.color, team.logoUpdatedAt)
             from TeamMember member join member.team team
             where member.user.id = :userId and member.leftAt is null
             order by team.createdAt desc, team.id asc

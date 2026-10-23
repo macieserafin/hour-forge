@@ -38,9 +38,9 @@ public class AuthController {
     }
 
     /** The signed-in person; {@code operator} only decides whether the operator panel is offered. */
-    public record MeResponse(UUID id, String email, String displayName, boolean operator) {
+    public record MeResponse(UUID id, String email, String displayName, boolean operator, java.time.Instant avatarUpdatedAt) {
         public static MeResponse of(pl.macieserafin.hourforge.user.User user, boolean operator) {
-            return new MeResponse(user.getId(), user.getEmail(), user.getDisplayName(), operator);
+            return new MeResponse(user.getId(), user.getEmail(), user.getDisplayName(), operator, user.getAvatarUpdatedAt());
         }
     }
 }

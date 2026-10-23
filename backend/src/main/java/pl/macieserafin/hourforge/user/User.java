@@ -43,6 +43,9 @@ public class User {
     @Column(name = "blocked_reason")
     private String blockedReason;
 
+    @Column(name = "avatar_updated_at")
+    private Instant avatarUpdatedAt;
+
     protected User() {
     }
 
@@ -94,6 +97,16 @@ public class User {
         this.displayName = placeholderName;
         this.emailVerifiedAt = null;
         this.deletedAt = now;
+        this.avatarUpdatedAt = null;
+    }
+
+    /** When the profile picture last changed (also its cache key); null when the person has none. */
+    public Instant getAvatarUpdatedAt() {
+        return avatarUpdatedAt;
+    }
+
+    public void setAvatarUpdatedAt(Instant avatarUpdatedAt) {
+        this.avatarUpdatedAt = avatarUpdatedAt;
     }
 
     public Instant getBlockedAt() {

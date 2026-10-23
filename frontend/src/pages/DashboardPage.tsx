@@ -13,14 +13,11 @@ import { IntegrationsPanel } from './IntegrationsPanel'
 import { WhatsNewPanel } from './WhatsNewPanel'
 import { OperatorPanel } from './OperatorPanel'
 import { AnnouncementBanner } from '../components/AnnouncementBanner'
+import { Avatar } from '../components/Avatar'
 import { unseenReleases } from '../lib/whatsNew'
 import { TimerWatcher } from '../components/TimerWatcher'
 import { usePreferences } from '../lib/preferences'
 import { setTimeFormat } from '../lib/time'
-
-function initials(name: string) {
-  return name.trim().split(/\s+/).slice(0, 2).map(part => part.charAt(0)).join('').toLocaleUpperCase('pl-PL') || 'U'
-}
 
 interface SidebarProps {
   user: User
@@ -52,7 +49,7 @@ function Sidebar({ user, isLoggingOut, onLogout, onNavigate }: SidebarProps) {
     </nav>
     <NavLink to="/whats-new" className={({ isActive }) => `nav-item nav-whats-new ${isActive ? 'active' : ''}`} onClick={onNavigate}><Sparkles size={18} />Co nowego{unseen > 0 && <span className="nav-badge" aria-label={`Nowości: ${unseen}`}>{unseen}</span>}</NavLink>
     <div className="sidebar-bottom">
-      <div className="sidebar-profile"><span className="avatar">{initials(user.displayName)}</span><div><strong title={user.displayName}>{user.displayName}</strong><span title={user.email}>{user.email}</span></div></div>
+      <div className="sidebar-profile"><Avatar user={user} /><div><strong title={user.displayName}>{user.displayName}</strong><span title={user.email}>{user.email}</span></div></div>
       <button className="logout-button" onClick={onLogout} disabled={isLoggingOut}>
         {isLoggingOut ? <LoaderCircle size={16} className="spin" /> : <LogOut size={16} />}{isLoggingOut ? 'Wylogowywanie…' : 'Wyloguj się'}
       </button>
@@ -86,7 +83,7 @@ export function DashboardPage({ user, section = 'dashboard' }: { user: User; sec
       <AnnouncementBanner />
       <header className="topbar">
         <div className="breadcrumbs"><button className="icon-button menu-trigger" aria-label="Otwórz menu" onClick={() => menu.current?.showModal()}><Menu size={20} /></button><strong>{sectionTitle}</strong></div>
-        <div className="topbar-right"><span className="topbar-user">{user.displayName}</span><span className="avatar avatar-small" aria-label={user.displayName}>{initials(user.displayName)}</span></div>
+        <div className="topbar-right"><span className="topbar-user">{user.displayName}</span><Avatar user={user} small /></div>
       </header>
 
       <main id="main" className="dashboard-content">

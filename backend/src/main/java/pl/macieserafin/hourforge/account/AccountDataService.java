@@ -9,6 +9,7 @@ import pl.macieserafin.hourforge.auth.AccountMailService;
 import pl.macieserafin.hourforge.auth.EmailTokenRepository;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.entrytemplate.EntryTemplateRepository;
+import pl.macieserafin.hourforge.image.ImageStore;
 import pl.macieserafin.hourforge.invitation.TeamInviteRepository;
 import pl.macieserafin.hourforge.jira.JiraUserAuthorizationRepository;
 import pl.macieserafin.hourforge.jira.OAuthStateRepository;
@@ -48,6 +49,7 @@ public class AccountDataService {
     private final EntryTemplateRepository entryTemplates;
     private final LoginEventRepository logins;
     private final TwoFactorService twoFactor;
+    private final ImageStore images;
     private final PreferencesService preferences;
     private final PasswordEncoder encoder;
     private final PasswordChangeAttempts attempts;
@@ -60,7 +62,7 @@ public class AccountDataService {
                               TeamRepository teams, TimeEntryRepository entries, TeamInviteRepository invites,
                               EmailTokenRepository tokens, JiraUserAuthorizationRepository jiraAuthorizations,
                               OAuthStateRepository oauthStates, UserPreferencesRepository preferenceRows, EntryTemplateRepository entryTemplates,
-                              LoginEventRepository logins, TwoFactorService twoFactor,
+                              LoginEventRepository logins, TwoFactorService twoFactor, ImageStore images,
                               PreferencesService preferences, PasswordEncoder encoder, PasswordChangeAttempts attempts,
                               AccountMailService mail, RateLimiter limiter, RateLimitProperties limits, Clock clock) {
         this.users = users;
@@ -76,6 +78,7 @@ public class AccountDataService {
         this.entryTemplates = entryTemplates;
         this.logins = logins;
         this.twoFactor = twoFactor;
+        this.images = images;
         this.preferences = preferences;
         this.encoder = encoder;
         this.attempts = attempts;
@@ -104,7 +107,7 @@ public class AccountDataService {
                         entry.getTag() == null ? null : entry.getTag().getName())).toList();
         return new AccountExport(clock.instant(),
                 new AccountExport.Profile(user.getId(), user.getEmail(), user.getDisplayName(), user.getCreatedAt(),
-                        user.getEmailVerifiedAt()),
+                        user.getEmailVerifiedAt(), images.avatar(userId).map(java.util.Base64.getEncoder()::encodeToString).orElse(null)),
                 teamsOfUser, timeEntries, preferences.get(userId),
                 logins.findByUserIdOrderByOccurredAtAsc(userId).stream()
                         .map(login -> new AccountExport.Login(login.getOccurredAt(), login.getOutcome().name(), login.getBrowser(),
@@ -162,6 +165,7 @@ public class AccountDataService {
         entryTemplates.deleteAllByUserId(userId);
         logins.deleteByUserId(userId);
         twoFactor.remove(userId);
+        images.deleteAvatar(userId);
         var user = users.findById(userId).orElseThrow();
         var oldEmail = user.getEmail();
         credential.ifPresent(credentials::delete);

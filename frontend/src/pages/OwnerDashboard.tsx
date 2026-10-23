@@ -6,6 +6,7 @@ import { ApiError, type ReportBucket, type ReportFilters, type ReportGroup, type
 import { MAX_REPORT_DAYS, clearedSearch, filtersFromSearch, filtersToSearch, reportRangeDays, reportRanges, useDownloadReport, useReportActive, useReportBreakdown, useReportEntries, useReportTimesheet, useReportMembers, useReportProjects, useReportSummary } from '../lib/reports'
 import { formatClock, formatDuration, formatHours } from '../lib/time'
 import { ProjectDot } from '../components/ProjectDot'
+import { TeamMark } from '../components/Avatar'
 import { projectColorHex } from '../lib/projectColors'
 import { useTags } from '../lib/tags'
 import { useJiraStatus } from '../lib/jira'
@@ -238,7 +239,7 @@ export function OwnerDashboard({ userId, team }: { userId: string; team: Team })
 
   return <section className="owner-dashboard" aria-label="Raport zespołu">
     <header className="teams-toolbar">
-      <div><h2><ProjectDot color={team.color} />Czas zespołu</h2><p>Zapisana praca w zespole {team.name}.</p></div>
+      <div><h2><TeamMark team={team} />Czas zespołu</h2><p>Zapisana praca w zespole {team.name}.</p></div>
       <div className="report-actions">
         <button className="button-secondary" disabled={csv.isPending} onClick={() => csv.mutate()}>
           {csv.isPending ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />}Pobierz CSV

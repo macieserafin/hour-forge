@@ -5,7 +5,7 @@ import jakarta.servlet.http.Cookie;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.AbstractMockHttpServletRequestBuilder;
 import pl.macieserafin.hourforge.session.SessionConfig;
 
 import java.nio.charset.StandardCharsets;
@@ -35,7 +35,7 @@ public final class BrowserSession {
         return this;
     }
 
-    public ResultActions perform(MockHttpServletRequestBuilder request) throws Exception {
+    public ResultActions perform(AbstractMockHttpServletRequestBuilder<?> request) throws Exception {
         if (cookie != null) request.cookie(cookie);
         if (userAgent != null) request.header("User-Agent", userAgent);
         if (address != null) request.with(mock -> { mock.setRemoteAddr(address); return mock; });
@@ -62,7 +62,7 @@ public final class BrowserSession {
     }
 
     /** A state-changing request with this browser's CSRF token. */
-    public ResultActions send(MockHttpServletRequestBuilder request) throws Exception {
+    public ResultActions send(AbstractMockHttpServletRequestBuilder<?> request) throws Exception {
         return perform(request.header("X-CSRF-TOKEN", csrfToken()));
     }
 

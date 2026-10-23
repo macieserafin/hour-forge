@@ -66,8 +66,14 @@ public class Team {
     @Column(name = "color", length = 20)
     private pl.macieserafin.hourforge.project.ProjectColor color;
 
+    @Column(name = "logo_updated_at")
+    private java.time.Instant logoUpdatedAt;
+
     public pl.macieserafin.hourforge.project.ProjectColor getColor() { return color; }
     public void setColor(pl.macieserafin.hourforge.project.ProjectColor color) { this.color = color; }
+    /** When the logo last changed (also its cache key); null when the team has none. */
+    public java.time.Instant getLogoUpdatedAt() { return logoUpdatedAt; }
+    public void setLogoUpdatedAt(java.time.Instant logoUpdatedAt) { this.logoUpdatedAt = logoUpdatedAt; }
 
     protected Team() {
     }

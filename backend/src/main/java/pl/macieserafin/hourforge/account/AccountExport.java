@@ -12,7 +12,8 @@ public record AccountExport(Instant exportedAt, Profile profile, List<Membership
     public record Login(Instant occurredAt, String outcome, String browser, String system, String address, String location) {
     }
 
-    public record Profile(UUID id, String email, String displayName, Instant createdAt, Instant emailVerifiedAt) {
+    /** The profile picture, when there is one, as the stored 256x256 JPEG in base64. */
+    public record Profile(UUID id, String email, String displayName, Instant createdAt, Instant emailVerifiedAt, String avatarJpegBase64) {
     }
 
     public record Membership(UUID teamId, String teamName, String role, Instant joinedAt, Instant leftAt, Instant removedAt,

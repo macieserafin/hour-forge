@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, changePassword, deleteAccount, disableTwoFactor, downloadAccountData, enableTwoFactor, endSession, getLoginHistory, getSessions,
-  getTwoFactorStatus, renewBackupCodes, requestEmailChange, signOutEverywhere, startTwoFactorSetup, updateProfile } from './api'
+  getTwoFactorStatus, removeAvatar, removeTeamLogo, renewBackupCodes, requestEmailChange, signOutEverywhere, startTwoFactorSetup, updateProfile,
+  uploadAvatar, uploadTeamLogo } from './api'
 import { saveBlob } from './download'
 import { sessionOptions } from './auth'
-import { useAuthError } from './teams'
+import { teamsKey, useAuthError } from './teams'
 
 export function useUpdateProfile() {
   const client = useQueryClient()
@@ -109,5 +110,26 @@ export function useTwoFactorActions(userId: string) {
     enable: useMutation({ mutationFn: enableTwoFactor, retry: false, gcTime: 0, onError, onSettled }),
     disable: useMutation({ mutationFn: disableTwoFactor, retry: false, gcTime: 0, onError, onSettled }),
     renew: useMutation({ mutationFn: renewBackupCodes, retry: false, gcTime: 0, onError, onSettled }),
+  }
+}
+
+/** Uploading or removing the profile picture; the session is read again for the new picture version. */
+export function useProfilePicture() {
+  const client = useQueryClient()
+  const onError = useAuthError()
+  const onSuccess = () => client.invalidateQueries({ queryKey: sessionOptions.queryKey })
+  return {
+    upload: useMutation({ mutationFn: uploadAvatar, retry: false, onError, onSuccess }),
+    remove: useMutation({ mutationFn: removeAvatar, retry: false, onError, onSuccess }),
+  }
+}
+
+export function useTeamLogo(userId: string) {
+  const client = useQueryClient()
+  const onError = useAuthError()
+  const onSuccess = () => client.invalidateQueries({ queryKey: teamsKey(userId) })
+  return {
+    upload: useMutation({ mutationFn: uploadTeamLogo, retry: false, onError, onSuccess }),
+    remove: useMutation({ mutationFn: removeTeamLogo, retry: false, onError, onSuccess }),
   }
 }
