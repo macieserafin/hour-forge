@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-# Used both on first initialization and by the Compose provisioning service.
+# Run through /bin/sh by the Compose provisioning service after PostgreSQL is healthy.
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
     --set=app_user="$DB_USERNAME" --set=app_password="$DB_PASSWORD" \
     --set=db_name="$POSTGRES_DB" <<'SQL'

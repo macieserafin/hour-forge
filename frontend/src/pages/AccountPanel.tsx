@@ -206,7 +206,7 @@ function DeviceList({ userId }: { userId: string }) {
         <div>
           <strong>{deviceLabel(session)}</strong>{session.current && <span className="session-current"> · to urządzenie</span>}
           <p className="field-hint">Zalogowano {dateTime(session.signedInAt)} · ostatnia aktywność {dateTime(session.lastActiveAt)}
-            {session.address && <> · adres {session.address}</>}{session.location && <> · {session.location}</>}{session.remembered && <> · zapamiętane</>}</p>
+            {session.location && <> · {session.location}</>}{session.remembered && <> · zapamiętane</>}</p>
         </div>
         {!session.current && <button type="button" className="button-secondary" disabled={end.isPending}
           aria-label={`Wyloguj ${deviceLabel(session)}, zalogowane ${dateTime(session.signedInAt)}`}
@@ -375,12 +375,12 @@ function LoginHistorySection({ userId }: { userId: string }) {
       : <>
         <div className="team-table-wrap" tabIndex={0} role="region" aria-label="Historia logowań">
           <table className="team-table"><caption className="sr-only">Logowania od najnowszego</caption>
-            <thead><tr><th scope="col">Czas</th><th scope="col">Wynik</th><th scope="col">Urządzenie</th><th scope="col">Adres i miejsce</th></tr></thead>
+            <thead><tr><th scope="col">Czas</th><th scope="col">Wynik</th><th scope="col">Urządzenie</th><th scope="col">Miejsce</th></tr></thead>
             <tbody>{history.data.entries.map(entry => <tr key={`${entry.occurredAt}-${entry.successful}`}>
               <td><time dateTime={entry.occurredAt}>{dateTime(entry.occurredAt)}</time></td>
               <td>{entry.successful ? 'Udane' : 'Nieudane'}</td>
               <td>{deviceLabel(entry)}</td>
-              <td>{[entry.address, entry.location].filter(Boolean).join(' · ') || 'Nieznany'}</td>
+              <td>{entry.location || 'Nieznane'}</td>
             </tr>)}</tbody>
           </table>
         </div>
