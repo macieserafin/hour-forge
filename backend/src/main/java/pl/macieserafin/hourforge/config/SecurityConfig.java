@@ -26,7 +26,10 @@ import pl.macieserafin.hourforge.security.SessionVersionFilter;
 import pl.macieserafin.hourforge.security.RateLimitProperties;
 import pl.macieserafin.hourforge.security.TooManyRequestsException;
 import pl.macieserafin.hourforge.session.ActivityFilter;
+import pl.macieserafin.hourforge.session.DeviceInfo;
 import pl.macieserafin.hourforge.session.DeviceSessions;
+import pl.macieserafin.hourforge.session.GeoLocator;
+import pl.macieserafin.hourforge.session.LoginHistory;
 import pl.macieserafin.hourforge.session.SessionConfig;
 import pl.macieserafin.hourforge.user.UserRepository;
 
@@ -49,7 +52,7 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, LoginAttemptService loginAttempts,
                                             UserCredentialRepository credentials, DeviceSessions devices,
-                                            UserRepository users, Clock clock) throws Exception {
+                                            LoginHistory logins, GeoLocator locator, UserRepository users, Clock clock) throws Exception {
         return http
                 .headers(headers -> headers.referrerPolicy(policy -> policy.policy(
                         org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
@@ -85,11 +88,14 @@ public class SecurityConfig {
                             loginAttempts.recordSuccess(request.getParameter(EMAIL_PARAMETER), request.getRemoteAddr());
                             var remembered = "true".equals(request.getParameter(REMEMBER_PARAMETER));
                             if (remembered) rememberDevice(request);
-                            devices.recordSignIn(request, remembered);
+                            var device = DeviceInfo.of(request, locator);
+                            devices.recordSignIn(request, device, remembered);
+                            if (authentication.getPrincipal() instanceof AppUserPrincipal principal) logins.recordSuccess(principal.getUserId(), device);
                             response.setStatus(HttpServletResponse.SC_NO_CONTENT);
                         })
                         .failureHandler((request, response, exception) -> {
                             loginAttempts.recordFailure(request.getParameter(EMAIL_PARAMETER), request.getRemoteAddr());
+                            logins.recordFailure(request.getParameter(EMAIL_PARAMETER), DeviceInfo.of(request, locator));
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                         })
                         .permitAll())

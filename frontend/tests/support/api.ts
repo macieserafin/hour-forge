@@ -30,6 +30,7 @@ export function mockApi(overrides: Record<string, Handler> = {}) {
     'GET /api/account/preferences': () => json({ defaultTeamId: null, startPage: 'DASHBOARD', timeFormat: 'CLOCK', weekStart: 'MONDAY', longTimerEmail: true,
       browserNotifications: false, longTimerHours: 10, titleTimer: true }),
     'GET /api/account/sessions': () => json([deviceSession]),
+    'GET /api/account/logins': () => json({ entries: [], locationSource: null }),
     'GET /api/dashboard/overview': () => json({ todaySeconds: 900, weekSeconds: 3600, teams: [{ teamId: 'team', teamName: 'Studio', archived: false, todaySeconds: 900, weekSeconds: 3600 }] }),
     'GET /api/dashboard/activity': () => json({ from: '2026-08-03', to: '2026-10-25', today: '2026-10-19', maxSeconds: 0, days: Array.from({ length: 84 }, (_, index) => ({ workDate: new Date(Date.UTC(2026, 7, 3 + index)).toISOString().slice(0, 10), seconds: 0 })) }),
     'GET /api/timer/active': () => json(null, 204),

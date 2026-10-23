@@ -18,6 +18,7 @@ import pl.macieserafin.hourforge.security.PasswordChangeAttempts;
 import pl.macieserafin.hourforge.security.RateLimitProperties;
 import pl.macieserafin.hourforge.security.RateLimiter;
 import pl.macieserafin.hourforge.security.TooManyRequestsException;
+import pl.macieserafin.hourforge.session.LoginEventRepository;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
 import pl.macieserafin.hourforge.team.TeamRole;
@@ -44,6 +45,7 @@ public class AccountDataService {
     private final OAuthStateRepository oauthStates;
     private final UserPreferencesRepository preferenceRows;
     private final EntryTemplateRepository entryTemplates;
+    private final LoginEventRepository logins;
     private final PreferencesService preferences;
     private final PasswordEncoder encoder;
     private final PasswordChangeAttempts attempts;
@@ -56,6 +58,7 @@ public class AccountDataService {
                               TeamRepository teams, TimeEntryRepository entries, TeamInviteRepository invites,
                               EmailTokenRepository tokens, JiraUserAuthorizationRepository jiraAuthorizations,
                               OAuthStateRepository oauthStates, UserPreferencesRepository preferenceRows, EntryTemplateRepository entryTemplates,
+                              LoginEventRepository logins,
                               PreferencesService preferences, PasswordEncoder encoder, PasswordChangeAttempts attempts,
                               AccountMailService mail, RateLimiter limiter, RateLimitProperties limits, Clock clock) {
         this.users = users;
@@ -69,6 +72,7 @@ public class AccountDataService {
         this.oauthStates = oauthStates;
         this.preferenceRows = preferenceRows;
         this.entryTemplates = entryTemplates;
+        this.logins = logins;
         this.preferences = preferences;
         this.encoder = encoder;
         this.attempts = attempts;
@@ -98,7 +102,10 @@ public class AccountDataService {
         return new AccountExport(clock.instant(),
                 new AccountExport.Profile(user.getId(), user.getEmail(), user.getDisplayName(), user.getCreatedAt(),
                         user.getEmailVerifiedAt()),
-                teamsOfUser, timeEntries, preferences.get(userId));
+                teamsOfUser, timeEntries, preferences.get(userId),
+                logins.findByUserIdOrderByOccurredAtAsc(userId).stream()
+                        .map(login -> new AccountExport.Login(login.getOccurredAt(), login.getOutcome().name(), login.getBrowser(),
+                                login.getSystem(), login.getAddress(), login.getLocation())).toList());
     }
 
     /**
@@ -133,6 +140,7 @@ public class AccountDataService {
         oauthStates.deleteAllByUserId(userId);
         preferenceRows.deleteByUserId(userId);
         entryTemplates.deleteAllByUserId(userId);
+        logins.deleteByUserId(userId);
         var user = credential.getUser();
         var oldEmail = user.getEmail();
         credentials.delete(credential);

@@ -47,6 +47,12 @@
             <artifactId>spring-boot-starter-session-jdbc</artifactId>
         </dependency>
         <dependency>
+            <!-- Reads an optional IP location database (DB-IP Lite or GeoLite2, .mmdb); Apache 2.0, no further dependencies. -->
+            <groupId>com.maxmind.db</groupId>
+            <artifactId>maxmind-db</artifactId>
+            <version>3.2.0</version>
+        </dependency>
+        <dependency>
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
             <version>3.0.5</version>

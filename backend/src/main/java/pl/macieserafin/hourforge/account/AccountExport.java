@@ -7,7 +7,11 @@ import java.util.UUID;
 
 /** Everything the application stores about one user: profile, team memberships and own time entries. */
 public record AccountExport(Instant exportedAt, Profile profile, List<Membership> teams, List<Entry> timeEntries,
-                            pl.macieserafin.hourforge.preferences.PreferencesResponse preferences) {
+                            pl.macieserafin.hourforge.preferences.PreferencesResponse preferences, List<Login> logins) {
+    /** A stored sign-in (kept for 90 days), as shown in the account settings. */
+    public record Login(Instant occurredAt, String outcome, String browser, String system, String address, String location) {
+    }
+
     public record Profile(UUID id, String email, String displayName, Instant createdAt, Instant emailVerifiedAt) {
     }
 

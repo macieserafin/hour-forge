@@ -5,10 +5,12 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.mock.web.MockHttpServletRequest;
 import pl.macieserafin.hourforge.session.DeviceInfo;
+import pl.macieserafin.hourforge.session.GeoLocator;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class DeviceInfoTest {
+    private static final GeoLocator NO_PLACES = new GeoLocator("", "");
 
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {
@@ -22,16 +24,16 @@ class DeviceInfoTest {
             "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36|Chrome|ChromeOS",
     })
     void recognisesCommonBrowsersAndSystems(String userAgent, String browser, String system) {
-        var device = DeviceInfo.of(request(userAgent, "10.0.0.1"));
+        var device = DeviceInfo.of(request(userAgent, "10.0.0.1"), NO_PLACES);
         assertThat(device.browser()).isEqualTo(browser);
         assertThat(device.system()).isEqualTo(system);
     }
 
     @Test
     void anUnknownOrMissingUserAgentGivesNoGuess() {
-        assertThat(DeviceInfo.of(request("curl/8.4.0", "10.0.0.1"))).extracting(DeviceInfo::browser, DeviceInfo::system)
+        assertThat(DeviceInfo.of(request("curl/8.4.0", "10.0.0.1"), NO_PLACES)).extracting(DeviceInfo::browser, DeviceInfo::system)
                 .containsExactly(null, null);
-        assertThat(DeviceInfo.of(request(null, "10.0.0.1"))).extracting(DeviceInfo::browser, DeviceInfo::system)
+        assertThat(DeviceInfo.of(request(null, "10.0.0.1"), NO_PLACES)).extracting(DeviceInfo::browser, DeviceInfo::system)
                 .containsExactly(null, null);
     }
 
@@ -44,13 +46,13 @@ class DeviceInfoTest {
             "::ffff:83.24.117.9|83.24.x.x",
     })
     void keepsOnlyTheNetworkPartOfTheAddress(String address, String shown) {
-        assertThat(DeviceInfo.of(request(null, address)).address()).isEqualTo(shown);
+        assertThat(DeviceInfo.of(request(null, address), NO_PLACES).address()).isEqualTo(shown);
     }
 
     @ParameterizedTest
     @CsvSource({"example.com", "not an address", "''"})
     void neverResolvesNamesOrKeepsGarbage(String address) {
-        assertThat(DeviceInfo.of(request(null, address)).address()).isNull();
+        assertThat(DeviceInfo.of(request(null, address), NO_PLACES).address()).isNull();
     }
 
     private static MockHttpServletRequest request(String userAgent, String address) {

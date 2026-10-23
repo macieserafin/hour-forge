@@ -4,11 +4,18 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.macieserafin.hourforge.mail.EmailSender;
+import pl.macieserafin.hourforge.session.DeviceInfo;
 import pl.macieserafin.hourforge.user.User;
+
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 
 /** Builds and sends the account e-mails that carry one-time links. */
 @Service
 public class AccountMailService {
+    private static final DateTimeFormatter SIGN_IN_TIME = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm 'UTC'").withZone(ZoneOffset.UTC);
+
     private final EmailTokenService tokens;
     private final EmailSender sender;
     private final String frontendUrl;
@@ -48,6 +55,21 @@ public class AccountMailService {
                 "Twoje konto w HourForge zostało usunięte. Imię, adres e-mail i hasło zostały usunięte; zapisane godziny pracy "
                         + "pozostają w raportach zespołów pod nazwą „Użytkownik usunięty”.\n\n"
                         + "Jeśli to nie Ty, skontaktuj się z administratorem serwisu.\n");
+    }
+
+    /** A security message: always sent, whatever the notification settings say. */
+    public void sendNewDeviceSignIn(User user, DeviceInfo device, Instant at) {
+        var details = new StringBuilder()
+                .append("Urządzenie: ").append(device.browser() == null ? "nieznana przeglądarka" : device.browser())
+                .append(device.system() == null ? "" : " · " + device.system()).append('\n')
+                .append("Czas: ").append(SIGN_IN_TIME.format(at)).append('\n');
+        if (device.address() != null) details.append("Adres: ").append(device.address()).append('\n');
+        if (device.location() != null) details.append("Miejsce (przybliżone): ").append(device.location()).append('\n');
+        sender.send(user.getEmail(), "Nowe logowanie na Twoje konto HourForge",
+                "Cześć " + user.getDisplayName() + ",\n\nna Twoje konto zalogowano się z nowego urządzenia:\n\n" + details
+                        + "\nJeśli to Ty, nic nie musisz robić.\n"
+                        + "Jeśli to nie Ty, od razu zmień hasło i wyloguj nieznane urządzenia:\n"
+                        + frontendUrl + "/account#sessions\n");
     }
 
     public void sendEmailChanged(String oldEmail, String newEmail) {

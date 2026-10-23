@@ -1,11 +1,11 @@
-import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState, type FormEvent } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { LoaderCircle } from 'lucide-react'
 import { Modal } from '../components/Modal'
 import type { Preferences, User } from '../lib/api'
 import { defaultPreferences, usePreferences, useSavePreferences } from '../lib/preferences'
 import { useTeams } from '../lib/teams'
-import { deviceLabel, passwordChangeError, useChangePassword, useDeleteAccount, useDownloadAccountData, useEndSession, useRequestEmailChange, useSessions, useSignOutEverywhere, useUpdateProfile } from '../lib/account'
+import { deviceLabel, passwordChangeError, useChangePassword, useDeleteAccount, useDownloadAccountData, useEndSession, useLoginHistory, useRequestEmailChange, useSessions, useSignOutEverywhere, useUpdateProfile } from '../lib/account'
 
 function ProfileSection({ user }: { user: User }) {
   const save = useUpdateProfile()
@@ -185,7 +185,7 @@ function DeviceList({ userId }: { userId: string }) {
         <div>
           <strong>{deviceLabel(session)}</strong>{session.current && <span className="session-current"> · to urządzenie</span>}
           <p className="field-hint">Zalogowano {dateTime(session.signedInAt)} · ostatnia aktywność {dateTime(session.lastActiveAt)}
-            {session.address && <> · adres {session.address}</>}{session.remembered && <> · zapamiętane</>}</p>
+            {session.address && <> · adres {session.address}</>}{session.location && <> · {session.location}</>}{session.remembered && <> · zapamiętane</>}</p>
         </div>
         {!session.current && <button type="button" className="button-secondary" disabled={end.isPending}
           aria-label={`Wyloguj ${deviceLabel(session)}, zalogowane ${dateTime(session.signedInAt)}`}
@@ -200,7 +200,7 @@ function DeviceList({ userId }: { userId: string }) {
 function SignOutSection({ userId }: { userId: string }) {
   const signOut = useSignOutEverywhere()
   const [confirm, setConfirm] = useState(false)
-  return <section className="overview-panel account-section" aria-labelledby="account-sessions-title">
+  return <section id="sessions" className="overview-panel account-section" aria-labelledby="account-sessions-title">
     <h2 id="account-sessions-title">Zalogowane urządzenia</h2>
     <p className="field-hint">Wyloguj urządzenie, którego nie rozpoznajesz. Adres jest skrócony, a czasy są przybliżone.</p>
     <DeviceList userId={userId} />
@@ -249,13 +249,43 @@ function DeleteSection() {
   </section>
 }
 
+function LoginHistorySection({ userId }: { userId: string }) {
+  const history = useLoginHistory(userId)
+  return <section className="overview-panel account-section" aria-labelledby="account-logins-title">
+    <h2 id="account-logins-title">Historia logowań</h2>
+    <p className="field-hint">Ostatnie logowania z 90 dni, także nieudane próby. Jeśli widzisz logowanie, którego nie rozpoznajesz, zmień hasło.</p>
+    {history.isPending ? <p role="status"><LoaderCircle size={18} className="spin" />Wczytywanie historii logowań…</p>
+      : history.isError ? <div role="alert" className="dashboard-error">{history.error.message}
+        <button type="button" onClick={() => void history.refetch()}>Wczytaj ponownie</button></div>
+      : history.data.entries.length === 0 ? <p>Brak zapisanych logowań.</p>
+      : <>
+        <div className="team-table-wrap" tabIndex={0} role="region" aria-label="Historia logowań">
+          <table className="team-table"><caption className="sr-only">Logowania od najnowszego</caption>
+            <thead><tr><th scope="col">Czas</th><th scope="col">Wynik</th><th scope="col">Urządzenie</th><th scope="col">Adres i miejsce</th></tr></thead>
+            <tbody>{history.data.entries.map(entry => <tr key={`${entry.occurredAt}-${entry.successful}`}>
+              <td><time dateTime={entry.occurredAt}>{dateTime(entry.occurredAt)}</time></td>
+              <td>{entry.successful ? 'Udane' : 'Nieudane'}</td>
+              <td>{deviceLabel(entry)}</td>
+              <td>{[entry.address, entry.location].filter(Boolean).join(' · ') || 'Nieznany'}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+        {history.data.locationSource && <p className="field-hint">Miejsca są przybliżone. Dane lokalizacji: {history.data.locationSource}.</p>}
+      </>}
+  </section>
+}
+
 export function AccountPanel({ user }: { user: User }) {
+  const { hash } = useLocation()
+  // The new-device e-mail links to #sessions; the section exists only after the first render.
+  useEffect(() => { if (hash) document.getElementById(hash.slice(1))?.scrollIntoView?.() }, [hash])
   return <div className="account-panel">
     <ProfileSection user={user} />
     <PreferencesSection userId={user.id} />
     <EmailChangeSection />
     <PasswordSection />
     <SignOutSection userId={user.id} />
+    <LoginHistorySection userId={user.id} />
     <DataSection />
     <DeleteSection />
   </div>

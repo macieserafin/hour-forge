@@ -131,6 +131,27 @@ class RetentionIT extends ApiIntegrationTestSupport {
     }
 
     @Test
+    void sweepsSignInsOlderThanNinetyDaysAndThoseOfRemovedAccounts() {
+        var person = fixtures.user("signins@example.com", "Sign-ins");
+        var old = loginEvent(person, now.minus(91, ChronoUnit.DAYS));
+        var kept = loginEvent(person, now.minus(89, ChronoUnit.DAYS));
+        var unconfirmed = unconfirmed("tried@example.com", 8);
+        var attempt = loginEvent(unconfirmed, now.minus(1, ChronoUnit.DAYS));
+
+        var purged = retention.purge(now);
+
+        assertThat(purged.logins()).isGreaterThanOrEqualTo(1);
+        assertThat(jdbc.queryForList("select id from login_events where id in (?, ?, ?)", UUID.class, old, kept, attempt)).containsExactly(kept);
+        assertThat(exists(unconfirmed)).isFalse();
+    }
+
+    private UUID loginEvent(User user, Instant at) {
+        var id = UUID.randomUUID();
+        jdbc.update("insert into login_events (id, user_id, occurred_at, outcome) values (?, ?, ?, ?)", id, user.getId(), java.sql.Timestamp.from(at), "FAILED");
+        return id;
+    }
+
+    @Test
     void runningTwiceChangesNothingTheSecondTime() {
         unconfirmed("twice@example.com", 20);
         retention.purge(now);

@@ -7,12 +7,13 @@ import pl.macieserafin.hourforge.auth.EmailTokenRepository;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.invitation.TeamInviteRepository;
 import pl.macieserafin.hourforge.jira.OAuthStateRepository;
+import pl.macieserafin.hourforge.session.LoginEventRepository;
 import pl.macieserafin.hourforge.user.UserRepository;
 
-/** Removes data that has outlived its purpose: unconfirmed accounts, spent one-time tokens and stale invitations. */
+/** Removes data that has outlived its purpose: unconfirmed accounts, spent one-time tokens, stale invitations and old sign-ins. */
 @Service
 public class RetentionService {
-    public record Purged(int accounts, int tokens, int oauthStates, int invitations) {
+    public record Purged(int accounts, int tokens, int oauthStates, int invitations, int logins) {
     }
 
     private final JobsProperties properties;
@@ -21,15 +22,18 @@ public class RetentionService {
     private final EmailTokenRepository tokens;
     private final OAuthStateRepository oauthStates;
     private final TeamInviteRepository invitations;
+    private final LoginEventRepository logins;
 
     public RetentionService(JobsProperties properties, UserRepository users, UserCredentialRepository credentials,
-                            EmailTokenRepository tokens, OAuthStateRepository oauthStates, TeamInviteRepository invitations) {
+                            EmailTokenRepository tokens, OAuthStateRepository oauthStates, TeamInviteRepository invitations,
+                            LoginEventRepository logins) {
         this.properties = properties;
         this.users = users;
         this.credentials = credentials;
         this.tokens = tokens;
         this.oauthStates = oauthStates;
         this.invitations = invitations;
+        this.logins = logins;
     }
 
     @Transactional
@@ -38,6 +42,7 @@ public class RetentionService {
         for (var id : users.findUnconfirmedIdsCreatedBefore(now.minus(properties.unconfirmedAccountAge()))) {
             // The confirmation tokens of the account go with it, before the tokens are swept by age.
             tokens.deleteByUserId(id);
+            logins.deleteByUserId(id);
             credentials.deleteByUserId(id);
             users.deleteById(id);
             accounts++;
@@ -46,6 +51,7 @@ public class RetentionService {
         int spent = tokens.deleteSpent(now.minus(properties.spentTokenAge()));
         int states = oauthStates.deleteExpired(now.minus(properties.spentTokenAge()));
         int stale = invitations.deleteStale(now.minus(properties.staleInvitationAge()));
-        return new Purged(accounts, spent, states, stale);
+        int oldLogins = logins.deleteOlderThan(now.minus(properties.loginHistoryAge()));
+        return new Purged(accounts, spent, states, stale, oldLogins);
     }
 }

@@ -32,8 +32,8 @@ public class ScheduledJobs {
     public void purge() {
         try {
             var purged = retention.purge(clock.instant());
-            log.info("Retention job removed {} accounts, {} tokens, {} OAuth states, {} invitations",
-                    purged.accounts(), purged.tokens(), purged.oauthStates(), purged.invitations());
+            log.info("Retention job removed {} accounts, {} tokens, {} OAuth states, {} invitations, {} sign-ins",
+                    purged.accounts(), purged.tokens(), purged.oauthStates(), purged.invitations(), purged.logins());
         } catch (RuntimeException exception) {
             log.error("Retention job failed", exception);
         }

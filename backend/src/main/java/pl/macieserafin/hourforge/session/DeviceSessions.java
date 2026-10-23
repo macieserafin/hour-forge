@@ -24,7 +24,7 @@ public class DeviceSessions {
     static final String SIGNED_IN_AT = DeviceSessions.class.getName() + ".SIGNED_IN_AT";
     static final String REMEMBERED = DeviceSessions.class.getName() + ".REMEMBERED";
 
-    public record DeviceSession(String id, String browser, String system, String address, Instant signedInAt,
+    public record DeviceSession(String id, String browser, String system, String address, String location, Instant signedInAt,
                                 Instant lastActiveAt, boolean current, boolean remembered) {
     }
 
@@ -37,9 +37,9 @@ public class DeviceSessions {
     }
 
     /** Called right after a successful sign-in, on the session that sign-in created. */
-    public void recordSignIn(HttpServletRequest request, boolean remembered) {
+    public void recordSignIn(HttpServletRequest request, DeviceInfo device, boolean remembered) {
         var session = request.getSession();
-        session.setAttribute(DEVICE, DeviceInfo.of(request));
+        session.setAttribute(DEVICE, device);
         session.setAttribute(HANDLE, UUID.randomUUID().toString());
         session.setAttribute(SIGNED_IN_AT, clock.instant());
         session.setAttribute(REMEMBERED, remembered);
@@ -85,7 +85,7 @@ public class DeviceSessions {
         Boolean remembered = session.getAttribute(REMEMBERED);
         return new DeviceSession(handle,
                 device == null ? null : device.browser(), device == null ? null : device.system(),
-                device == null ? null : device.address(),
+                device == null ? null : device.address(), device == null ? null : device.location(),
                 signedInAt == null ? session.getCreationTime() : signedInAt, session.getLastAccessedTime(), current,
                 Boolean.TRUE.equals(remembered));
     }

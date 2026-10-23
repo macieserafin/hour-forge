@@ -6,12 +6,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /** Background jobs: whether they run, how long data is kept, and when a timer counts as forgotten. */
 @ConfigurationProperties("app.jobs")
 public record JobsProperties(boolean enabled, Duration unconfirmedAccountAge, Duration spentTokenAge, Duration staleInvitationAge,
-                             Duration longTimerAfter) {
+                             Duration longTimerAfter, Duration loginHistoryAge) {
     public JobsProperties {
         unconfirmedAccountAge = positive(unconfirmedAccountAge, Duration.ofDays(7));
         spentTokenAge = positive(spentTokenAge, Duration.ofDays(7));
         staleInvitationAge = positive(staleInvitationAge, Duration.ofDays(90));
         longTimerAfter = positive(longTimerAfter, Duration.ofHours(10));
+        loginHistoryAge = positive(loginHistoryAge, Duration.ofDays(90));
     }
 
     private static Duration positive(Duration value, Duration fallback) {

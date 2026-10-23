@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, changePassword, deleteAccount, downloadAccountData, endSession, getSessions, requestEmailChange, signOutEverywhere, updateProfile } from './api'
+import { ApiError, changePassword, deleteAccount, downloadAccountData, endSession, getLoginHistory, getSessions, requestEmailChange, signOutEverywhere, updateProfile } from './api'
 import { saveBlob } from './download'
 import { sessionOptions } from './auth'
 import { useAuthError } from './teams'
@@ -37,6 +37,14 @@ export const sessionsKey = (userId: string) => ['account-sessions', userId] as c
 export function useSessions(userId: string) {
   const handleError = useAuthError()
   const query = useQuery({ queryKey: sessionsKey(userId), queryFn: ({ signal }) => getSessions(signal),
+    retry: (count, error) => count < 1 && error instanceof ApiError && (error.status === 0 || error.status >= 500) })
+  useEffect(() => { if (query.error) handleError(query.error) }, [query.error, handleError])
+  return query
+}
+
+export function useLoginHistory(userId: string) {
+  const handleError = useAuthError()
+  const query = useQuery({ queryKey: ['login-history', userId], queryFn: ({ signal }) => getLoginHistory(signal),
     retry: (count, error) => count < 1 && error instanceof ApiError && (error.status === 0 || error.status >= 500) })
   useEffect(() => { if (query.error) handleError(query.error) }, [query.error, handleError])
   return query

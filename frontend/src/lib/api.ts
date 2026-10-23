@@ -361,10 +361,24 @@ export interface DeviceSession {
   browser: string | null
   system: string | null
   address: string | null
+  /** Approximate place, only when the server has a location database. */
+  location?: string | null
   signedInAt: string
   lastActiveAt: string
   current: boolean
   remembered: boolean
+}
+
+export interface LoginHistory {
+  entries: { occurredAt: string; successful: boolean; browser: string | null; system: string | null; address: string | null; location: string | null }[]
+  /** Credit required by the location database licence; null when places are not shown. */
+  locationSource: string | null
+}
+
+export async function getLoginHistory(signal?: AbortSignal): Promise<LoginHistory> {
+  const response = await request('/api/account/logins', { signal })
+  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.' : 'Nie udało się wczytać historii logowań.')
+  return response.json() as Promise<LoginHistory>
 }
 
 export async function getSessions(signal?: AbortSignal): Promise<DeviceSession[]> {

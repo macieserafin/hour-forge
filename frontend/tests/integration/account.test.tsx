@@ -142,3 +142,25 @@ it('names an unknown browser plainly and explains a device that is already gone'
   await userEvent.click(within(unknown).getByRole('button'))
   expect(await screen.findByText('To urządzenie jest już wylogowane. Odśwież listę.')).toBeVisible()
 })
+
+it('shows the sign-in history with failed attempts, places and the credit for the location data', async () => {
+  mockApi({ 'GET /api/account/logins': () => json({ locationSource: 'IP Geolocation by DB-IP (https://db-ip.com)', entries: [
+    { occurredAt: '2026-10-19T10:00:00Z', successful: true, browser: 'Firefox', system: 'Windows', address: '83.24.x.x', location: 'Warsaw, Poland' },
+    { occurredAt: '2026-10-19T09:58:00Z', successful: false, browser: null, system: null, address: null, location: null }] }) })
+  renderApp(<App />, '/account')
+  const table = await screen.findByRole('table', { name: 'Logowania od najnowszego' })
+  const rows = within(table).getAllByRole('row').slice(1)
+  expect(rows[0]).toHaveTextContent('Udane')
+  expect(rows[0]).toHaveTextContent('Firefox · Windows')
+  expect(rows[0]).toHaveTextContent('83.24.x.x · Warsaw, Poland')
+  expect(rows[1]).toHaveTextContent('Nieudane')
+  expect(rows[1]).toHaveTextContent('Nieznana przeglądarka')
+  expect(screen.getByText(/Dane lokalizacji: IP Geolocation by DB-IP/)).toBeVisible()
+})
+
+it('says when no sign-ins are stored and shows no credit without places', async () => {
+  mockApi()
+  renderApp(<App />, '/account')
+  expect(await screen.findByText('Brak zapisanych logowań.')).toBeVisible()
+  expect(screen.queryByText(/Dane lokalizacji/)).toBeNull()
+})
