@@ -70,6 +70,8 @@ export default async function globalSetup() {
         JOBS_ENABLED: 'false',
         JIRA_INTEGRATION_ENABLED: 'true', JIRA_CLIENT_ID: 'e2e-client', JIRA_CLIENT_SECRET: 'e2e-client-secret-only',
         JIRA_REDIRECT_URI: redirectUri, JIRA_TOKEN_ENCRYPTION_KEY: randomBytes(32).toString('base64'), TWO_FACTOR_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
+        // The seeded owner also runs the instance, so the operator panel can be exercised.
+        OPERATOR_EMAILS: 'owner@hourforge-e2e.test',
         APP_JIRA_AUTHBASEURL: atlassian.url, APP_JIRA_APIBASEURL: atlassian.url },
       stdio: ['ignore', 'pipe', 'pipe'],
     })

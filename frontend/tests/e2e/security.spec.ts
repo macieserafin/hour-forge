@@ -1,0 +1,86 @@
+import { test, expect, login, member, memberPassword, owner, signOut, submitLogin, totp } from '../support/e2e'
+
+test('two-step sign-in is set up with the app and then asked for at every sign-in', async ({ page }) => {
+  await login(page, member)
+  await page.goto('/account')
+  const section = page.getByRole('region', { name: 'Logowanie dwuetapowe' })
+  await section.getByRole('button', { name: 'Włącz logowanie dwuetapowe' }).click()
+  await expect(section.getByRole('img', { name: /Kod QR/ })).toBeVisible()
+  const secret = (await section.locator('.two-factor-secret').textContent())!.replace(/\s/g, '')
+  await section.getByLabel('Kod z aplikacji').fill(totp(secret))
+  await section.getByLabel('Obecne hasło').fill(memberPassword)
+  await section.getByRole('button', { name: 'Włącz', exact: true }).click()
+  const codes = section.getByRole('region', { name: 'Kody zapasowe' })
+  await expect(codes.getByRole('listitem')).toHaveCount(10)
+  const backupCode = (await codes.getByRole('listitem').first().textContent())!
+  await codes.getByRole('button', { name: 'Zapisałem kody' }).click()
+  await expect(section).toContainText('Pozostałe kody zapasowe: 10')
+
+  await signOut(page)
+  await submitLogin(page, member)
+  await expect(page.getByRole('heading', { name: 'Logowanie dwuetapowe' })).toBeVisible()
+  expect((await page.request.get('/api/me')).status()).toBe(401)
+  // The code that turned it on was used up; the next one signs in.
+  await page.getByLabel('Kod z aplikacji lub kod zapasowy').fill(totp(secret, 1))
+  await page.getByRole('button', { name: 'Potwierdź' }).click()
+  await expect(page).toHaveURL(/\/dashboard$/)
+
+  await signOut(page)
+  await submitLogin(page, member)
+  await page.getByLabel('Kod z aplikacji lub kod zapasowy').fill(backupCode)
+  await page.getByRole('button', { name: 'Potwierdź' }).click()
+  await expect(page).toHaveURL(/\/dashboard$/)
+  await page.goto('/account')
+  await expect(page.getByRole('region', { name: 'Logowanie dwuetapowe' })).toContainText('Pozostałe kody zapasowe: 9')
+  await expect(page.getByRole('table', { name: 'Logowania od najnowszego' }).getByRole('row')).not.toHaveCount(1)
+})
+
+test('another signed-in device can be signed out from the device list', async ({ page, browser }) => {
+  const other = await browser.newContext()
+  const otherPage = await other.newPage()
+  await login(otherPage, owner)
+  await login(page, owner)
+
+  await page.goto('/account')
+  const devices = page.getByRole('list', { name: 'Zalogowane urządzenia' })
+  await expect(devices.getByRole('listitem')).toHaveCount(2)
+  await expect(devices.getByRole('listitem').first()).toContainText('to urządzenie')
+  await devices.getByRole('listitem').nth(1).getByRole('button', { name: /^Wyloguj/ }).click()
+  await expect(page.getByText('Urządzenie zostało wylogowane.')).toBeVisible()
+  await expect(devices.getByRole('listitem')).toHaveCount(1)
+
+  await otherPage.goto('/dashboard')
+  await expect(otherPage).toHaveURL(/\/login/)
+  await other.close()
+})
+
+test('the instance operator shows a notice to everybody and blocks an abusive account', async ({ page, browser }) => {
+  await login(page, owner)
+  await page.getByRole('link', { name: 'Operator' }).first().click()
+  await expect(page.getByRole('heading', { name: 'Operator instancji', level: 1 })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Statystyki' })).toContainText('Konta')
+
+  const notice = page.getByRole('region', { name: 'Ogłoszenie dla wszystkich' })
+  await notice.getByLabel('Treść ogłoszenia').fill('Prace serwisowe w sobotę 22:00–23:00.')
+  await notice.getByLabel('Rodzaj').selectOption('WARNING')
+  await notice.getByRole('button', { name: 'Opublikuj' }).click()
+  await expect(notice.getByRole('status')).toContainText('Ogłoszenie zostało opublikowane.')
+
+  const accounts = page.getByRole('region', { name: 'Konta' })
+  await accounts.getByLabel('Szukaj konta po adresie lub nazwie').fill('member@')
+  await accounts.getByRole('button', { name: 'Szukaj' }).click()
+  const row = accounts.getByRole('row').filter({ hasText: member })
+  await row.getByRole('button', { name: 'Zablokuj' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Zablokuj konto' })
+  await dialog.getByLabel(/Powód/).fill('Spam w zaproszeniach')
+  await dialog.getByRole('button', { name: 'Zablokuj' }).click()
+  await expect(row).toContainText('Zablokowane: Spam w zaproszeniach')
+
+  const visitor = await browser.newContext()
+  const visitorPage = await visitor.newPage()
+  await visitorPage.goto('/login')
+  await expect(visitorPage.getByRole('status', { name: 'Ogłoszenie operatora serwisu' })).toContainText('Prace serwisowe w sobotę')
+  await submitLogin(visitorPage, member)
+  await expect(visitorPage.getByRole('alert')).toContainText('zablokowane przez operatora')
+  await visitor.close()
+})

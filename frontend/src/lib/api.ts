@@ -1235,6 +1235,8 @@ export interface OperatorAccount {
   blockedReason: string | null
   twoFactor: boolean
   ownedTeams: number
+  /** Unused for 24 months but kept, because it owns a team others still use. */
+  inactiveOwnerKept?: boolean
 }
 
 export interface OperatorTeam {

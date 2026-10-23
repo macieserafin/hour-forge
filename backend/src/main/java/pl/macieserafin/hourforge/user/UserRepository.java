@@ -20,10 +20,11 @@ public interface UserRepository extends JpaRepository<User, UUID> {
             + " and not exists (select 1 from TeamInvite i where i.createdBy = u)")
     List<UUID> findUnconfirmedIdsCreatedBefore(Instant before);
 
-    /** Moves the last active day forward; an older or equal day leaves it as it is. */
+    /** Moves the last active day forward (an older or equal day leaves it as it is) and cancels inactivity warnings. */
     @Transactional
     @Modifying
-    @Query("update User u set u.lastActiveAt = :day where u.id = :id and (u.lastActiveAt is null or u.lastActiveAt < :day)")
+    @Query("update User u set u.lastActiveAt = :day, u.inactivityWarnedDays = null, u.inactivityWarnedAt = null"
+            + " where u.id = :id and (u.lastActiveAt is null or u.lastActiveAt < :day)")
     int markActive(UUID id, Instant day);
 
     // Serialize a user's timer operations without blocking FK key-share locks on this user.

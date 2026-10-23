@@ -8,7 +8,7 @@ import { mockApi, json, user } from '../support/api'
 const operator = { ...user, operator: true }
 const stats = { accounts: 12, unconfirmed: 1, blocked: 0, activeLastWeek: 5, activeLastMonth: 9, twoFactor: 2, teams: 4, timeEntries: 300 }
 const spammer = { id: 'spammer', email: 'spam@example.test', displayName: 'Spammer', createdAt: '2026-10-01T10:00:00Z', lastActiveAt: null,
-  confirmed: true, blockedAt: null, blockedReason: null, twoFactor: true, ownedTeams: 0 }
+  confirmed: true, blockedAt: null, blockedReason: null, twoFactor: true, ownedTeams: 1, inactiveOwnerKept: true }
 const spamTeam = { id: 'spam-team', name: 'Spam Team', createdAt: '2026-10-01T10:00:00Z', archivedAt: null, members: 1, ownerEmail: 'spam@example.test', timeEntries: 3 }
 
 function operatorApi(overrides = {}) {
@@ -57,6 +57,7 @@ it('blocks an account with a reason and never offers actions on the operator', a
   expect(rows[1]).toHaveTextContent('To Ty')
   expect(within(rows[1]!).queryByRole('button')).toBeNull()
   expect(rows[0]).toHaveTextContent('Logowanie dwuetapowe')
+  expect(rows[0]).toHaveTextContent('Nieaktywne od 24 miesięcy, zachowane dla zespołów')
 
   await userEvent.click(within(rows[0]!).getByRole('button', { name: 'Zablokuj' }))
   const dialog = screen.getByRole('dialog')

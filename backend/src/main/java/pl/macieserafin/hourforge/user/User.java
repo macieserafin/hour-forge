@@ -46,6 +46,12 @@ public class User {
     @Column(name = "avatar_updated_at")
     private Instant avatarUpdatedAt;
 
+    @Column(name = "inactivity_warned_days")
+    private Integer inactivityWarnedDays;
+
+    @Column(name = "inactivity_warned_at")
+    private Instant inactivityWarnedAt;
+
     protected User() {
     }
 
@@ -107,6 +113,20 @@ public class User {
 
     public void setAvatarUpdatedAt(Instant avatarUpdatedAt) {
         this.avatarUpdatedAt = avatarUpdatedAt;
+    }
+
+    /** The last inactivity warning (30 or 7 days before removal), 0 when kept for the teams it owns, null when none. */
+    public Integer getInactivityWarnedDays() {
+        return inactivityWarnedDays;
+    }
+
+    public Instant getInactivityWarnedAt() {
+        return inactivityWarnedAt;
+    }
+
+    public void warnAboutInactivity(int days, Instant at) {
+        this.inactivityWarnedDays = days;
+        this.inactivityWarnedAt = at;
     }
 
     public Instant getBlockedAt() {

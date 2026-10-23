@@ -15,6 +15,7 @@ import java.time.format.DateTimeFormatter;
 @Service
 public class AccountMailService {
     private static final DateTimeFormatter SIGN_IN_TIME = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm 'UTC'").withZone(ZoneOffset.UTC);
+    private static final DateTimeFormatter REMOVAL_DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy").withZone(ZoneOffset.UTC);
 
     private final EmailTokenService tokens;
     private final EmailSender sender;
@@ -80,6 +81,25 @@ public class AccountMailService {
                                 + "uwierzytelniającej. Zachowaj kody zapasowe w bezpiecznym miejscu.\n"
                                 : "na Twoim koncie wyłączono logowanie dwuetapowe. Do logowania wystarczy teraz samo hasło.\n")
                         + "\nJeśli to nie Ty, od razu zmień hasło:\n" + frontendUrl + "/account#sessions\n");
+    }
+
+    /** Required notice before an unused account is removed; always sent, whatever the notification settings say. */
+    public void sendInactivityWarning(User user, Instant removalOn) {
+        sender.send(user.getEmail(), "Twoje konto w HourForge zostanie usunięte " + REMOVAL_DATE.format(removalOn),
+                "Cześć " + user.getDisplayName() + ",\n\nod dłuższego czasu nie korzystasz z konta w HourForge. Konta nieużywane przez "
+                        + "24 miesiące usuwamy, aby nie przechowywać danych bez potrzeby.\n\n"
+                        + "Jeśli chcesz zachować konto, po prostu zaloguj się przed " + REMOVAL_DATE.format(removalOn) + ":\n"
+                        + frontendUrl + "/login\n\n"
+                        + "Jeśli nic nie zrobisz, usuniemy Twoje imię, adres e-mail i hasło. Zapisane godziny pracy zostaną w raportach "
+                        + "zespołów pod nazwą „Użytkownik usunięty”.\n");
+    }
+
+    /** Tells the owners' fellow admins that an unused owner account is kept because of their team. */
+    public void sendInactiveOwner(User admin, String teamName, String ownerName) {
+        sender.send(admin.getEmail(), "Właściciel zespołu " + teamName + " od dawna nie korzysta z HourForge",
+                "Cześć " + admin.getDisplayName() + ",\n\n" + ownerName + ", właściciel zespołu " + teamName + ", nie korzysta z HourForge "
+                        + "od ponad 24 miesięcy. Konto nie zostanie usunięte, bo zespół jest nadal używany.\n\n"
+                        + "Poproś właściciela o przekazanie własności zespołu albo skontaktuj się z operatorem serwisu.\n");
     }
 
     public void sendEmailChanged(String oldEmail, String newEmail) {

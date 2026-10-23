@@ -19,9 +19,12 @@ public class ScheduledJobs {
     private final RetentionService retention;
     private final LongTimerReminderService reminders;
     private final WeeklyReportService weeklyReports;
+    private final InactiveAccountService inactiveAccounts;
     private final Clock clock;
 
-    public ScheduledJobs(RetentionService retention, LongTimerReminderService reminders, WeeklyReportService weeklyReports, Clock clock) {
+    public ScheduledJobs(RetentionService retention, LongTimerReminderService reminders, WeeklyReportService weeklyReports,
+                         InactiveAccountService inactiveAccounts, Clock clock) {
+        this.inactiveAccounts = inactiveAccounts;
         this.weeklyReports = weeklyReports;
         this.retention = retention;
         this.reminders = reminders;
@@ -57,5 +60,20 @@ public class ScheduledJobs {
         } catch (RuntimeException exception) {
             log.error("Long timer reminder job failed", exception);
         }
+    }
+
+    @Scheduled(cron = "0 0 4 * * *", zone = "UTC")
+    public void handleInactiveAccounts() {
+        var now = clock.instant();
+        int removed = 0;
+        for (var userId : inactiveAccounts.due(now)) {
+            // One account at a time: a problem with one (e.g. a team changing meanwhile) does not stop the others.
+            try {
+                if (inactiveAccounts.handle(userId, now) == InactiveAccountService.Outcome.REMOVED) removed++;
+            } catch (RuntimeException exception) {
+                log.error("Inactive account job failed for userId={}", userId, exception);
+            }
+        }
+        if (removed > 0) log.info("Removed {} inactive accounts", removed);
     }
 }

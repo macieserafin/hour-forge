@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { test as base, expect, type Page, type APIRequestContext } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 
@@ -103,4 +104,17 @@ export async function createTeamProject(page: Page, suffix: string) {
   const team = await create(page.request, '/api/teams', { name: `Team ${suffix}`, timezone: 'Europe/Warsaw' })
   const project = await create(page.request, `/api/teams/${team.id}/projects`, { name: `Project ${suffix}`, description: null })
   return { team, project }
+}
+
+/** The current authenticator-app code (RFC 6238, SHA-1, 30 s, 6 digits) for a Base32 secret, `steps` periods ahead. */
+export function totp(secret: string, steps = 0) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+  let bits = ''
+  for (const character of secret.replace(/[\s=]/g, '').toUpperCase()) bits += alphabet.indexOf(character).toString(2).padStart(5, '0')
+  const key = Buffer.from(bits.match(/.{8}/g)!.map(byte => parseInt(byte, 2)))
+  const counter = Buffer.alloc(8)
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000) + steps))
+  const hash = createHmac('sha1', key).update(counter).digest()
+  const offset = hash[hash.length - 1]! & 0x0f
+  return ((hash.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).toString().padStart(6, '0')
 }

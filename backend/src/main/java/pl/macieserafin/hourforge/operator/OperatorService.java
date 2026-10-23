@@ -38,7 +38,7 @@ public class OperatorService {
     }
 
     public record Account(UUID id, String email, String displayName, Instant createdAt, Instant lastActiveAt, boolean confirmed,
-                          Instant blockedAt, String blockedReason, boolean twoFactor, long ownedTeams) {
+                          Instant blockedAt, String blockedReason, boolean twoFactor, long ownedTeams, boolean inactiveOwnerKept) {
     }
 
     public record TeamRow(UUID id, String name, Instant createdAt, Instant archivedAt, long members, String ownerEmail, long timeEntries) {
@@ -97,14 +97,15 @@ public class OperatorService {
                 select u.id, u.email, u.display_name, u.created_at, u.last_active_at, u.email_verified_at is not null as confirmed,
                        u.blocked_at, u.blocked_reason,
                        exists (select 1 from user_two_factor t where t.user_id = u.id and t.enabled_at is not null) as two_factor,
-                       (select count(*) from team_members m where m.user_id = u.id and m.left_at is null and m.role = 'OWNER') as owned_teams
+                       (select count(*) from team_members m where m.user_id = u.id and m.left_at is null and m.role = 'OWNER') as owned_teams,
+                       coalesce(u.inactivity_warned_days = 0, false) as inactive_owner_kept
                 from users u
                 where u.deleted_at is null and (cast(? as text) is null or lower(u.email) like ? escape '\\' or lower(u.display_name) like ? escape '\\')
                 order by u.created_at desc, u.id limit ? offset ?
                 """, (row, index) -> new Account(row.getObject("id", UUID.class), row.getString("email"), row.getString("display_name"),
                         instant(row.getTimestamp("created_at")), instant(row.getTimestamp("last_active_at")), row.getBoolean("confirmed"),
                         instant(row.getTimestamp("blocked_at")), row.getString("blocked_reason"), row.getBoolean("two_factor"),
-                        row.getLong("owned_teams")),
+                        row.getLong("owned_teams"), row.getBoolean("inactive_owner_kept")),
                 pattern, pattern, pattern, PAGE_SIZE + 1, offset(page));
         return page(rows, page);
     }

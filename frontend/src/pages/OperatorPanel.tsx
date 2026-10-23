@@ -116,7 +116,8 @@ function AccountsSection({ selfId }: { selfId: string }) {
             <td>{dateLabel(account.createdAt)}</td>
             <td>{dateLabel(account.lastActiveAt)}</td>
             <td>{[account.blockedAt ? `Zablokowane: ${account.blockedReason ?? ''}` : null, account.confirmed ? null : 'Niepotwierdzone',
-              account.twoFactor ? 'Logowanie dwuetapowe' : null, account.ownedTeams ? `Właściciel zespołów: ${account.ownedTeams}` : null]
+              account.twoFactor ? 'Logowanie dwuetapowe' : null, account.ownedTeams ? `Właściciel zespołów: ${account.ownedTeams}` : null,
+              account.inactiveOwnerKept ? 'Nieaktywne od 24 miesięcy, zachowane dla zespołów' : null]
               .filter(Boolean).join(' · ') || 'Aktywne'}</td>
             <td className="operator-actions">{account.id === selfId ? <span className="field-hint">To Ty</span> : <>
               {account.blockedAt
