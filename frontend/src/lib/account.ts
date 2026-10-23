@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, changePassword, deleteAccount, downloadAccountData, endSession, getLoginHistory, getSessions, requestEmailChange, signOutEverywhere, updateProfile } from './api'
+import { ApiError, changePassword, deleteAccount, disableTwoFactor, downloadAccountData, enableTwoFactor, endSession, getLoginHistory, getSessions,
+  getTwoFactorStatus, renewBackupCodes, requestEmailChange, signOutEverywhere, startTwoFactorSetup, updateProfile } from './api'
 import { saveBlob } from './download'
 import { sessionOptions } from './auth'
 import { useAuthError } from './teams'
@@ -86,4 +87,27 @@ export function useDeleteAccount() {
       client.removeQueries({ predicate: query => query.queryKey[0] !== 'session' })
       client.setQueryData(sessionOptions.queryKey, null)
     } })
+}
+
+export const twoFactorKey = (userId: string) => ['two-factor', userId] as const
+
+export function useTwoFactorStatus(userId: string) {
+  const handleError = useAuthError()
+  const query = useQuery({ queryKey: twoFactorKey(userId), queryFn: ({ signal }) => getTwoFactorStatus(signal),
+    retry: (count, error) => count < 1 && error instanceof ApiError && (error.status === 0 || error.status >= 500) })
+  useEffect(() => { if (query.error) handleError(query.error) }, [query.error, handleError])
+  return query
+}
+
+/** Setup, turning on and off and new backup codes; every change refreshes the status. */
+export function useTwoFactorActions(userId: string) {
+  const client = useQueryClient()
+  const onError = useAuthError()
+  const onSettled = () => client.invalidateQueries({ queryKey: twoFactorKey(userId) })
+  return {
+    setup: useMutation({ mutationFn: startTwoFactorSetup, retry: false, gcTime: 0, onError }),
+    enable: useMutation({ mutationFn: enableTwoFactor, retry: false, gcTime: 0, onError, onSettled }),
+    disable: useMutation({ mutationFn: disableTwoFactor, retry: false, gcTime: 0, onError, onSettled }),
+    renew: useMutation({ mutationFn: renewBackupCodes, retry: false, gcTime: 0, onError, onSettled }),
+  }
 }

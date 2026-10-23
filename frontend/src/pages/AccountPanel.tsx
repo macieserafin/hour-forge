@@ -5,7 +5,8 @@ import { Modal } from '../components/Modal'
 import type { Preferences, User } from '../lib/api'
 import { defaultPreferences, usePreferences, useSavePreferences } from '../lib/preferences'
 import { useTeams } from '../lib/teams'
-import { deviceLabel, passwordChangeError, useChangePassword, useDeleteAccount, useDownloadAccountData, useEndSession, useLoginHistory, useRequestEmailChange, useSessions, useSignOutEverywhere, useUpdateProfile } from '../lib/account'
+import { deviceLabel, passwordChangeError, useChangePassword, useDeleteAccount, useDownloadAccountData, useEndSession, useLoginHistory, useRequestEmailChange, useSessions, useSignOutEverywhere, useTwoFactorActions, useTwoFactorStatus, useUpdateProfile } from '../lib/account'
+import { QrCode } from '../components/QrCode'
 
 function ProfileSection({ user }: { user: User }) {
   const save = useUpdateProfile()
@@ -249,6 +250,99 @@ function DeleteSection() {
   </section>
 }
 
+function BackupCodeList({ codes, onDone }: { codes: string[]; onDone: () => void }) {
+  const [copied, setCopied] = useState(false)
+  return <div className="backup-codes" role="region" aria-label="Kody zapasowe">
+    <p className="project-notice" role="status">Zapisz te kody w bezpiecznym miejscu. Każdy działa raz, gdy nie masz dostępu do aplikacji. Nie pokażemy ich ponownie.</p>
+    <ul>{codes.map(code => <li key={code}><code>{code}</code></li>)}</ul>
+    <div className="dialog-actions">
+      <button type="button" className="button-secondary" onClick={() => { void navigator.clipboard?.writeText(codes.join('\n')).then(() => setCopied(true)) }}>
+        {copied ? 'Skopiowano' : 'Skopiuj kody'}</button>
+      <button type="button" className="button-primary" onClick={onDone}>Zapisałem kody</button>
+    </div>
+  </div>
+}
+
+function PasswordConfirm({ title, description, action, busy, error, onConfirm, onClose }: { title: string; description: string; action: string;
+  busy: boolean; error?: string; onConfirm: (password: string) => void; onClose: () => void }) {
+  const [password, setPassword] = useState('')
+  return <Modal title={title} busy={busy} onClose={onClose}>
+    <form onSubmit={event => { event.preventDefault(); if (password) onConfirm(password) }}>
+      <p className="dialog-description">{description}</p>
+      <div className="field-group"><label htmlFor="two-factor-password">Obecne hasło</label>
+        <input className="text-input" id="two-factor-password" type="password" autoComplete="current-password" disabled={busy} value={password} onChange={event => setPassword(event.target.value)} /></div>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <footer className="dialog-actions"><button type="button" className="button-secondary" disabled={busy} onClick={onClose}>Anuluj</button>
+        <button type="submit" className="button-primary" disabled={busy || !password}>{busy && <LoaderCircle size={16} className="spin" />}{action}</button></footer>
+    </form>
+  </Modal>
+}
+
+function TwoFactorSection({ userId }: { userId: string }) {
+  const status = useTwoFactorStatus(userId)
+  const { setup, enable, disable, renew } = useTwoFactorActions(userId)
+  const [code, setCode] = useState('')
+  const [password, setPassword] = useState('')
+  const [codes, setCodes] = useState<string[] | null>(null)
+  const [dialog, setDialog] = useState<'disable' | 'renew' | null>(null)
+
+  function submitEnable(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!code.trim() || !password) return
+    enable.mutate({ code, currentPassword: password }, { onSuccess: backupCodes => { setCodes(backupCodes); setup.reset(); setCode(''); setPassword('') } })
+  }
+
+  return <section className="overview-panel account-section" aria-labelledby="account-two-factor-title">
+    <h2 id="account-two-factor-title">Logowanie dwuetapowe</h2>
+    {status.isPending ? <p role="status"><LoaderCircle size={18} className="spin" />Wczytywanie…</p>
+      : status.isError ? <div role="alert" className="dashboard-error">{status.error.message}
+        <button type="button" onClick={() => void status.refetch()}>Wczytaj ponownie</button></div>
+      : codes ? <BackupCodeList codes={codes} onDone={() => setCodes(null)} />
+      : status.data.enabled ? <>
+        <p className="field-hint">Logowanie dwuetapowe jest włączone. Przy logowaniu podajesz hasło i kod z aplikacji. Pozostałe kody zapasowe: <strong>{status.data.backupCodesLeft}</strong>.</p>
+        <div className="dialog-actions">
+          <button type="button" className="button-secondary" onClick={() => { renew.reset(); setDialog('renew') }}>Utwórz nowe kody zapasowe</button>
+          <button type="button" className="button-secondary" onClick={() => { disable.reset(); setDialog('disable') }}>Wyłącz logowanie dwuetapowe</button>
+        </div>
+      </>
+      : !status.data.available ? <p className="field-hint">Logowanie dwuetapowe nie jest włączone na tym serwerze. Skontaktuj się z administratorem serwisu.</p>
+      : setup.data ? <form onSubmit={submitEnable} aria-label="Włączanie logowania dwuetapowego">
+        <p className="field-hint">1. Zeskanuj kod QR aplikacją uwierzytelniającą (np. Google Authenticator, Microsoft Authenticator, Aegis) albo wpisz w niej klucz ręcznie.</p>
+        <div className="two-factor-setup">
+          <QrCode value={setup.data.uri} label="Kod QR do dodania konta HourForge w aplikacji uwierzytelniającej" />
+          <p className="field-hint">Klucz: <code className="two-factor-secret">{setup.data.secret.match(/.{1,4}/g)?.join(' ')}</code></p>
+        </div>
+        <p className="field-hint">2. Wpisz kod pokazany w aplikacji i obecne hasło.</p>
+        <div className="field-group"><label htmlFor="two-factor-setup-code">Kod z aplikacji</label>
+          <input className="text-input" id="two-factor-setup-code" inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={code} disabled={enable.isPending}
+            onChange={event => { setCode(event.target.value); if (enable.isError) enable.reset() }} /></div>
+        <div className="field-group"><label htmlFor="two-factor-setup-password">Obecne hasło</label>
+          <input className="text-input" id="two-factor-setup-password" type="password" autoComplete="current-password" value={password} disabled={enable.isPending}
+            onChange={event => { setPassword(event.target.value); if (enable.isError) enable.reset() }} /></div>
+        {enable.isError && <p className="form-error" role="alert">{enable.error.message}</p>}
+        <div className="dialog-actions">
+          <button type="button" className="button-secondary" disabled={enable.isPending} onClick={() => { setup.reset(); enable.reset() }}>Anuluj</button>
+          <button type="submit" className="button-primary" disabled={enable.isPending || !code.trim() || !password}>
+            {enable.isPending && <LoaderCircle size={16} className="spin" />}Włącz</button>
+        </div>
+      </form>
+      : <>
+        <p className="field-hint">Chroń konto drugim krokiem logowania: po haśle podasz kod z aplikacji uwierzytelniającej w telefonie.</p>
+        <button type="button" className="button-secondary" disabled={setup.isPending} onClick={() => setup.mutate()}>
+          {setup.isPending && <LoaderCircle size={16} className="spin" />}Włącz logowanie dwuetapowe</button>
+        {setup.isError && <p className="form-error" role="alert">{setup.error.message}</p>}
+      </>}
+    {dialog === 'disable' && <PasswordConfirm title="Wyłącz logowanie dwuetapowe" action="Wyłącz"
+      description="Do logowania wystarczy wtedy samo hasło. Kody zapasowe przestaną działać."
+      busy={disable.isPending} error={disable.error?.message}
+      onConfirm={currentPassword => disable.mutate(currentPassword, { onSuccess: () => setDialog(null) })} onClose={() => setDialog(null)} />}
+    {dialog === 'renew' && <PasswordConfirm title="Nowe kody zapasowe" action="Utwórz kody"
+      description="Dotychczasowe kody zapasowe przestaną działać."
+      busy={renew.isPending} error={renew.error?.message}
+      onConfirm={currentPassword => renew.mutate(currentPassword, { onSuccess: backupCodes => { setDialog(null); setCodes(backupCodes) } })} onClose={() => setDialog(null)} />}
+  </section>
+}
+
 function LoginHistorySection({ userId }: { userId: string }) {
   const history = useLoginHistory(userId)
   return <section className="overview-panel account-section" aria-labelledby="account-logins-title">
@@ -284,6 +378,7 @@ export function AccountPanel({ user }: { user: User }) {
     <PreferencesSection userId={user.id} />
     <EmailChangeSection />
     <PasswordSection />
+    <TwoFactorSection userId={user.id} />
     <SignOutSection userId={user.id} />
     <LoginHistorySection userId={user.id} />
     <DataSection />

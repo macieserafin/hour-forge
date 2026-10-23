@@ -26,10 +26,8 @@ import pl.macieserafin.hourforge.security.SessionVersionFilter;
 import pl.macieserafin.hourforge.security.RateLimitProperties;
 import pl.macieserafin.hourforge.security.TooManyRequestsException;
 import pl.macieserafin.hourforge.session.ActivityFilter;
-import pl.macieserafin.hourforge.session.DeviceInfo;
-import pl.macieserafin.hourforge.session.DeviceSessions;
-import pl.macieserafin.hourforge.session.GeoLocator;
-import pl.macieserafin.hourforge.session.LoginHistory;
+import pl.macieserafin.hourforge.session.SignInCompletion;
+import pl.macieserafin.hourforge.twofactor.TwoFactorSignIn;
 import pl.macieserafin.hourforge.session.SessionConfig;
 import pl.macieserafin.hourforge.user.UserRepository;
 
@@ -42,7 +40,6 @@ public class SecurityConfig {
     private static final String LOGIN_URL = "/api/auth/login";
     private static final String EMAIL_PARAMETER = "email";
     private static final String REMEMBER_PARAMETER = "rememberMe";
-    static final java.time.Duration REMEMBER_FOR = java.time.Duration.ofDays(30);
 
     @Bean
     PasswordEncoder passwordEncoder() {
@@ -51,8 +48,8 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, LoginAttemptService loginAttempts,
-                                            UserCredentialRepository credentials, DeviceSessions devices,
-                                            LoginHistory logins, GeoLocator locator, UserRepository users, Clock clock) throws Exception {
+                                            UserCredentialRepository credentials, SignInCompletion signIns,
+                                            TwoFactorSignIn twoFactor, UserRepository users, Clock clock) throws Exception {
         return http
                 .headers(headers -> headers.referrerPolicy(policy -> policy.policy(
                         org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
@@ -62,7 +59,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/email-verification/confirm",
                                 "/api/auth/email-verification/resend", "/api/auth/password-reset/request",
-                                "/api/auth/password-reset/confirm", "/api/auth/email-change/confirm", "/api/notifications/unsubscribe").permitAll()
+                                "/api/auth/password-reset/confirm", "/api/auth/email-change/confirm", "/api/notifications/unsubscribe", "/api/auth/two-factor").permitAll()
                         .anyRequest().authenticated())
                 .requestCache(cache -> cache.disable())
                 .exceptionHandling(exceptions -> exceptions
@@ -87,15 +84,21 @@ public class SecurityConfig {
                             }
                             loginAttempts.recordSuccess(request.getParameter(EMAIL_PARAMETER), request.getRemoteAddr());
                             var remembered = "true".equals(request.getParameter(REMEMBER_PARAMETER));
-                            if (remembered) rememberDevice(request);
-                            var device = DeviceInfo.of(request, locator);
-                            devices.recordSignIn(request, device, remembered);
-                            if (authentication.getPrincipal() instanceof AppUserPrincipal principal) logins.recordSuccess(principal.getUserId(), device);
+                            var userId = ((AppUserPrincipal) authentication.getPrincipal()).getUserId();
+                            if (twoFactor.required(userId)) {
+                                // Not signed in yet: the session waits for the code (POST /api/auth/two-factor).
+                                twoFactor.begin(request, userId, remembered);
+                                response.setStatus(HttpServletResponse.SC_ACCEPTED);
+                                response.setContentType("application/json");
+                                response.getWriter().write("{\"code\":\"TWO_FACTOR_REQUIRED\"}");
+                                return;
+                            }
+                            signIns.complete(request, userId, remembered);
                             response.setStatus(HttpServletResponse.SC_NO_CONTENT);
                         })
                         .failureHandler((request, response, exception) -> {
                             loginAttempts.recordFailure(request.getParameter(EMAIL_PARAMETER), request.getRemoteAddr());
-                            logins.recordFailure(request.getParameter(EMAIL_PARAMETER), DeviceInfo.of(request, locator));
+                            signIns.failPassword(request, request.getParameter(EMAIL_PARAMETER));
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                         })
                         .permitAll())
@@ -105,15 +108,6 @@ public class SecurityConfig {
                         .logoutSuccessHandler((request, response, authentication) ->
                                 response.setStatus(HttpServletResponse.SC_NO_CONTENT)))
                 .build();
-    }
-
-    /**
-     * "Remember me": this session may stay idle for 30 days, and its cookie is made persistent so it survives closing
-     * the browser (see {@link SessionConfig}).
-     */
-    private static void rememberDevice(HttpServletRequest request) {
-        request.getSession().setMaxInactiveInterval((int) SessionConfig.REMEMBER_FOR.toSeconds());
-        request.setAttribute(SessionConfig.REMEMBER_ATTRIBUTE, Boolean.TRUE);
     }
 
     // Not a bean: a Filter bean would also be registered in the servlet container outside the security chain.

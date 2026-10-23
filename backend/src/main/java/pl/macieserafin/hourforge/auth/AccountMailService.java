@@ -72,6 +72,16 @@ public class AccountMailService {
                         + frontendUrl + "/account#sessions\n");
     }
 
+    /** A security message: always sent, whatever the notification settings say. */
+    public void sendTwoFactorChanged(User user, boolean enabled) {
+        sender.send(user.getEmail(), enabled ? "Włączono logowanie dwuetapowe w HourForge" : "Wyłączono logowanie dwuetapowe w HourForge",
+                "Cześć " + user.getDisplayName() + ",\n\n"
+                        + (enabled ? "na Twoim koncie włączono logowanie dwuetapowe. Od teraz przy logowaniu podasz też kod z aplikacji "
+                                + "uwierzytelniającej. Zachowaj kody zapasowe w bezpiecznym miejscu.\n"
+                                : "na Twoim koncie wyłączono logowanie dwuetapowe. Do logowania wystarczy teraz samo hasło.\n")
+                        + "\nJeśli to nie Ty, od razu zmień hasło:\n" + frontendUrl + "/account#sessions\n");
+    }
+
     public void sendEmailChanged(String oldEmail, String newEmail) {
         sender.send(oldEmail, "Adres e-mail konta w HourForge został zmieniony",
                 "Adres e-mail Twojego konta w HourForge zmieniono na " + newEmail + ". Od teraz logujesz się nowym adresem.\n\n"

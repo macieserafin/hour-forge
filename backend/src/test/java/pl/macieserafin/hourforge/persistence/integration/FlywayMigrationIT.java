@@ -45,7 +45,7 @@ class FlywayMigrationIT {
                             ('00000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000002',
                             '00000000-0000-0000-0000-000000000001', 'legacy-expired', '2000-01-01')
                         """);
-                assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(27);
+                assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(28);
                 try (var result = statement.executeQuery("SELECT last_active_at IS NOT NULL FROM users WHERE id = '00000000-0000-0000-0000-000000000001'")) {
                     assertThat(result.next()).isTrue();
                     assertThat(result.getBoolean(1)).isTrue();

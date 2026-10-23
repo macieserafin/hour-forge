@@ -69,7 +69,7 @@ export default async function globalSetup() {
         // Background jobs have their own tests; a browser run must not be disturbed by them.
         JOBS_ENABLED: 'false',
         JIRA_INTEGRATION_ENABLED: 'true', JIRA_CLIENT_ID: 'e2e-client', JIRA_CLIENT_SECRET: 'e2e-client-secret-only',
-        JIRA_REDIRECT_URI: redirectUri, JIRA_TOKEN_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
+        JIRA_REDIRECT_URI: redirectUri, JIRA_TOKEN_ENCRYPTION_KEY: randomBytes(32).toString('base64'), TWO_FACTOR_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
         APP_JIRA_AUTHBASEURL: atlassian.url, APP_JIRA_APIBASEURL: atlassian.url },
       stdio: ['ignore', 'pipe', 'pipe'],
     })

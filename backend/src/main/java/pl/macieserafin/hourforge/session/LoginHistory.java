@@ -62,6 +62,11 @@ public class LoginHistory {
                 .ifPresent(user -> events.save(new LoginEvent(user.getId(), clock.instant(), LoginEvent.Outcome.FAILED, device)));
     }
 
+    @Transactional
+    public void recordFailure(UUID userId, DeviceInfo device) {
+        events.save(new LoginEvent(userId, clock.instant(), LoginEvent.Outcome.FAILED, device));
+    }
+
     @Transactional(readOnly = true)
     public History list(UUID userId) {
         var entries = events.findByUserIdOrderByOccurredAtDesc(userId, PageRequest.of(0, SHOWN)).stream()

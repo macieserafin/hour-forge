@@ -24,6 +24,7 @@ import pl.macieserafin.hourforge.team.TeamRepository;
 import pl.macieserafin.hourforge.team.TeamRole;
 import pl.macieserafin.hourforge.timeentry.EntryType;
 import pl.macieserafin.hourforge.timeentry.TimeEntryRepository;
+import pl.macieserafin.hourforge.twofactor.TwoFactorService;
 import pl.macieserafin.hourforge.user.UserRepository;
 
 import java.time.Clock;
@@ -46,6 +47,7 @@ public class AccountDataService {
     private final UserPreferencesRepository preferenceRows;
     private final EntryTemplateRepository entryTemplates;
     private final LoginEventRepository logins;
+    private final TwoFactorService twoFactor;
     private final PreferencesService preferences;
     private final PasswordEncoder encoder;
     private final PasswordChangeAttempts attempts;
@@ -58,7 +60,7 @@ public class AccountDataService {
                               TeamRepository teams, TimeEntryRepository entries, TeamInviteRepository invites,
                               EmailTokenRepository tokens, JiraUserAuthorizationRepository jiraAuthorizations,
                               OAuthStateRepository oauthStates, UserPreferencesRepository preferenceRows, EntryTemplateRepository entryTemplates,
-                              LoginEventRepository logins,
+                              LoginEventRepository logins, TwoFactorService twoFactor,
                               PreferencesService preferences, PasswordEncoder encoder, PasswordChangeAttempts attempts,
                               AccountMailService mail, RateLimiter limiter, RateLimitProperties limits, Clock clock) {
         this.users = users;
@@ -73,6 +75,7 @@ public class AccountDataService {
         this.preferenceRows = preferenceRows;
         this.entryTemplates = entryTemplates;
         this.logins = logins;
+        this.twoFactor = twoFactor;
         this.preferences = preferences;
         this.encoder = encoder;
         this.attempts = attempts;
@@ -141,6 +144,7 @@ public class AccountDataService {
         preferenceRows.deleteByUserId(userId);
         entryTemplates.deleteAllByUserId(userId);
         logins.deleteByUserId(userId);
+        twoFactor.remove(userId);
         var user = credential.getUser();
         var oldEmail = user.getEmail();
         credentials.delete(credential);

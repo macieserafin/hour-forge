@@ -1,5 +1,5 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { confirmEmail, confirmEmailChange, confirmPasswordReset, getUser, login, logout, register, requestPasswordReset, resendVerification } from './api'
+import { answerTwoFactor, confirmEmail, confirmEmailChange, confirmPasswordReset, getUser, login, logout, register, requestPasswordReset, resendVerification } from './api'
 
 export const sessionOptions = queryOptions({
   queryKey: ['session'],
@@ -40,6 +40,18 @@ export function useLogin() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: login,
+    onSuccess: async result => {
+      // With two-step sign-in the session starts only after the code.
+      if (result === 'SIGNED_IN') await client.invalidateQueries({ queryKey: sessionOptions.queryKey })
+    },
+  })
+}
+
+export function useAnswerTwoFactor() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: answerTwoFactor,
+    retry: false,
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: sessionOptions.queryKey })
     },

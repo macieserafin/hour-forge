@@ -246,13 +246,15 @@ async function getCsrf(): Promise<CsrfToken> {
   return response.json() as Promise<CsrfToken>
 }
 
-export async function login({ email, password, rememberMe }: { email: string; password: string; rememberMe?: boolean }): Promise<void> {
+/** Signs in with the password; accounts with two-step sign-in then wait for a code ({@link answerTwoFactor}). */
+export async function login({ email, password, rememberMe }: { email: string; password: string; rememberMe?: boolean }): Promise<'SIGNED_IN' | 'TWO_FACTOR_REQUIRED'> {
   const csrf = await getCsrf()
   const response = await request('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', [csrf.headerName]: csrf.token },
     body: new URLSearchParams({ email: email.trim(), password, ...(rememberMe ? { rememberMe: 'true' } : {}) }),
   })
+  if (response.status === 202) return 'TWO_FACTOR_REQUIRED'
   if (response.status === 429) throw new ApiError(429, tooManyRequestsMessage(response))
   if (response.status === 401) throw new ApiError(401, 'Nieprawidłowy adres e-mail lub hasło.')
   if (response.status === 403) {
@@ -263,6 +265,20 @@ export async function login({ email, password, rememberMe }: { email: string; pa
     throw new ApiError(403, 'Sesja formularza wygasła. Spróbuj zalogować się ponownie.')
   }
   if (!response.ok) throw new ApiError(response.status, 'Logowanie jest chwilowo niedostępne. Spróbuj ponownie.')
+  return 'SIGNED_IN'
+}
+
+/** The second step of signing in: a code from the authenticator app or a backup code. */
+export async function answerTwoFactor(code: string): Promise<void> {
+  const csrf = await getCsrf()
+  const response = await request('/api/auth/two-factor', { method: 'POST',
+    headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token }, body: JSON.stringify({ code: code.trim() }) })
+  if (response.ok) return
+  if (response.status === 429) throw new ApiError(429, tooManyRequestsMessage(response))
+  if (response.status === 400) throw new ApiError(400, 'Nieprawidłowy kod. Sprawdź kod w aplikacji i spróbuj ponownie.')
+  if (response.status === 401) throw new ApiError(401, 'Czas na podanie kodu minął albo było zbyt wiele prób. Zaloguj się ponownie.', 'SIGN_IN_AGAIN')
+  if (response.status === 403) throw new ApiError(403, 'Sesja formularza wygasła. Zaloguj się ponownie.', 'SIGN_IN_AGAIN')
+  throw new ApiError(response.status, 'Logowanie jest chwilowo niedostępne. Spróbuj ponownie.')
 }
 
 async function publicPost(path: string, body: unknown, messages: Record<number, string>, fallback: string) {
@@ -373,6 +389,44 @@ export interface LoginHistory {
   entries: { occurredAt: string; successful: boolean; browser: string | null; system: string | null; address: string | null; location: string | null }[]
   /** Credit required by the location database licence; null when places are not shown. */
   locationSource: string | null
+}
+
+export interface TwoFactorStatus {
+  /** False when the server has no key for two-step sign-in. */
+  available: boolean
+  enabled: boolean
+  backupCodesLeft: number
+}
+
+export async function getTwoFactorStatus(signal?: AbortSignal): Promise<TwoFactorStatus> {
+  const response = await request('/api/account/two-factor', { signal })
+  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.' : 'Nie udało się wczytać ustawień logowania dwuetapowego.')
+  return response.json() as Promise<TwoFactorStatus>
+}
+
+const twoFactorMessages = { 400: 'Sprawdź kod z aplikacji i obecne hasło.', 409: 'Ustawienia logowania dwuetapowego zmieniły się. Odśwież stronę.',
+  503: 'Logowanie dwuetapowe nie jest skonfigurowane na tym serwerze.' }
+
+export async function startTwoFactorSetup(): Promise<{ secret: string; uri: string }> {
+  const response = await accountRequest('/api/account/two-factor/setup', 'POST', {}, twoFactorMessages, 'Nie udało się rozpocząć konfiguracji. Spróbuj ponownie.')
+  return response.json() as Promise<{ secret: string; uri: string }>
+}
+
+export async function enableTwoFactor(input: { code: string; currentPassword: string }): Promise<string[]> {
+  const response = await accountRequest('/api/account/two-factor/enable', 'POST', { code: input.code.replace(/\s/g, ''), currentPassword: input.currentPassword },
+    twoFactorMessages, 'Nie udało się włączyć logowania dwuetapowego. Spróbuj ponownie.')
+  return ((await response.json()) as { codes: string[] }).codes
+}
+
+export async function disableTwoFactor(currentPassword: string): Promise<void> {
+  await accountRequest('/api/account/two-factor/disable', 'POST', { currentPassword },
+    { ...twoFactorMessages, 400: 'Obecne hasło jest nieprawidłowe.' }, 'Nie udało się wyłączyć logowania dwuetapowego. Spróbuj ponownie.')
+}
+
+export async function renewBackupCodes(currentPassword: string): Promise<string[]> {
+  const response = await accountRequest('/api/account/two-factor/backup-codes', 'POST', { currentPassword },
+    { ...twoFactorMessages, 400: 'Obecne hasło jest nieprawidłowe.' }, 'Nie udało się utworzyć nowych kodów. Spróbuj ponownie.')
+  return ((await response.json()) as { codes: string[] }).codes
 }
 
 export async function getLoginHistory(signal?: AbortSignal): Promise<LoginHistory> {
