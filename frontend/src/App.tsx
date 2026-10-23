@@ -59,6 +59,7 @@ export function App() {
     <Route path="/integrations" element={user ? <DashboardPage user={user} section="integrations" /> : signIn} />
     <Route path="/whats-new" element={user ? <DashboardPage user={user} section="whats-new" /> : signIn} />
     <Route path="/account" element={user ? <DashboardPage user={user} section="account" /> : signIn} />
+    <Route path="/operator" element={user ? user.operator ? <DashboardPage user={user} section="operator" /> : <Navigate to="/dashboard" replace /> : signIn} />
     <Route path="/invite/:token" element={user ? <InvitePage user={user} /> : signIn} />
     <Route path="*" element={user ? <StartRedirect userId={user.id} /> : <Navigate to="/login" replace />} />
   </Routes>

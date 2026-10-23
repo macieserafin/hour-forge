@@ -127,6 +127,23 @@ public class AccountDataService {
             attempts.recordFailure(userId);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect");
         }
+        anonymize(userId);
+        attempts.reset(userId);
+    }
+
+    /**
+     * Removal by the instance operator (abuse) or by the retention of unused accounts: the same anonymization, without
+     * the password. Owned teams still have to be handed over or deleted first.
+     */
+    @Transactional
+    public void deleteWithoutPassword(UUID userId) {
+        var user = users.findById(userId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (user.getDeletedAt() != null) throw new ResponseStatusException(HttpStatus.CONFLICT, "The account is already deleted");
+        anonymize(userId);
+    }
+
+    private void anonymize(UUID userId) {
+        var credential = credentials.findLockedByUserId(userId);
         // Same locks as ownership transfer and team deletion, taken in a fixed order, before the roles are read.
         users.findLockedForTimeEntryById(userId);
         members.findActiveTeamIds(userId).forEach(teams::findLockedById);
@@ -145,12 +162,11 @@ public class AccountDataService {
         entryTemplates.deleteAllByUserId(userId);
         logins.deleteByUserId(userId);
         twoFactor.remove(userId);
-        var user = credential.getUser();
+        var user = users.findById(userId).orElseThrow();
         var oldEmail = user.getEmail();
-        credentials.delete(credential);
+        credential.ifPresent(credentials::delete);
         user.anonymize("deleted-" + userId + "@deleted.invalid", DELETED_USER_NAME, now);
         users.flush();
-        attempts.reset(userId);
         mail.sendAccountDeleted(oldEmail);
     }
 }

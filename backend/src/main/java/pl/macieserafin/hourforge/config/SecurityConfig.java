@@ -82,6 +82,14 @@ public class SecurityConfig {
                                 response.getWriter().write("{\"code\":\"EMAIL_NOT_VERIFIED\"}");
                                 return;
                             }
+                            if (authentication.getPrincipal() instanceof AppUserPrincipal principal && principal.isBlocked()) {
+                                // Told only after a right password, like the unconfirmed address above.
+                                new SecurityContextLogoutHandler().logout(request, response, authentication);
+                                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                                response.setContentType("application/json");
+                                response.getWriter().write("{\"code\":\"ACCOUNT_BLOCKED\"}");
+                                return;
+                            }
                             loginAttempts.recordSuccess(request.getParameter(EMAIL_PARAMETER), request.getRemoteAddr());
                             var remembered = "true".equals(request.getParameter(REMEMBER_PARAMETER));
                             var userId = ((AppUserPrincipal) authentication.getPrincipal()).getUserId();

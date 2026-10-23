@@ -3,6 +3,8 @@ export interface User {
   id: string
   email: string
   displayName: string
+  /** Listed by the server as an operator of this instance; only decides whether the panel is offered. */
+  operator?: boolean
 }
 
 export type TeamRole = 'OWNER' | 'ADMIN' | 'MEMBER'
@@ -262,6 +264,9 @@ export async function login({ email, password, rememberMe }: { email: string; pa
     if (body?.code === 'EMAIL_NOT_VERIFIED') {
       throw new ApiError(403, 'Potwierdź adres e-mail, aby się zalogować. Link wysłaliśmy po rejestracji.', 'EMAIL_NOT_VERIFIED')
     }
+    if (body?.code === 'ACCOUNT_BLOCKED') {
+      throw new ApiError(403, 'To konto zostało zablokowane przez operatora serwisu. Jeśli to pomyłka, skontaktuj się z administratorem.', 'ACCOUNT_BLOCKED')
+    }
     throw new ApiError(403, 'Sesja formularza wygasła. Spróbuj zalogować się ponownie.')
   }
   if (!response.ok) throw new ApiError(response.status, 'Logowanie jest chwilowo niedostępne. Spróbuj ponownie.')
@@ -317,8 +322,16 @@ export interface RegistrationInput {
 }
 
 /** Settings the server shares before sign-in. */
+export interface Announcement {
+  message: string
+  level: 'INFO' | 'WARNING'
+  updatedAt: string
+}
+
 export interface PublicConfig {
   botCheckSiteKey: string | null
+  /** The notice the instance operator shows to everybody. */
+  announcement?: Announcement | null
 }
 
 export async function getPublicConfig(signal?: AbortSignal): Promise<PublicConfig> {
@@ -1196,3 +1209,77 @@ export type UnsubscribeKind = 'TEAM_EVENTS' | 'WEEKLY_REPORT' | 'LONG_TIMER'
 export const unsubscribe = (input: { token: string; kind: UnsubscribeKind }) => publicPost('/api/notifications/unsubscribe', input,
   { 400: 'Link jest nieprawidłowy.', 404: 'Link jest nieprawidłowy albo nie jest już aktualny. Ustawienia powiadomień znajdziesz w koncie.' },
   'Nie udało się wypisać z wiadomości. Spróbuj ponownie.')
+
+export interface OperatorStats {
+  accounts: number
+  unconfirmed: number
+  blocked: number
+  activeLastWeek: number
+  activeLastMonth: number
+  twoFactor: number
+  teams: number
+  timeEntries: number
+}
+
+export interface OperatorAccount {
+  id: string
+  email: string
+  displayName: string
+  createdAt: string
+  lastActiveAt: string | null
+  confirmed: boolean
+  blockedAt: string | null
+  blockedReason: string | null
+  twoFactor: boolean
+  ownedTeams: number
+}
+
+export interface OperatorTeam {
+  id: string
+  name: string
+  createdAt: string
+  archivedAt: string | null
+  members: number
+  ownerEmail: string | null
+  timeEntries: number
+}
+
+export interface OperatorPage<T> {
+  items: T[]
+  page: number
+  hasMore: boolean
+}
+
+async function operatorRequest<T>(path: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
+  const csrf = method === 'GET' ? null : await getCsrf()
+  const response = await request(path, { method, signal,
+    headers: csrf ? { [csrf.headerName]: csrf.token, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) } : undefined,
+    body: body === undefined ? undefined : JSON.stringify(body) })
+  if (!response.ok) {
+    throw new ApiError(response.status, {
+      400: 'Sprawdź wpisane dane.',
+      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      403: 'Panel operatora jest dostępny tylko dla operatorów tej instancji.',
+      404: 'Nie znaleziono konta lub zespołu. Odśwież listę.',
+      409: 'Tego nie da się teraz zrobić: konto jest właścicielem zespołów albo zmieniło się w międzyczasie. Odśwież listę.',
+    }[response.status] ?? 'Nie udało się wykonać operacji. Spróbuj ponownie.')
+  }
+  return (response.status === 204 ? null : await response.json()) as T
+}
+
+const pageQuery = (query: string, page: number) => `?${new URLSearchParams({ ...(query.trim() ? { query: query.trim() } : {}), page: String(page) })}`
+
+export const getOperatorStats = (signal?: AbortSignal) => operatorRequest<OperatorStats>('/api/operator/stats', 'GET', undefined, signal)
+export const getOperatorAccounts = (query: string, page: number, signal?: AbortSignal) =>
+  operatorRequest<OperatorPage<OperatorAccount>>(`/api/operator/accounts${pageQuery(query, page)}`, 'GET', undefined, signal)
+export const getOperatorTeams = (query: string, page: number, signal?: AbortSignal) =>
+  operatorRequest<OperatorPage<OperatorTeam>>(`/api/operator/teams${pageQuery(query, page)}`, 'GET', undefined, signal)
+export const blockAccount = ({ id, reason }: { id: string; reason: string }) =>
+  operatorRequest<null>(`/api/operator/accounts/${encodeURIComponent(id)}/block`, 'POST', { reason: reason.trim() })
+export const unblockAccount = (id: string) => operatorRequest<null>(`/api/operator/accounts/${encodeURIComponent(id)}/unblock`, 'POST')
+export const turnOffTwoFactorFor = (id: string) => operatorRequest<null>(`/api/operator/accounts/${encodeURIComponent(id)}/two-factor/disable`, 'POST')
+export const deleteAccountAsOperator = (id: string) => operatorRequest<null>(`/api/operator/accounts/${encodeURIComponent(id)}`, 'DELETE')
+export const deleteTeamAsOperator = (id: string) => operatorRequest<null>(`/api/operator/teams/${encodeURIComponent(id)}`, 'DELETE')
+export const saveAnnouncement = (input: { message: string; level: 'INFO' | 'WARNING' }) =>
+  operatorRequest<Announcement>('/api/operator/announcement', 'PUT', { message: input.message.trim(), level: input.level })
+export const clearAnnouncement = () => operatorRequest<null>('/api/operator/announcement', 'DELETE')

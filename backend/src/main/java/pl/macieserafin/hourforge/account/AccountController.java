@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pl.macieserafin.hourforge.auth.AuthController.MeResponse;
+import pl.macieserafin.hourforge.operator.OperatorAccess;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
 import pl.macieserafin.hourforge.session.DeviceSessions;
 import pl.macieserafin.hourforge.session.SessionConfig;
@@ -31,8 +32,10 @@ public class AccountController {
     private final AccountService account;
     private final AccountDataService data;
     private final DeviceSessions devices;
+    private final OperatorAccess operators;
 
-    public AccountController(AccountService account, AccountDataService data, DeviceSessions devices) {
+    public AccountController(AccountService account, AccountDataService data, DeviceSessions devices, OperatorAccess operators) {
+        this.operators = operators;
         this.account = account;
         this.data = data;
         this.devices = devices;
@@ -42,7 +45,7 @@ public class AccountController {
     public MeResponse updateProfile(@AuthenticationPrincipal AppUserPrincipal principal,
                                     @Valid @RequestBody ProfileRequest request) {
         var user = account.updateDisplayName(principal.getUserId(), request.displayName());
-        return MeResponse.of(user);
+        return MeResponse.of(user, operators.isOperator(user));
     }
 
     @PostMapping("/password")

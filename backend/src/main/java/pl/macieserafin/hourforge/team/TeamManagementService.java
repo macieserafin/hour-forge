@@ -148,6 +148,16 @@ public class TeamManagementService {
     public void delete(UUID actorId, UUID teamId) {
         var team = ownedTeam(actorId, teamId);
         requireNoActiveTimers(team, "Stop active timers before deleting the team");
+        remove(team);
+    }
+
+    /** Removal of an abusive team by the instance operator: everything goes, running timers included. */
+    @Transactional
+    public void deleteByOperator(UUID teamId) {
+        remove(lockedTeam(teamId));
+    }
+
+    private void remove(Team team) {
         // Children first; the team row stays locked until the transaction commits.
         entries.deleteAllByTeamId(team.getId());
         entryTemplates.deleteAllByTeamId(team.getId());

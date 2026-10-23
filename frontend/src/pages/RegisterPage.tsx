@@ -1,10 +1,9 @@
 import { useState, type FormEvent } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, Eye, EyeOff, LoaderCircle, LockKeyhole, Mail, UserRound } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AuthLayout } from '../components/AuthLayout'
 import { BotCheckWidget } from '../components/BotCheckWidget'
-import { getPublicConfig } from '../lib/api'
+import { usePublicConfig } from '../lib/operator'
 import { useRegister } from '../lib/auth'
 import { loginUrl, safeReturnTo } from '../lib/navigation'
 import { registrationError } from '../lib/registration'
@@ -17,7 +16,7 @@ export function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [validation, setValidation] = useState('')
   const registration = useRegister()
-  const config = useQuery({ queryKey: ['public-config'], queryFn: ({ signal }) => getPublicConfig(signal), staleTime: Infinity, retry: 1 })
+  const config = usePublicConfig()
   const siteKey = config.data?.botCheckSiteKey ?? null
   const [botCheckToken, setBotCheckToken] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)

@@ -83,6 +83,7 @@ public class TwoFactorSignIn {
         var user = users.findById(pending.userId()).filter(found -> found.getDeletedAt() == null);
         if (user.isEmpty()) return Result.START_AGAIN;
         var principal = (AppUserPrincipal) userDetails.loadUserByUsername(user.get().getEmail());
+        if (principal.isBlocked()) return Result.START_AGAIN;
         request.changeSessionId();
         var context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(principal, null, List.of()));

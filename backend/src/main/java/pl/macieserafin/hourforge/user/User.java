@@ -37,6 +37,12 @@ public class User {
     @Column(name = "last_active_at")
     private Instant lastActiveAt;
 
+    @Column(name = "blocked_at")
+    private Instant blockedAt;
+
+    @Column(name = "blocked_reason")
+    private String blockedReason;
+
     protected User() {
     }
 
@@ -88,6 +94,24 @@ public class User {
         this.displayName = placeholderName;
         this.emailVerifiedAt = null;
         this.deletedAt = now;
+    }
+
+    public Instant getBlockedAt() {
+        return blockedAt;
+    }
+
+    public String getBlockedReason() {
+        return blockedReason;
+    }
+
+    public boolean isBlocked() {
+        return blockedAt != null;
+    }
+
+    /** Blocks sign-in (with a reason for the operator), or lifts the block when {@code at} is null. */
+    public void block(Instant at, String reason) {
+        this.blockedAt = at;
+        this.blockedReason = at == null ? null : reason;
     }
 
     public void setEmail(String email) {
