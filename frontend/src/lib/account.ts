@@ -5,6 +5,7 @@ import { ApiError, changePassword, deleteAccount, disableTwoFactor, downloadAcco
   uploadAvatar, uploadTeamLogo } from './api'
 import { saveBlob } from './download'
 import { sessionOptions } from './auth'
+import { clearBrowserStateOf } from './localState'
 import { teamsKey, useAuthError } from './teams'
 
 export function useUpdateProfile() {
@@ -79,12 +80,13 @@ export function useDownloadAccountData() {
     onSuccess: ({ blob, filename }) => saveBlob(blob, filename) })
 }
 
-export function useDeleteAccount() {
+export function useDeleteAccount(userId: string) {
   const client = useQueryClient()
   const handleError = useAuthError()
   return useMutation({ mutationFn: deleteAccount, retry: false, gcTime: 0, onError: handleError,
     onSuccess: async () => {
       await client.cancelQueries()
+      clearBrowserStateOf(userId)
       client.removeQueries({ predicate: query => query.queryKey[0] !== 'session' })
       client.setQueryData(sessionOptions.queryKey, null)
     } })

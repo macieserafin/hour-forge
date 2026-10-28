@@ -3,7 +3,7 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App } from '../../src/App'
 import { renderApp } from '../support/render'
-import { mockApi, json, user } from '../support/api'
+import { mockApi, json, user, timer } from '../support/api'
 
 let clicked: HTMLAnchorElement[] = []
 
@@ -68,4 +68,39 @@ it('explains a wrong password when deleting', async () => {
   await userEvent.type(dialog.getByLabelText('Obecne hasło'), 'wrong-password-value')
   await userEvent.click(dialog.getByRole('button', { name: 'Usuń konto na stałe' }))
   expect(await dialog.findByRole('alert')).toHaveTextContent('Obecne hasło jest nieprawidłowe.')
+})
+
+it('warns by name that a running timer is lost without saving its time', async () => {
+  mockApi({ 'GET /api/timer/active': () => json(timer) })
+  renderApp(<App />, '/account')
+  await userEvent.click(await screen.findByRole('button', { name: 'Usuń konto' }))
+  const dialog = within(screen.getByRole('dialog'))
+  expect(await dialog.findByText(/Masz uruchomiony timer.*nie zostanie zapisany/)).toBeVisible()
+})
+
+it('does not claim a running timer when there is none', async () => {
+  mockApi({ 'GET /api/timer/active': () => json(null) })
+  renderApp(<App />, '/account')
+  await userEvent.click(await screen.findByRole('button', { name: 'Usuń konto' }))
+  expect(within(screen.getByRole('dialog')).queryByText(/Masz uruchomiony timer/)).not.toBeInTheDocument()
+})
+
+it('removes what the browser keeps for the deleted account but not for other people', async () => {
+  window.localStorage.setItem(`hourforge:timer-draft:${user.id}:entry`, 'Secret draft of the work')
+  window.localStorage.setItem(`hourforge:long-timer-dismissed:${user.id}:entry`, '1')
+  window.localStorage.setItem(`hourforge:last-project:${user.id}:team`, 'project')
+  window.localStorage.setItem(`hourforge:whats-new-seen:${user.id}`, 'r1')
+  window.localStorage.setItem('hourforge:timer-draft:somebody-else:entry', 'Not mine')
+  let deleted = false
+  mockApi({ 'GET /api/me': () => deleted ? json(null, 401) : json(user),
+    'POST /api/account/delete': () => { deleted = true; return json(null, 204) } })
+  renderApp(<App />, '/account')
+  await userEvent.click(await screen.findByRole('button', { name: 'Usuń konto' }))
+  const dialog = within(screen.getByRole('dialog'))
+  await userEvent.type(dialog.getByLabelText('Obecne hasło'), 'Current-password-2026')
+  await userEvent.click(dialog.getByRole('button', { name: 'Usuń konto na stałe' }))
+  expect(await screen.findByRole('heading', { name: /Zaloguj/i })).toBeVisible()
+  const left = Object.keys(window.localStorage)
+  expect(left.filter(key => key.includes(`:${user.id}`))).toEqual([])
+  expect(left).toContain('hourforge:timer-draft:somebody-else:entry')
 })

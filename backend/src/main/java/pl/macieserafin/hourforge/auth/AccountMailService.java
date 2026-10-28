@@ -54,7 +54,7 @@ public class AccountMailService {
     public void sendAccountDeleted(String oldEmail) {
         sender.send(oldEmail, "Konto w HourForge zostało usunięte",
                 "Twoje konto w HourForge zostało usunięte. Imię, adres e-mail i hasło zostały usunięte; zapisane godziny pracy "
-                        + "pozostają w raportach zespołów pod nazwą „Użytkownik usunięty”.\n\n"
+                        + "pozostają w raportach zespołów pod nazwą „Użytkownik usunięty”. Trwający timer został odrzucony bez zapisania czasu.\n\n"
                         + "Jeśli to nie Ty, skontaktuj się z administratorem serwisu.\n");
     }
 

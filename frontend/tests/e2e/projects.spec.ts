@@ -15,6 +15,12 @@ test('select team, create, inspect, edit and archive projects', { tag: '@respons
   await form.getByLabel('Nazwa projektu').fill('   ')
   await form.getByRole('button', { name: 'Utwórz projekt', exact: true }).click()
   await expect(form.getByRole('alert')).toHaveText('Wpisz nazwę projektu.')
+  // Closing the dialog gives the focus back to the button that opened it (a real browser; jsdom does not move focus).
+  await page.keyboard.press('Escape')
+  await expect(form).not.toBeVisible()
+  await expect(page.getByRole('button', { name: 'Utwórz projekt', exact: true })).toBeFocused()
+  await page.getByRole('button', { name: 'Utwórz projekt', exact: true }).click()
+  await expect(form).toBeVisible()
   const projectName = `Projekt ${suffix}`
   await form.getByLabel('Nazwa projektu').fill(`  ${projectName}  `)
   await form.getByLabel('Opis', { exact: false }).fill('Pierwszy opis\nDruga linia')

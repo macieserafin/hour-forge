@@ -7,9 +7,16 @@ export function Modal({ title, busy, onClose, children }: { title: string; busy:
   useEffect(() => {
     const dialog = ref.current
     const previousOverflow = document.body.style.overflow
+    // The control that opened the dialog, found before the dialog takes the focus; it gets the focus back on close.
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
     document.body.style.overflow = 'hidden'
     dialog?.showModal()
-    return () => { dialog?.close(); document.body.style.overflow = previousOverflow }
+    return () => {
+      dialog?.close()
+      document.body.style.overflow = previousOverflow
+      // React has already detached the dialog here, so the browser cannot restore the focus by itself.
+      if (opener && opener !== document.body && opener.isConnected) opener.focus()
+    }
   }, [])
   return <dialog ref={ref} className="form-dialog" aria-labelledby={titleId}
     onKeyDown={event => {

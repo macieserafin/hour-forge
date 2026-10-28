@@ -6,6 +6,7 @@ import type { Preferences, User } from '../lib/api'
 import { defaultPreferences, usePreferences, useSavePreferences } from '../lib/preferences'
 import { useTeams } from '../lib/teams'
 import { deviceLabel, passwordChangeError, useChangePassword, useDeleteAccount, useDownloadAccountData, useEndSession, useLoginHistory, useRequestEmailChange, useSessions, useSignOutEverywhere, useProfilePicture, useTwoFactorActions, useTwoFactorStatus, useUpdateProfile } from '../lib/account'
+import { useActiveTimer } from '../lib/time'
 import { Avatar } from '../components/Avatar'
 import { PictureEditor } from '../components/PictureEditor'
 import { QrCode } from '../components/QrCode'
@@ -248,17 +249,19 @@ function DataSection() {
   </section>
 }
 
-function DeleteSection() {
-  const remove = useDeleteAccount()
+function DeleteSection({ userId }: { userId: string }) {
+  const remove = useDeleteAccount(userId)
+  const runningTimer = useActiveTimer(userId).data
   const [open, setOpen] = useState(false)
   const [password, setPassword] = useState('')
   return <section className="overview-panel account-section" aria-labelledby="account-delete-title">
     <h2 id="account-delete-title">Usuń konto</h2>
-    <p className="field-hint">Usuniemy Twoje imię, adres e-mail i hasło. Zapisane godziny pozostaną w raportach zespołów pod nazwą „Użytkownik usunięty”. Najpierw przekaż własność lub usuń zespoły, których jesteś właścicielem.</p>
+    <p className="field-hint">Usuniemy Twoje imię, adres e-mail i hasło. Zapisane godziny pozostaną w raportach zespołów pod nazwą „Użytkownik usunięty”. Trwający timer zostanie odrzucony bez zapisania jego czasu. Najpierw przekaż własność lub usuń zespoły, których jesteś właścicielem.</p>
     <button className="button-secondary" type="button" onClick={() => { remove.reset(); setPassword(''); setOpen(true) }}>Usuń konto</button>
     {open && <Modal title="Usuń konto" busy={remove.isPending} onClose={() => setOpen(false)}>
       <form onSubmit={event => { event.preventDefault(); if (password) remove.mutate(password) }}>
-        <p className="dialog-description">Tej operacji nie można cofnąć. Aktywny timer zostanie odrzucony, a Ty opuścisz wszystkie zespoły. Podaj hasło, aby potwierdzić.</p>
+        <p className="dialog-description">Tej operacji nie można cofnąć. Opuścisz wszystkie zespoły, a szkice opisów zapisane w tej przeglądarce zostaną usunięte. Podaj hasło, aby potwierdzić.</p>
+        {runningTimer && <p className="form-error">Masz uruchomiony timer. Po usunięciu konta zostanie odrzucony, a jego czas nie zostanie zapisany. Jeśli chcesz zachować te godziny, zatrzymaj timer przed usunięciem konta.</p>}
         <div className="field-group"><label htmlFor="account-delete-password">Obecne hasło</label>
           <input className="text-input" id="account-delete-password" type="password" autoComplete="current-password" disabled={remove.isPending} value={password} onChange={event => setPassword(event.target.value)} /></div>
         {remove.isError && <p className="form-error" role="alert">{remove.error.message}{remove.error.message.includes('zespoły') && <> <Link className="text-link" to="/teams">Przejdź do zespołów</Link></>}</p>}
@@ -403,6 +406,6 @@ export function AccountPanel({ user }: { user: User }) {
     <SignOutSection userId={user.id} />
     <LoginHistorySection userId={user.id} />
     <DataSection />
-    <DeleteSection />
+    <DeleteSection userId={user.id} />
   </div>
 }
