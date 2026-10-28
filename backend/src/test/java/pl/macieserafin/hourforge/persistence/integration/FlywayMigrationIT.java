@@ -28,7 +28,8 @@ class FlywayMigrationIT {
                         VALUES ('00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000002',
                                 'Migration project', 'Preserved description')
                         """);
-                var upgraded = Flyway.configure().dataSource(database.getJdbcUrl(), database.getUsername(), database.getPassword()).load();
+                var upgraded = Flyway.configure().dataSource(database.getJdbcUrl(), database.getUsername(), database.getPassword())
+                        .target("32").load();
                 statement.execute("""
                         INSERT INTO time_entries (id, user_id, team_id, project_id, entry_type, work_date, duration_seconds)
                         VALUES ('00000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000001',
@@ -46,6 +47,33 @@ class FlywayMigrationIT {
                             '00000000-0000-0000-0000-000000000001', 'legacy-expired', '2000-01-01')
                         """);
                 assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(31);
+                // These links existed before credential versions were recorded. Migration must not grant them
+                // the current version: the account might have changed since they were sent.
+                statement.execute("""
+                        INSERT INTO email_tokens (id, user_id, purpose, token_hash, new_email, expires_at)
+                        VALUES (gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'RESET_PASSWORD',
+                                repeat('a', 64), NULL, CURRENT_TIMESTAMP + interval '1 hour'),
+                               (gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'CHANGE_EMAIL',
+                                repeat('b', 64), 'new@example.test', CURRENT_TIMESTAMP + interval '1 day'),
+                               (gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'VERIFY_EMAIL',
+                                repeat('c', 64), NULL, CURRENT_TIMESTAMP + interval '1 day')
+                        """);
+                upgraded = Flyway.configure().dataSource(database.getJdbcUrl(), database.getUsername(), database.getPassword()).load();
+                // V33 binds links to credential versions, V34 adds the repeat-day request records, V35 the template tag, V36 the entry version.
+                assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(4);
+                try (var result = statement.executeQuery("SELECT min(version), (SELECT count(tag_id) FROM entry_templates) FROM time_entries")) {
+                    assertThat(result.next()).isTrue();
+                    assertThat(result.getInt(1)).isZero();
+                }
+                try (var result = statement.executeQuery("SELECT count(*) FROM copy_day_requests")) {
+                    assertThat(result.next()).isTrue();
+                    assertThat(result.getInt(1)).isZero();
+                }
+                try (var result = statement.executeQuery("SELECT count(*), bool_and(credential_version IS NULL) FROM email_tokens")) {
+                    assertThat(result.next()).isTrue();
+                    assertThat(result.getInt(1)).isEqualTo(3);
+                    assertThat(result.getBoolean(2)).isTrue();
+                }
                 try (var result = statement.executeQuery("SELECT last_active_at IS NOT NULL FROM users WHERE id = '00000000-0000-0000-0000-000000000001'")) {
                     assertThat(result.next()).isTrue();
                     assertThat(result.getBoolean(1)).isTrue();

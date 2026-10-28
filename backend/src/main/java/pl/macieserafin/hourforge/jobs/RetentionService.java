@@ -8,6 +8,7 @@ import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.invitation.TeamInviteRepository;
 import pl.macieserafin.hourforge.jira.OAuthStateRepository;
 import pl.macieserafin.hourforge.session.LoginEventRepository;
+import pl.macieserafin.hourforge.timeentry.CopyDayOperationRepository;
 import pl.macieserafin.hourforge.user.UserRepository;
 
 /** Removes data that has outlived its purpose: unconfirmed accounts, spent one-time tokens, stale invitations and old sign-ins. */
@@ -23,10 +24,12 @@ public class RetentionService {
     private final OAuthStateRepository oauthStates;
     private final TeamInviteRepository invitations;
     private final LoginEventRepository logins;
+    private final CopyDayOperationRepository copyDayRequests;
 
     public RetentionService(JobsProperties properties, UserRepository users, UserCredentialRepository credentials,
                             EmailTokenRepository tokens, OAuthStateRepository oauthStates, TeamInviteRepository invitations,
-                            LoginEventRepository logins) {
+                            LoginEventRepository logins, CopyDayOperationRepository copyDayRequests) {
+        this.copyDayRequests = copyDayRequests;
         this.properties = properties;
         this.users = users;
         this.credentials = credentials;
@@ -50,6 +53,7 @@ public class RetentionService {
         users.flush();
         int spent = tokens.deleteSpent(now.minus(properties.spentTokenAge()));
         int states = oauthStates.deleteExpired(now.minus(properties.spentTokenAge()));
+        copyDayRequests.deleteOlderThan(now.minus(properties.spentTokenAge()));
         int stale = invitations.deleteStale(now.minus(properties.staleInvitationAge()));
         int oldLogins = logins.deleteOlderThan(now.minus(properties.loginHistoryAge()));
         return new Purged(accounts, spent, states, stale, oldLogins);

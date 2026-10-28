@@ -159,4 +159,20 @@ class RetentionIT extends ApiIntegrationTestSupport {
         assertThat(second.accounts()).isZero();
         assertThat(second.invitations()).isGreaterThanOrEqualTo(0);
     }
+
+    @Test
+    void sweepsTheRecordsOfOldRepeatDayRequestsButKeepsRecentOnes() {
+        var person = fixtures.user("copy-day-retention@example.com", "Copy Day");
+        var team = UUID.randomUUID();
+        var old = UUID.randomUUID();
+        var recent = UUID.randomUUID();
+        for (var entry : java.util.Map.of(old, 8, recent, 1).entrySet()) {
+            jdbc.update("insert into copy_day_requests (user_id, request_id, team_id, from_date, to_date, copied, total_seconds, created_at) values (?, ?, ?, '2026-10-01', '2026-10-02', 1, 60, ?)",
+                    person.getId(), entry.getKey(), team, java.sql.Timestamp.from(now.minus(entry.getValue(), ChronoUnit.DAYS)));
+        }
+
+        retention.purge(now);
+
+        assertThat(jdbc.queryForList("select request_id from copy_day_requests where user_id = ?", UUID.class, person.getId())).containsExactly(recent);
+    }
 }

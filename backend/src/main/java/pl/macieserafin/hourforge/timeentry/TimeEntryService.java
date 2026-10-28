@@ -44,9 +44,12 @@ public class TimeEntryService {
     private final ProjectRepository projects;
     private final TagRepository tags;
     private final JiraConnectionRepository jiraConnections;
+    private final CopyDayOperationRepository copyDayOperations;
 
     public TimeEntryService(TimeEntryRepository entries, UserRepository users, TeamRepository teams,
-                            TeamMemberRepository members, ProjectRepository projects, TagRepository tags, JiraConnectionRepository jiraConnections, Clock clock) {
+                            TeamMemberRepository members, ProjectRepository projects, TagRepository tags, JiraConnectionRepository jiraConnections,
+                            CopyDayOperationRepository copyDayOperations, Clock clock) {
+        this.copyDayOperations = copyDayOperations;
         this.clock = clock;
         this.entries = entries;
         this.users = users;
@@ -131,7 +134,7 @@ public class TimeEntryService {
                 entry.getStartedAt(), entry.getEndedAt(), entry.getJiraIssueId(), entry.getJiraIssueKey(),
                 entry.getLastEditedAt(), entry.correctedByName(), entry.getProject().getColor() == null ? null : entry.getProject().getColor().name(),
                 entry.getTag() == null ? null : entry.getTag().getId(), entry.getTag() == null ? null : entry.getTag().getName(),
-                entry.getTag() == null || entry.getTag().getColor() == null ? null : entry.getTag().getColor().name())).toList();
+                entry.getTag() == null || entry.getTag().getColor() == null ? null : entry.getTag().getColor().name(), entry.getVersion())).toList();
         return new TimeEntryHistoryResponse(content, page, size, result.getTotalElements(), result.getTotalPages());
     }
 
@@ -319,6 +322,10 @@ public class TimeEntryService {
     }
 
     private TimeEntry applyUpdate(TimeEntry entry, UpdateTimeEntryRequest request, IssueLink link, User editor, boolean enforceRules) {
+        // A form opened before someone else's change must not silently overwrite it.
+        if (request.expectedVersion() != null && request.expectedVersion() != entry.getVersion()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "The entry was changed meanwhile; reload it and try again");
+        }
         var project = projects.findByIdAndTeamId(request.projectId(), entry.getTeam().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (!project.getId().equals(entry.getProject().getId()) && project.getArchivedAt() != null) {
@@ -431,7 +438,15 @@ public class TimeEntryService {
     /** Copies a whole day of one's own work to another day, e.g. "repeat yesterday". Nothing is copied unless all of it can be. */
     @Transactional
     public CopyDayResponse copyDay(UUID userId, CopyDayRequest request) {
+        // The person is locked first: two copies of the same request cannot run side by side.
         var user = lockUser(userId);
+        if (request.requestId() != null) {
+            var done = copyDayOperations.find(userId, request.requestId());
+            if (done.isPresent()) {
+                if (!done.get().answers(request)) throw new ResponseStatusException(HttpStatus.CONFLICT, "This request id was used for another copy");
+                return done.get().result();
+            }
+        }
         var team = teams.findLockedById(request.teamId()).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         members.findByTeamIdAndUserId(request.teamId(), userId).filter(member -> member.getLeftAt() == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
@@ -442,16 +457,28 @@ public class TimeEntryService {
         if (source.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "There is nothing to copy from that day");
         if (source.size() > MAX_COPIED_ENTRIES) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Too many entries to copy at once");
         long total = 0;
+        // Every copy is a new manual entry and has to pass what a new manual entry has to pass, before anything is saved.
+        var copies = new java.util.ArrayList<TimeEntry>();
         for (var original : source) {
+            requireManualDuration(original.getDurationSeconds());
+            if (original.getProject().getArchivedAt() != null) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived projects cannot receive new time entries");
+            }
             var copy = new TimeEntry(user, team, original.getProject(), EntryType.MANUAL, request.toDate(), null, null, original.getDurationSeconds(), original.getDescription());
             // The link was checked when it was made; a link to a disconnected site was already removed with the site.
-            copy.setTag(original.getTag());
+            copy.setTag(tagFor(team.getId(), original.getTag() == null ? null : original.getTag().getId(), null));
             if (original.getJiraIssueId() != null) copy.setJiraIssue(new IssueLink(original.getJiraConnectionId(), original.getJiraIssueId(), original.getJiraIssueKey()));
-            entries.save(copy);
+            requireTeamRules(team, copy.getDescription(), copy.getTag(), copy.getJiraIssueId() != null);
+            copies.add(copy);
             total += original.getDurationSeconds();
         }
+        entries.saveAll(copies);
         entries.flush();
-        return new CopyDayResponse(source.size(), total);
+        var result = new CopyDayResponse(source.size(), total);
+        if (request.requestId() != null) {
+            copyDayOperations.saveAndFlush(new CopyDayOperation(userId, request, result, clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS)));
+        }
+        return result;
     }
 
     @Transactional
@@ -562,6 +589,6 @@ public class TimeEntryService {
                 entry.getProject().getId(), entry.getEntryType(), entry.getWorkDate(), entry.getStartedAt(),
                 entry.getEndedAt(), entry.getDurationSeconds(), entry.getDescription(), entry.getCreatedAt(), entry.getUpdatedAt(),
                 entry.getPausedAt(), entry.getPausedDurationMicros() / 1_000_000.0, entry.getJiraIssueId(), entry.getJiraIssueKey(),
-                entry.getTag() == null ? null : entry.getTag().getId());
+                entry.getTag() == null ? null : entry.getTag().getId(), entry.getVersion());
     }
 }

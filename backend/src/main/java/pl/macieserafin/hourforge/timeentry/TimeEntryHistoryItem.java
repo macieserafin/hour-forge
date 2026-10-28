@@ -8,5 +8,5 @@ public record TimeEntryHistoryItem(UUID id, UUID teamId, UUID projectId, String 
                                    EntryType entryType, LocalDate workDate, int durationSeconds,
                                    String description, Instant startedAt, Instant endedAt,
                                    String jiraIssueId, String jiraIssueKey, Instant editedAt, String editedByName, String projectColor,
-                                   UUID tagId, String tagName, String tagColor) {
+                                   UUID tagId, String tagName, String tagColor, int version) {
 }

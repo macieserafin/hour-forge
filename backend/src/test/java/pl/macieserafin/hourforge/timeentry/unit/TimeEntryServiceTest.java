@@ -18,6 +18,7 @@ import pl.macieserafin.hourforge.team.TeamMember;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
 import pl.macieserafin.hourforge.team.TeamRole;
+import pl.macieserafin.hourforge.timeentry.CopyDayOperationRepository;
 import pl.macieserafin.hourforge.timeentry.EntryType;
 import pl.macieserafin.hourforge.timeentry.ManualTimeEntryRequest;
 import pl.macieserafin.hourforge.timeentry.StartTimerRequest;
@@ -43,12 +44,13 @@ class TimeEntryServiceTest {
     @Mock ProjectRepository projects;
     @Mock pl.macieserafin.hourforge.tag.TagRepository tags;
     @Mock pl.macieserafin.hourforge.jira.JiraConnectionRepository jiraConnections;
+    @Mock CopyDayOperationRepository copyDayOperations;
     private TimeEntryService service;
     private final User actor = user();
     private final Team team = team();
     private final Project project = project(team);
 
-    @BeforeEach void setup() { service = new TimeEntryService(entries, users, teams, members, projects, tags, jiraConnections, CLOCK); }
+    @BeforeEach void setup() { service = new TimeEntryService(entries, users, teams, members, projects, tags, jiraConnections, copyDayOperations, CLOCK); }
     private TimeEntry timer() {
         var entry = identified(new TimeEntry(actor, team, project, EntryType.TIMER, LocalDate.of(2026, 10, 19), NOW.minusSeconds(120), null, null, "Original"));
         when(users.findLockedForTimeEntryById(actor.getId())).thenReturn(Optional.of(actor));

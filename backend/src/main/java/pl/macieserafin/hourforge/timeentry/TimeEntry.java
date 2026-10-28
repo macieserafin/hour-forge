@@ -93,6 +93,10 @@ public class TimeEntry {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @jakarta.persistence.Version
+    @Column(name = "version", nullable = false)
+    private int version;
+
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
@@ -114,6 +118,10 @@ public class TimeEntry {
 
     public UUID getId() {
         return id;
+    }
+
+    public int getVersion() {
+        return version;
     }
 
     public Instant getLastEditedAt() {

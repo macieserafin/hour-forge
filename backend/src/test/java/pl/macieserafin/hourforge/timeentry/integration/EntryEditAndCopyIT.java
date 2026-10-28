@@ -156,4 +156,131 @@ class EntryEditAndCopyIT extends ApiIntegrationTestSupport {
         teams.saveAndFlush(frozen);
         send(post("/api/time-entries/copy-day"), principal, body).andExpect(status().isConflict());
     }
+
+    private String copyBody(LocalDate from, LocalDate to, String requestId) {
+        return "{\"teamId\":\"" + team.getId() + "\",\"fromDate\":\"" + from + "\",\"toDate\":\"" + to + "\""
+                + (requestId == null ? "" : ",\"requestId\":\"" + requestId + "\"") + "}";
+    }
+
+    @Test
+    void aForgottenTimerLongerThanADayCannotBecomeAManualEntryAndNothingIsCopied() throws Exception {
+        manual(worker, project, today.minusDays(1), 600, "Fine");
+        entries.saveAndFlush(new TimeEntry(worker, team, project, EntryType.TIMER, today.minusDays(1),
+                Instant.now().minus(40, ChronoUnit.HOURS), Instant.now().minus(10, ChronoUnit.HOURS), 30 * 3600, "Forgotten"));
+
+        send(post("/api/time-entries/copy-day"), principal, copyBody(today.minusDays(1), today, null)).andExpect(status().isBadRequest());
+
+        assertThat(entries.findDayOf(worker.getId(), team.getId(), today)).isEmpty();
+    }
+
+    @Test
+    void theRulesOfTheTeamApplyToEveryCopyAndNothingIsCopiedWhenOneBreaksThem() throws Exception {
+        manual(worker, project, today.minusDays(1), 600, "Described");
+        manual(worker, project, today.minusDays(1), 600, null);
+        var strict = teams.findById(team.getId()).orElseThrow();
+        strict.setRequireDescription(true);
+        teams.saveAndFlush(strict);
+
+        send(post("/api/time-entries/copy-day"), principal, copyBody(today.minusDays(1), today, null)).andExpect(status().isUnprocessableEntity());
+
+        assertThat(entries.findDayOf(worker.getId(), team.getId(), today)).isEmpty();
+    }
+
+    @Test
+    void anArchivedProjectCannotReceiveCopiesAndNothingIsCopied() throws Exception {
+        manual(worker, project, today.minusDays(1), 600, "Live");
+        manual(worker, other, today.minusDays(1), 600, "Archived later");
+        entityManager.flush();
+        jdbc.update("update projects set archived_at = now() where id = ?", other.getId());
+        entityManager.clear();
+
+        send(post("/api/time-entries/copy-day"), principal, copyBody(today.minusDays(1), today, null)).andExpect(status().isConflict());
+
+        assertThat(entries.findDayOf(worker.getId(), team.getId(), today)).isEmpty();
+    }
+
+    @Test
+    void repeatingTheSameRequestAfterALostResponseReturnsTheFirstResultWithoutCopyingAgain() throws Exception {
+        manual(worker, project, today.minusDays(1), 600, "Morning");
+        var id = java.util.UUID.randomUUID().toString();
+
+        send(post("/api/time-entries/copy-day"), principal, copyBody(today.minusDays(1), today, id))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.copied").value(1)).andExpect(jsonPath("$.totalSeconds").value(600));
+        send(post("/api/time-entries/copy-day"), principal, copyBody(today.minusDays(1), today, id))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.copied").value(1)).andExpect(jsonPath("$.totalSeconds").value(600));
+
+        assertThat(entries.findDayOf(worker.getId(), team.getId(), today)).hasSize(1);
+        // A new request id is a deliberate second copy.
+        send(post("/api/time-entries/copy-day"), principal, copyBody(today.minusDays(1), today, java.util.UUID.randomUUID().toString()))
+                .andExpect(status().isOk());
+        assertThat(entries.findDayOf(worker.getId(), team.getId(), today)).hasSize(2);
+    }
+
+    @Test
+    void aRequestIdAlreadyUsedForAnotherCopyIsRefused() throws Exception {
+        manual(worker, project, today.minusDays(2), 600, "Earlier");
+        manual(worker, project, today.minusDays(1), 600, "Morning");
+        var id = java.util.UUID.randomUUID().toString();
+        send(post("/api/time-entries/copy-day"), principal, copyBody(today.minusDays(1), today, id)).andExpect(status().isOk());
+
+        send(post("/api/time-entries/copy-day"), principal, copyBody(today.minusDays(2), today, id)).andExpect(status().isConflict());
+
+        assertThat(entries.findDayOf(worker.getId(), team.getId(), today)).hasSize(1);
+    }
+
+    @Test
+    void theSameRequestIdOfAnotherPersonIsNotAReplay() throws Exception {
+        manual(worker, project, today.minusDays(1), 600, "Mine");
+        manual(colleague, project, today.minusDays(1), 900, "Theirs");
+        var id = java.util.UUID.randomUUID().toString();
+
+        send(post("/api/time-entries/copy-day"), principal, copyBody(today.minusDays(1), today, id)).andExpect(status().isOk());
+        send(post("/api/time-entries/copy-day"), new AppUserPrincipal(colleague.getId(), colleague.getEmail(), "unused"),
+                copyBody(today.minusDays(1), today, id)).andExpect(status().isOk()).andExpect(jsonPath("$.totalSeconds").value(900));
+    }
+
+    private String editWithVersion(Project target, LocalDate date, int seconds, String description, Integer version) {
+        var body = edit(target, date, seconds, description);
+        return version == null ? body : body.replaceFirst("}$", ",\"expectedVersion\":" + version + "}");
+    }
+
+    @Test
+    void anEditFromAStaleFormIsRefusedInsteadOfOverwritingTheNewerChange() throws Exception {
+        var entry = manual(worker, project, today.minusDays(1), 600, "Original");
+        var url = "/api/time-entries/" + entry.getId();
+        var first = send(patch(url), principal, editWithVersion(project, today.minusDays(1), 900, "First edit", 0))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.version").value(1));
+
+        // A second form opened before the first edit still carries version 0.
+        send(patch(url), principal, editWithVersion(project, today.minusDays(1), 1200, "Second edit", 0)).andExpect(status().isConflict());
+
+        entityManager.flush();
+        entityManager.clear();
+        var stored = entries.findById(entry.getId()).orElseThrow();
+        assertThat(stored.getDescription()).isEqualTo("First edit");
+        assertThat(stored.getDurationSeconds()).isEqualTo(900);
+        send(patch(url), principal, editWithVersion(project, today.minusDays(1), 1200, "Second edit", 1)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(2));
+    }
+
+    @Test
+    void aManagersCorrectionFromAStaleFormIsRefusedToo() throws Exception {
+        var entry = manual(worker, project, today.minusDays(1), 600, "Original");
+        send(patch("/api/time-entries/" + entry.getId()), principal, editWithVersion(project, today.minusDays(1), 900, "Member edit", 0)).andExpect(status().isOk());
+
+        send(patch("/api/teams/" + team.getId() + "/time-entries/" + entry.getId()), ownerPrincipal,
+                editWithVersion(project, today.minusDays(1), 1200, "Owner correction", 0)).andExpect(status().isConflict());
+        send(patch("/api/teams/" + team.getId() + "/time-entries/" + entry.getId()), ownerPrincipal,
+                editWithVersion(project, today.minusDays(1), 1200, "Owner correction", 1)).andExpect(status().isOk());
+    }
+
+    @Test
+    void theHistoryCarriesTheVersionTheFormHasToSendBack() throws Exception {
+        var entry = manual(worker, project, today.minusDays(1), 600, "Original");
+        send(patch("/api/time-entries/" + entry.getId()), principal, edit(project, today.minusDays(1), 900, "Changed")).andExpect(status().isOk());
+        entityManager.flush();
+
+        mvc.perform(get("/api/time-entries").param("teamId", team.getId().toString()).with(user(principal)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].version").value(1));
+    }
 }
