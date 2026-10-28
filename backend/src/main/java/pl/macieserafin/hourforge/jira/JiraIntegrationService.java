@@ -15,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import pl.macieserafin.hourforge.team.Team;
 import pl.macieserafin.hourforge.team.TeamMember;
 import pl.macieserafin.hourforge.entrytemplate.EntryTemplateRepository;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
@@ -30,7 +31,7 @@ public class JiraIntegrationService {
 
     /** What the callback tells the browser; only these fixed words are ever put in the redirect. */
     public enum Outcome {
-        CONNECTED, CHOOSE_SITE, DENIED, INVALID_STATE, FORBIDDEN, NO_ACCESS, UNAVAILABLE;
+        CONNECTED, CHOOSE_SITE, DENIED, INVALID_STATE, FORBIDDEN, ARCHIVED, NO_ACCESS, UNAVAILABLE;
 
         public String code() {
             return name().toLowerCase().replace('_', '-');
@@ -129,6 +130,11 @@ public class JiraIntegrationService {
         var member = members.findByTeamIdAndUserId(teamId, userId).filter(candidate -> candidate.getLeftAt() == null).orElse(null);
         if (member == null || stored.getIntent() == OAuthState.Intent.SITE && !member.getRole().canManage()) {
             return new CallbackResult(Outcome.FORBIDDEN, teamId);
+        }
+        // The team is locked like every other change to it, so archiving and this callback cannot both win;
+        // the site and the Jira links of an archived team stay as they are.
+        if (stored.getIntent() == OAuthState.Intent.SITE && teams.findLockedById(teamId).map(Team::isArchived).orElse(true)) {
+            return new CallbackResult(Outcome.ARCHIVED, teamId);
         }
         try {
             var granted = atlassian.exchangeCode(code);
@@ -235,7 +241,7 @@ public class JiraIntegrationService {
 
     /** The site of an archived team is frozen together with its time entries. */
     private void requireNotArchived(UUID teamId) {
-        var team = teams.findById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        var team = teams.findLockedById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (team.isArchived()) throw new ResponseStatusException(HttpStatus.CONFLICT, "The team is archived");
     }
 

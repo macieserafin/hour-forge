@@ -126,6 +126,39 @@ class JiraSecurityIT extends JiraIntegrationTestSupport {
         assertThat(jdbc.queryForObject("select count(*) from jira_connections", Integer.class)).isEqualTo(1);
     }
 
+    @Test
+    void aConsentStartedBeforeArchivingCannotChangeTheArchivedTeamsSite() throws Exception {
+        var session = new BrowserSession(mvc);
+        callbackConnect(teamA, session);
+        var state = authorize(teamA, session);
+        var team = teams.findById(teamA.getId()).orElseThrow();
+        team.setArchivedAt(Instant.now());
+        teams.saveAndFlush(team);
+        ATLASSIAN.sites = java.util.List.of(new FakeAtlassian.Site("cloud-2", "https://other.atlassian.net", "Other site"));
+
+        session.perform(get(BASE + "/callback").param("code", "good-code").param("state", state).with(user(principal)))
+                .andExpect(status().isFound()).andExpect(header().string("Location", org.hamcrest.Matchers.containsString("jira=archived")));
+        entityManager.flush();
+
+        assertThat(jdbc.queryForList("select cloud_id from jira_connections where team_id = ?", String.class, teamA.getId())).containsExactly("cloud-1");
+        assertThat(jdbc.queryForObject("select count(*) from jira_user_authorizations where cloud_id = 'cloud-2'", Integer.class)).isZero();
+    }
+
+    @Test
+    void aConsentStartedBeforeArchivingDoesNotConnectAnArchivedTeamWithoutASite() throws Exception {
+        var session = new BrowserSession(mvc);
+        var state = authorize(teamA, session);
+        var team = teams.findById(teamA.getId()).orElseThrow();
+        team.setArchivedAt(Instant.now());
+        teams.saveAndFlush(team);
+
+        session.perform(get(BASE + "/callback").param("code", "good-code").param("state", state).with(user(principal)))
+                .andExpect(status().isFound()).andExpect(header().string("Location", org.hamcrest.Matchers.containsString("jira=archived")));
+        entityManager.flush();
+
+        assertThat(jdbc.queryForObject("select count(*) from jira_connections where team_id = ?", Integer.class, teamA.getId())).isZero();
+    }
+
     private void callbackConnect(Team team, BrowserSession session) throws Exception {
         var state = authorize(team, session);
         session.perform(get(BASE + "/callback").param("code", "good-code").param("state", state).with(user(principal)))
