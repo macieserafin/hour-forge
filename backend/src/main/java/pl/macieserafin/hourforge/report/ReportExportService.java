@@ -21,8 +21,8 @@ import pl.macieserafin.hourforge.user.UserRepository;
 /** Builds the downloadable versions of a report. */
 @Service
 public class ReportExportService {
-    private static final int BUCKET_PAGE = 100;
-    private static final int MAX_BUCKET_PAGES = 10;
+
+
 
     private final ReportService reports;
     private final ReportRepository repository;
@@ -31,11 +31,16 @@ public class ReportExportService {
     private final Clock clock;
     private final int maxCsvRows;
     private final int maxPdfEntries;
+    private final int maxPdfGroups;
+    private final pl.macieserafin.hourforge.tag.TagRepository tags;
 
     public ReportExportService(ReportService reports, ReportRepository repository, UserRepository users,
-                               ProjectRepository projects, Clock clock,
+                               ProjectRepository projects, pl.macieserafin.hourforge.tag.TagRepository tags, Clock clock,
                                @Value("${app.report-export.max-rows:50000}") int maxCsvRows,
-                               @Value("${app.report-export.pdf-max-entries:2000}") int maxPdfEntries) {
+                               @Value("${app.report-export.pdf-max-entries:2000}") int maxPdfEntries,
+                               @Value("${app.report-export.pdf-max-groups:1000}") int maxPdfGroups) {
+        this.tags = tags;
+        this.maxPdfGroups = maxPdfGroups;
         this.reports = reports;
         this.repository = repository;
         this.users = users;
@@ -94,9 +99,9 @@ public class ReportExportService {
             pdf.paragraph("Łączny czas: " + ReportCsv.clock(totals.durationSeconds()) + "   ·   Liczba wpisów: " + totals.entryCount());
             pdf.note("Według daty pracy. Czas w toku nie jest wliczany; wpisy bez daty nie wchodzą do zestawień okresowych.");
 
-            if (!own) breakdown(pdf, "Czas według osób", "Osoba", teamId, f, ReportGrouping.MEMBER);
-            breakdown(pdf, "Czas według projektów", "Projekt", teamId, f, ReportGrouping.PROJECT);
-            breakdown(pdf, "Czas według dni", "Dzień", teamId, f, ReportGrouping.DAY);
+            if (!own) breakdown(pdf, "Czas według osób", "Osoba", teamId, f, ReportGrouping.MEMBER, totals);
+            breakdown(pdf, "Czas według projektów", "Projekt", teamId, f, ReportGrouping.PROJECT, totals);
+            breakdown(pdf, "Czas według dni", "Dzień", teamId, f, ReportGrouping.DAY, totals);
 
             pdf.heading("Wpisy");
             var rows = new ArrayList<List<String>>();
@@ -124,24 +129,34 @@ public class ReportExportService {
         }
     }
 
-    private void breakdown(ReportPdf pdf, String heading, String label, UUID teamId, ReportFilter filter, ReportGrouping grouping) {
+    /** One table of time per person, project or day. A table cut at the limit says so and accounts for what it leaves out. */
+    private void breakdown(ReportPdf pdf, String heading, String label, UUID teamId, ReportFilter filter, ReportGrouping grouping,
+                           ReportResponse.Totals totals) {
         var rows = new ArrayList<List<String>>();
-        for (int page = 0; page < MAX_BUCKET_PAGES; page++) {
-            var result = repository.breakdown(teamId, filter, grouping, page, BUCKET_PAGE);
-            for (var bucket : result.content()) {
-                rows.add(List.of(switch (grouping) {
-                    case MEMBER -> bucket.displayName();
-                    case PROJECT -> bucket.projectName() + (bucket.projectArchivedAt() != null ? " (archiwalny)" : "");
-                    default -> date(bucket.workDate());
-                }, ReportCsv.clock(bucket.durationSeconds()), Long.toString(bucket.entryCount())));
-            }
-            if (!result.hasNext()) break;
+        var result = repository.breakdown(teamId, filter, grouping, 0, maxPdfGroups);
+        long shownSeconds = 0;
+        long shownEntries = 0;
+        for (var bucket : result.content()) {
+            rows.add(List.of(switch (grouping) {
+                case MEMBER -> bucket.displayName();
+                case PROJECT -> bucket.projectName() + (bucket.projectArchivedAt() != null ? " (archiwalny)" : "");
+                default -> date(bucket.workDate());
+            }, ReportCsv.clock(bucket.durationSeconds()), Long.toString(bucket.entryCount())));
+            shownSeconds += bucket.durationSeconds();
+            shownEntries += bucket.entryCount();
         }
         pdf.heading(heading);
         if (rows.isEmpty()) {
             pdf.paragraph("Brak zapisanego czasu dla wybranych filtrów.");
-        } else {
-            pdf.table(List.of(new ReportPdf.Column(label, 420), new ReportPdf.Column("Czas", 90, true), new ReportPdf.Column("Wpisy", 60, true)), rows);
+            return;
+        }
+        if (result.hasNext()) {
+            rows.add(List.of("Pozostałe pozycje (nie pokazano)", ReportCsv.clock(Math.max(0, totals.durationSeconds() - shownSeconds)),
+                    Long.toString(Math.max(0, totals.entryCount() - shownEntries))));
+        }
+        pdf.table(List.of(new ReportPdf.Column(label, 420), new ReportPdf.Column("Czas", 90, true), new ReportPdf.Column("Wpisy", 60, true)), rows);
+        if (result.hasNext()) {
+            pdf.note("Tabela skrócona: pokazano pierwsze " + maxPdfGroups + " pozycji, pozostałe są zsumowane w ostatnim wierszu. Wszystkie wpisy zawiera eksport CSV.");
         }
     }
 
@@ -153,6 +168,10 @@ public class ReportExportService {
         if (!f.projectIds().isEmpty()) {
             parts.add("projekty: " + projects.findAllById(f.projectIds()).stream().map(Project::getName).sorted().collect(Collectors.joining(", ")));
         }
+        if (!f.tagIds().isEmpty()) {
+            parts.add("tagi: " + tags.findAllById(f.tagIds()).stream().map(pl.macieserafin.hourforge.tag.Tag::getName).sorted().collect(Collectors.joining(", ")));
+        }
+        if (f.issueKey() != null) parts.add("zadanie Jira: " + f.issueKey());
         if (f.entryType() != null) parts.add("rodzaj: " + kind(f.entryType()));
         if (f.q() != null) parts.add("opis zawiera „" + f.q() + "”");
         return String.join("; ", parts);

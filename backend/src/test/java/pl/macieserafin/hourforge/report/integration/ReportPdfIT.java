@@ -124,6 +124,21 @@ class ReportPdfIT extends ApiIntegrationTestSupport {
         assertThat(content).doesNotContain("Faktura A", "Spotkanie");
     }
 
+    @Autowired pl.macieserafin.hourforge.tag.TagRepository tagRepository;
+
+    @Test
+    void namesTheTagAndJiraTaskFiltersToo() throws Exception {
+        var review = tagRepository.saveAndFlush(new pl.macieserafin.hourforge.tag.Tag(team, "Przegląd", null));
+        var tagged = new TimeEntry(worker, team, project, EntryType.MANUAL, LocalDate.parse("2026-10-20"), null, null, 120, "Z tagiem");
+        tagged.setTag(review);
+        entries.saveAndFlush(tagged);
+        manual(worker, project, "2026-10-21", 60, "Bez tagu");
+
+        var content = text(teamPdf(owner).param("tagIds", review.getId().toString()).param("issueKey", "proj-12"));
+
+        assertThat(content).contains("Filtry: tagi: Przegląd; zadanie Jira: PROJ-12");
+    }
+
     @Test
     void undatedReportsSayWhichEntriesTheyCover() throws Exception {
         manual(worker, project, null, 60, "Wpis bez daty");

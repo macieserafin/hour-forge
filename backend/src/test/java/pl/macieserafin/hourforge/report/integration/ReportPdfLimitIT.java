@@ -23,7 +23,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@TestPropertySource(properties = "app.report-export.pdf-max-entries=2")
+@TestPropertySource(properties = {"app.report-export.pdf-max-entries=2", "app.report-export.pdf-max-groups=2"})
 class ReportPdfLimitIT extends ApiIntegrationTestSupport {
     @Autowired MockMvc mvc;
     @Autowired TimeEntryRepository entries;
@@ -47,6 +47,28 @@ class ReportPdfLimitIT extends ApiIntegrationTestSupport {
             var text = new PDFTextStripper().getText(document).replaceAll("\\s+", " ");
             assertThat(text).contains("Pokazano pierwsze 2 z 5 wpisów. Pełną listę zawiera eksport CSV.", "Liczba wpisów: 5");
             assertThat(text).doesNotContain("Row 4");
+        }
+    }
+
+    @Test
+    void aGroupTableCutAtTheLimitSaysSoAndAccountsForTheRest() throws Exception {
+        var now = Instant.parse("2026-10-19T10:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        var owner = fixtures.user("pdf-groups-owner@example.test", "Owner");
+        var team = fixtures.team("Groups", "UTC");
+        fixtures.member(team, owner, TeamRole.OWNER, now.minusSeconds(100));
+        for (int index = 0; index < 3; index++) {
+            var project = fixtures.project(team, "Project " + index, null);
+            entries.saveAndFlush(new TimeEntry(owner, team, project, EntryType.MANUAL, LocalDate.parse("2026-10-19"), null, null, 60 * (index + 1), "Row " + index));
+        }
+        var principal = new AppUserPrincipal(owner.getId(), owner.getEmail(), "unused");
+
+        var bytes = mvc.perform(get("/api/teams/" + team.getId() + "/reports/export.pdf").with(user(principal)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+
+        try (var document = Loader.loadPDF(bytes)) {
+            var text = new PDFTextStripper().getText(document).replaceAll("\s+", " ");
+            assertThat(text).contains("Tabela skrócona: pokazano pierwsze 2 pozycji", "Pozostałe pozycje (nie pokazano)", "Łączny czas: 00:06:00", "Liczba wpisów: 3");
         }
     }
 }
