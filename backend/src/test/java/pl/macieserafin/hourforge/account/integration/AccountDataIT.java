@@ -210,4 +210,48 @@ class AccountDataIT extends ApiIntegrationTestSupport {
     private ResultActions login(String email, String password, BrowserSession session) throws Exception {
         return session.login(email, password);
     }
+
+    @Autowired pl.macieserafin.hourforge.entrytemplate.EntryTemplateRepository templateRows;
+    @Autowired pl.macieserafin.hourforge.tag.TagRepository tagRows;
+    @Autowired pl.macieserafin.hourforge.jira.JiraUserAuthorizationRepository jiraGrants;
+    @Autowired pl.macieserafin.hourforge.twofactor.UserTwoFactorRepository twoFactorRows;
+    @Autowired pl.macieserafin.hourforge.twofactor.BackupCodeRepository backupCodeRows;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+
+    @Test
+    void exportAlsoCoversTemplatesJiraConsentTwoStepStateAndCorrectionMarksButNoSecrets() throws Exception {
+        var session = signIn();
+        var review = tagRows.saveAndFlush(new pl.macieserafin.hourforge.tag.Tag(team, "Review", null));
+        var template = new pl.macieserafin.hourforge.entrytemplate.EntryTemplate(user, team);
+        template.apply("Weekly review", project.getId(), "Look at the board", review, null);
+        templateRows.saveAndFlush(template);
+        jiraGrants.saveAndFlush(new pl.macieserafin.hourforge.jira.JiraUserAuthorization(user, "cloud-1", "ENC-ACCESS-SECRET",
+                "ENC-REFRESH-SECRET", Instant.now().plusSeconds(3600), "read:jira-work", "v1"));
+        twoFactorRows.saveAndFlush(new pl.macieserafin.hourforge.twofactor.UserTwoFactor(user.getId(), "TOTP-SECRET-VALUE", Instant.now()));
+        jdbc.update("update user_two_factor set enabled_at = now() where user_id = ?", user.getId());
+        backupCodeRows.saveAndFlush(new pl.macieserafin.hourforge.twofactor.BackupCode(user.getId(), "BACKUP-HASH-VALUE"));
+        var corrected = manual(user, team, project, LocalDate.parse("2026-10-18"), 900, "Corrected by the owner");
+        corrected.setLastEditedAt(Instant.now());
+        corrected.setLastEditedBy(colleague);
+        entries.saveAndFlush(corrected);
+        em.clear();
+
+        session.perform(get("/api/account/export"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.templates.length()").value(1))
+                .andExpect(jsonPath("$.templates[0].name").value("Weekly review"))
+                .andExpect(jsonPath("$.templates[0].tagName").value("Review"))
+                .andExpect(jsonPath("$.templates[0].teamName").value("Studio"))
+                .andExpect(jsonPath("$.jiraAuthorizations.length()").value(1))
+                .andExpect(jsonPath("$.jiraAuthorizations[0].cloudId").value("cloud-1"))
+                .andExpect(jsonPath("$.twoFactor.enabled").value(true))
+                .andExpect(jsonPath("$.twoFactor.backupCodesLeft").value(1))
+                .andExpect(jsonPath("$.timeEntries[?(@.description=='Corrected by the owner')].lastEditedBy").value("Colleague"))
+                .andExpect(jsonPath("$.timeEntries[?(@.description=='Corrected by the owner')].lastEditedAt").isNotEmpty())
+                .andExpect(content().string(not(containsString("ENC-ACCESS-SECRET"))))
+                .andExpect(content().string(not(containsString("ENC-REFRESH-SECRET"))))
+                .andExpect(content().string(not(containsString("TOTP-SECRET-VALUE"))))
+                .andExpect(content().string(not(containsString("BACKUP-HASH-VALUE"))))
+                .andExpect(content().string(not(containsString(PASSWORD))));
+    }
 }

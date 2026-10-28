@@ -104,14 +104,24 @@ public class AccountDataService {
                         entry.getWorkDate(), entry.getStartedAt(), entry.getEndedAt(), entry.getDurationSeconds(),
                         entry.getPausedDurationMicros() / 1_000_000.0, entry.getDescription(), entry.getCreatedAt(),
                         entry.getUpdatedAt(), entry.getJiraIssueKey(),
-                        entry.getTag() == null ? null : entry.getTag().getName())).toList();
+                        entry.getTag() == null ? null : entry.getTag().getName(), entry.getLastEditedAt(),
+                        entry.getLastEditedBy() == null ? null : entry.getLastEditedBy().getDisplayName())).toList();
+        var templates = entryTemplates.findByUserIdOrderByCreatedAtAscIdAsc(userId).stream()
+                .map(template -> new AccountExport.Template(template.getId(), template.getTeam().getId(), template.getTeam().getName(),
+                        template.getName(), template.getProjectId(), template.getDescription(),
+                        template.getTag() == null ? null : template.getTag().getName(), template.getJiraIssueKey(),
+                        template.getCreatedAt(), template.getUpdatedAt())).toList();
+        var authorizations = jiraAuthorizations.findAllByUserIdOrderByUpdatedAtDesc(userId).stream()
+                .map(grant -> new AccountExport.JiraAuthorization(grant.getCloudId(), grant.getGrantedScopes(), grant.getConnectedAt(), grant.getUpdatedAt())).toList();
+        var twoFactorStatus = twoFactor.status(userId);
         return new AccountExport(clock.instant(),
                 new AccountExport.Profile(user.getId(), user.getEmail(), user.getDisplayName(), user.getCreatedAt(),
                         user.getEmailVerifiedAt(), images.avatar(userId).map(java.util.Base64.getEncoder()::encodeToString).orElse(null)),
                 teamsOfUser, timeEntries, preferences.get(userId),
                 logins.findByUserIdOrderByOccurredAtAsc(userId).stream()
                         .map(login -> new AccountExport.Login(login.getOccurredAt(), login.getOutcome().name(), login.getBrowser(),
-                                login.getSystem(), login.getAddress(), login.getLocation())).toList());
+                                login.getSystem(), login.getAddress(), login.getLocation())).toList(),
+                templates, authorizations, new AccountExport.TwoFactor(twoFactorStatus.enabled(), twoFactorStatus.backupCodesLeft()));
     }
 
     /**
