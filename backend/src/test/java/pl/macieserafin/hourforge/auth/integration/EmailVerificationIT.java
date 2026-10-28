@@ -119,6 +119,21 @@ class EmailVerificationIT extends ApiIntegrationTestSupport {
     }
 
     @Test
+    void aSimilarUnicodeMailboxCannotResendTheAsciiAccountsConfirmation() throws Exception {
+        resend("verıfy@example.com").andExpect(status().isNoContent());
+        assertThat(mail.sent()).isEmpty();
+        var distinct = fixtures.user("verıfy@example.com", "Different mailbox");
+        distinct.setEmailVerifiedAt(null);
+        users.flush();
+
+        resend(distinct.getEmail()).andExpect(status().isNoContent());
+        assertThat(mail.last().to()).isEqualTo(distinct.getEmail());
+        confirm(mail.lastToken("verify-email")).andExpect(status().isNoContent());
+        assertThat(users.findById(distinct.getId()).orElseThrow().isEmailVerified()).isTrue();
+        assertThat(users.findById(user.getId()).orElseThrow().isEmailVerified()).isFalse();
+    }
+
+    @Test
     void publicResendSilentlyStopsSendingAfterThePerAddressLimitAndBlocksAnIpThatSpams() throws Exception {
         for (int i = 0; i < 5; i++) resend(EMAIL).andExpect(status().isNoContent());
         assertThat(mail.sent()).hasSize(3);

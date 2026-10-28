@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import java.util.Locale;
+import pl.macieserafin.hourforge.user.EmailAddress;
 
 public record RegistrationRequest(@NotBlank @Size(max = 255) String displayName,
                                   @NotBlank @Email @Size(max = 255) String email,
@@ -12,7 +12,7 @@ public record RegistrationRequest(@NotBlank @Size(max = 255) String displayName,
                                   @Size(max = 4096) String botCheckToken) {
     public RegistrationRequest {
         displayName = displayName == null ? null : displayName.strip();
-        email = email == null ? null : email.strip().toLowerCase(Locale.ROOT);
+        email = EmailAddress.normalize(email);
     }
 
     @Override

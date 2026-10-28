@@ -38,6 +38,9 @@ public class EmailToken {
     @Column(name = "new_email")
     private String newEmail;
 
+    @Column(name = "credential_version", updatable = false)
+    private Integer credentialVersion;
+
     @Column(name = "expires_at", nullable = false, updatable = false)
     private Instant expiresAt;
 
@@ -73,6 +76,15 @@ public class EmailToken {
 
     public String getNewEmail() {
         return newEmail;
+    }
+
+    /** The user's session version when the link was issued; null for links that are not bound to it. */
+    public Integer getCredentialVersion() {
+        return credentialVersion;
+    }
+
+    public void bindToCredentialVersion(int version) {
+        this.credentialVersion = version;
     }
 
     public Instant getExpiresAt() {

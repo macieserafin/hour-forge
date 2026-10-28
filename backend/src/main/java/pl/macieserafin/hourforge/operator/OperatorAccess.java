@@ -7,9 +7,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.user.User;
 import pl.macieserafin.hourforge.user.UserRepository;
+import pl.macieserafin.hourforge.user.EmailAddress;
 
 import java.util.Arrays;
-import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -26,7 +26,7 @@ public class OperatorAccess {
 
     public OperatorAccess(@Value("${app.operator.emails:}") String emails, UserRepository users) {
         this.emails = Arrays.stream(emails.split(","))
-                .map(email -> email.strip().toLowerCase(Locale.ROOT))
+                .map(EmailAddress::normalize)
                 .filter(email -> !email.isEmpty())
                 .collect(Collectors.toUnmodifiableSet());
         this.users = users;
@@ -39,7 +39,7 @@ public class OperatorAccess {
 
     public boolean isOperator(User user) {
         return user.isEmailVerified() && user.getDeletedAt() == null && !user.isBlocked()
-                && emails.contains(user.getEmail().toLowerCase(Locale.ROOT));
+                && emails.contains(EmailAddress.normalize(user.getEmail()));
     }
 
     public void require(UUID userId) {

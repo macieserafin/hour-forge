@@ -63,13 +63,14 @@ public class EmailChangeService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect");
         }
         var user = credential.getUser();
-        if (user.getEmail().equalsIgnoreCase(request.newEmail())) {
+        var existing = users.findByEmailIgnoreCase(request.newEmail());
+        if (existing.filter(found -> found.getId().equals(userId)).isPresent()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The new address is the same as the current one");
         }
         limiter.tryAcquire("email-change:" + userId, limits.emailVerification())
                 .ifPresent(retryAfter -> { throw new TooManyRequestsException(retryAfter); });
         attempts.reset(userId);
-        if (users.findByEmailIgnoreCase(request.newEmail()).isEmpty()) {
+        if (existing.isEmpty()) {
             mail.sendEmailChange(user, request.newEmail());
         }
     }

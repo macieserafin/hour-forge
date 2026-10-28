@@ -11,7 +11,14 @@ import java.util.UUID;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, UUID> {
-    Optional<User> findByEmailIgnoreCase(String email);
+    default Optional<User> findByEmailIgnoreCase(String email) {
+        return findByNormalizedEmail(EmailAddress.normalize(email));
+    }
+
+    // Match uq_users_email_lower exactly. Spring Data's derived IgnoreCase query uses upper(),
+    // which treats distinct mailboxes containing dotless i or long s as the same account.
+    @Query("select u from User u where lower(u.email) = lower(:email)")
+    Optional<User> findByNormalizedEmail(String email);
 
     /** Accounts nobody confirmed in time: never signed in, so they own no teams, entries or invitations. */
     @Query("select u.id from User u where u.emailVerifiedAt is null and u.deletedAt is null and u.createdAt < :before"

@@ -3,6 +3,8 @@ package pl.macieserafin.hourforge.auth.integration;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -33,6 +35,7 @@ class PasswordResetIT extends ApiIntegrationTestSupport {
     @Autowired PasswordEncoder encoder;
     @Autowired JdbcTemplate jdbc;
     @Autowired jakarta.persistence.EntityManager em;
+    @Autowired pl.macieserafin.hourforge.auth.AccountMailService accountMail;
 
     private User user;
 
@@ -53,6 +56,23 @@ class PasswordResetIT extends ApiIntegrationTestSupport {
         assertThat(mail.sent()).hasSize(1);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"vıctim-is@is.test", "victim-iſ@is.test"})
+    void resettingASimilarUnicodeAddressCannotChangeTheAsciiAccount(String unicodeEmail) throws Exception {
+        user.setEmail("victim-is@is.test");
+        users.flush();
+        request(unicodeEmail).andExpect(status().isNoContent());
+        assertThat(mail.sent()).isEmpty();
+
+        var distinct = fixtures.user(unicodeEmail, "Different mailbox");
+        credentials.saveAndFlush(new UserCredential(distinct, encoder.encode(PASSWORD)));
+        request(unicodeEmail).andExpect(status().isNoContent());
+        assertThat(mail.last().to()).isEqualTo(unicodeEmail);
+        confirm(mail.lastToken("reset-password"), NEW_PASSWORD).andExpect(status().isNoContent());
+        assertThat(encoder.matches(PASSWORD, credentials.findById(user.getId()).orElseThrow().getPasswordHash())).isTrue();
+        assertThat(encoder.matches(NEW_PASSWORD, credentials.findById(distinct.getId()).orElseThrow().getPasswordHash())).isTrue();
+    }
+
     @Test
     void confirmingSetsTheNewPasswordEndsEverySessionAndUsesUpTheLink() throws Exception {
         var session = signIn(PASSWORD);
@@ -65,6 +85,70 @@ class PasswordResetIT extends ApiIntegrationTestSupport {
         login(NEW_PASSWORD, new BrowserSession(mvc)).andExpect(status().isNoContent());
         confirm(token, "Yet-another-password-2026").andExpect(status().isBadRequest());
         login(NEW_PASSWORD, new BrowserSession(mvc)).andExpect(status().isNoContent());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"password-change", "sign-out-everywhere", "address-change"})
+    void aLinkIssuedBeforeAnotherSecurityActionOnTheAccountNoLongerWorks(String action) throws Exception {
+        var session = signIn(PASSWORD);
+        request(EMAIL).andExpect(status().isNoContent());
+        var token = mail.lastToken("reset-password");
+
+        switch (action) {
+            case "password-change" -> session.send(post("/api/account/password").contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"currentPassword\":\"" + PASSWORD + "\",\"newPassword\":\"Another-password-2026\"}")).andExpect(status().isNoContent());
+            case "sign-out-everywhere" -> session.send(post("/api/account/sign-out-everywhere")).andExpect(status().isNoContent());
+            default -> {
+                session.send(post("/api/account/email").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newEmail\":\"moved@example.com\",\"currentPassword\":\"" + PASSWORD + "\"}")).andExpect(status().isNoContent());
+                mvc.perform(post("/api/auth/email-change/confirm").with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"" + mail.lastToken("confirm-email-change") + "\"}")).andExpect(status().isNoContent());
+            }
+        }
+        var before = credentials.findById(user.getId()).orElseThrow().getPasswordHash();
+        em.clear();
+
+        confirm(token, NEW_PASSWORD).andExpect(status().isBadRequest());
+
+        assertThat(credentials.findById(user.getId()).orElseThrow().getPasswordHash()).isEqualTo(before);
+        limiterClear();
+        request(action.equals("address-change") ? "moved@example.com" : EMAIL).andExpect(status().isNoContent());
+        confirm(mail.lastToken("reset-password"), NEW_PASSWORD).andExpect(status().isNoContent());
+    }
+
+    @Test
+    void aResetIssuedFromAnOutdatedAccountReadCannotResetTheRenamedAccount() throws Exception {
+        var session = signIn(PASSWORD);
+        session.send(post("/api/account/email").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"newEmail\":\"moved@example.com\",\"currentPassword\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isNoContent());
+        var addressToken = mail.lastToken("confirm-email-change");
+        // A reset request can have read this user before a concurrent address change commits.
+        // Keep that snapshot while the confirmation below loads and updates a separate entity.
+        em.clear();
+        mvc.perform(post("/api/auth/email-change/confirm").with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"token\":\"" + addressToken + "\"}")).andExpect(status().isNoContent());
+
+        accountMail.sendPasswordReset(user);
+
+        assertThat(mail.last().to()).isEqualTo(EMAIL);
+        confirm(mail.lastToken("reset-password"), NEW_PASSWORD).andExpect(status().isBadRequest());
+        new BrowserSession(mvc).login("moved@example.com", PASSWORD).andExpect(status().isNoContent());
+        request("moved@example.com").andExpect(status().isNoContent());
+        confirm(mail.lastToken("reset-password"), NEW_PASSWORD).andExpect(status().isNoContent());
+    }
+
+    @Test
+    void aLinkWithoutACredentialVersionRequiresANewResetRequest() throws Exception {
+        request(EMAIL).andExpect(status().isNoContent());
+        var token = mail.lastToken("reset-password");
+        jdbc.update("update email_tokens set credential_version = null where user_id = ?", user.getId());
+        em.clear();
+
+        confirm(token, NEW_PASSWORD).andExpect(status().isBadRequest());
+        login(PASSWORD, new BrowserSession(mvc)).andExpect(status().isNoContent());
+        request(EMAIL).andExpect(status().isNoContent());
+        confirm(mail.lastToken("reset-password"), NEW_PASSWORD).andExpect(status().isNoContent());
     }
 
     @Test

@@ -77,6 +77,16 @@ class RateLimitIT extends ApiIntegrationTestSupport {
     }
 
     @Test
+    void renamingAnAccountDoesNotResetItsFailureLimit() throws Exception {
+        for (int attempt = 0; attempt < 4; attempt++) {
+            login(owner.getEmail(), "wrong", "10.2.1." + attempt).andExpect(status().isUnauthorized());
+        }
+        owner.setEmail("renamed-limit-owner@example.com");
+        users.flush();
+        login(owner.getEmail(), PASSWORD, "10.2.1.99").andExpect(status().isTooManyRequests());
+    }
+
+    @Test
     void limitsRegistrationsPerAddressWithoutCreatingAccounts() throws Exception {
         register("first@example.com", "10.3.0.1").andExpect(status().isCreated());
         register("second@example.com", "10.3.0.1").andExpect(status().isCreated());

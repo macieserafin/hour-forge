@@ -3,6 +3,8 @@ package pl.macieserafin.hourforge.twofactor.integration;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -92,6 +94,60 @@ class TwoFactorIT extends ApiIntegrationTestSupport {
         laptop.perform(get("/api/me")).andExpect(status().isOk());
         laptop.perform(get("/api/account/sessions")).andExpect(jsonPath("$", hasSize(2)));
         laptop.perform(get("/api/account/logins")).andExpect(jsonPath("$.entries[0].successful").value(true));
+    }
+
+    @Test
+    void theStoredSignedInSessionHoldsNoPasswordHash() throws Exception {
+        turnOn();
+        var laptop = new BrowserSession(mvc);
+        laptop.login(EMAIL, PASSWORD).andExpect(status().isAccepted());
+        answer(laptop, codeAt(1)).andExpect(status().isNoContent());
+
+        for (var browser : List.of(owner, laptop)) {
+            var context = (org.springframework.security.core.context.SecurityContext) sessions.findById(browser.sessionId()).getAttribute("SPRING_SECURITY_CONTEXT");
+            assertThat(context).isNotNull();
+            assertThat(((org.springframework.security.core.userdetails.UserDetails) context.getAuthentication().getPrincipal()).getPassword()).isNull();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"password-change", "sign-out-everywhere", "password-reset", "address-change"})
+    void aWaitingSignInEndsWhenTheAccountIsSecuredMeanwhile(String action) throws Exception {
+        var codes = turnOn();
+        var waiting = new BrowserSession(mvc);
+        waiting.login(EMAIL, PASSWORD).andExpect(status().isAccepted());
+
+        switch (action) {
+            case "password-change" -> owner.send(post("/api/account/password").contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"currentPassword\":\"" + PASSWORD + "\",\"newPassword\":\"Another-password-2026\"}")).andExpect(status().isNoContent());
+            case "sign-out-everywhere" -> owner.send(post("/api/account/sign-out-everywhere")).andExpect(status().isNoContent());
+            case "password-reset" -> {
+                new BrowserSession(mvc).send(post("/api/auth/password-reset/request").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + EMAIL + "\"}")).andExpect(status().isNoContent());
+                new BrowserSession(mvc).send(post("/api/auth/password-reset/confirm").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"" + mail.lastToken("reset-password") + "\",\"newPassword\":\"Another-password-2026\"}"))
+                        .andExpect(status().isNoContent());
+            }
+            default -> {
+                owner.send(post("/api/account/email").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"newEmail\":\"moved@example.com\",\"currentPassword\":\"" + PASSWORD + "\"}")).andExpect(status().isNoContent());
+                new BrowserSession(mvc).send(post("/api/auth/email-change/confirm").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"" + mail.lastToken("confirm-email-change") + "\"}")).andExpect(status().isNoContent());
+            }
+        }
+
+        answer(waiting, codes.get(0)).andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("SIGN_IN_AGAIN"));
+        waiting.perform(get("/api/me")).andExpect(status().isUnauthorized());
+        // The refused answer did not use the code up, nor count as a wrong attempt.
+        assertThat(jdbc.queryForObject("select count(*) from two_factor_backup_codes where user_id = ? and used_at is null",
+                Integer.class, user.getId())).isEqualTo(10);
+
+        var currentEmail = action.equals("address-change") ? "moved@example.com" : EMAIL;
+        var currentPassword = action.equals("password-change") || action.equals("password-reset")
+                ? "Another-password-2026" : PASSWORD;
+        waiting.login(currentEmail, currentPassword).andExpect(status().isAccepted());
+        answer(waiting, codes.get(0)).andExpect(status().isNoContent());
+        waiting.perform(get("/api/me")).andExpect(status().isOk());
     }
 
     @Test

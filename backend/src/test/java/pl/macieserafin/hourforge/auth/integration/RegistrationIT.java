@@ -69,6 +69,21 @@ class RegistrationIT extends ApiIntegrationTestSupport {
         assertThat(mail.last().body()).contains("/forgot-password").doesNotContain("Different-password!");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"vıctim-is@is.test", "victim-iſ@is.test", "victim-is@ıs.test", "victim-is@iſ.test"})
+    void aSimilarUnicodeAddressDoesNotReserveTheAsciiMailbox(String unicodeEmail) throws Exception {
+        long before = users.count();
+        for (var email : java.util.List.of(unicodeEmail, "victim-is@is.test")) {
+            mvc.perform(post("/api/auth/register").with(csrf()).contentType("application/json")
+                    .content(BODY.replace("New@Example.test", email))).andExpect(status().isCreated());
+            assertThat(mail.last().to()).isEqualTo(email);
+            assertThat(mail.last().body()).contains("/verify-email/").doesNotContain("/forgot-password");
+        }
+        assertThat(users.count()).isEqualTo(before + 2);
+        assertThat(users.findByEmailIgnoreCase(unicodeEmail).orElseThrow().getId())
+                .isNotEqualTo(users.findByEmailIgnoreCase("victim-is@is.test").orElseThrow().getId());
+    }
+
     @Test void rejectsMissingAndInvalidCsrfWithoutCreatingAnAccount() throws Exception {
         mvc.perform(post("/api/auth/register").contentType("application/json").content(BODY)).andExpect(status().isForbidden());
         mvc.perform(post("/api/auth/register").with(csrf().useInvalidToken()).contentType("application/json").content(BODY)).andExpect(status().isForbidden());

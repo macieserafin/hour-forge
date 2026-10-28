@@ -18,11 +18,13 @@ import java.util.HexFormat;
 @Service
 public class EmailTokenService {
     private final EmailTokenRepository tokens;
+    private final UserCredentialRepository credentials;
     private final Clock clock;
     private final SecureRandom random = new SecureRandom();
 
-    public EmailTokenService(EmailTokenRepository tokens, Clock clock) {
+    public EmailTokenService(EmailTokenRepository tokens, UserCredentialRepository credentials, Clock clock) {
         this.tokens = tokens;
+        this.credentials = credentials;
         this.clock = clock;
     }
 
@@ -35,7 +37,12 @@ public class EmailTokenService {
         var bytes = new byte[32];
         random.nextBytes(bytes);
         var raw = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        tokens.saveAndFlush(new EmailToken(user, purpose, hash(raw), newEmail, now.plus(purpose.validity())));
+        var token = new EmailToken(user, purpose, hash(raw), newEmail, now.plus(purpose.validity()));
+        // Reset and address-change links die with the credentials they were issued for.
+        if (purpose.boundToCredentials()) {
+            credentials.findSessionVersionForEmail(user.getId(), user.getEmail()).ifPresent(token::bindToCredentialVersion);
+        }
+        tokens.saveAndFlush(token);
         return raw;
     }
 
@@ -48,9 +55,17 @@ public class EmailTokenService {
         if (token.getPurpose() != purpose || token.getUsedAt() != null || !token.getExpiresAt().isAfter(now)) {
             throw invalid();
         }
+        if (purpose.boundToCredentials() && !issuedForCurrentCredentials(token)) throw invalid();
         token.markUsed(now);
         tokens.flush();
         return token;
+    }
+
+    /** Locks the credential row, so a concurrent password change cannot slip in between this check and the redemption. */
+    private boolean issuedForCurrentCredentials(EmailToken token) {
+        var issuedFor = token.getCredentialVersion();
+        return issuedFor != null && credentials.findLockedByUserId(token.getUser().getId())
+                .map(credential -> credential.getSessionVersion() == issuedFor).orElse(false);
     }
 
     private static ResponseStatusException invalid() {

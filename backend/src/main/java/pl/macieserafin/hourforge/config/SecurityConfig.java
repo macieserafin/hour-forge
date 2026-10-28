@@ -92,10 +92,11 @@ public class SecurityConfig {
                             }
                             loginAttempts.recordSuccess(request.getParameter(EMAIL_PARAMETER), request.getRemoteAddr());
                             var remembered = "true".equals(request.getParameter(REMEMBER_PARAMETER));
-                            var userId = ((AppUserPrincipal) authentication.getPrincipal()).getUserId();
+                            var signedIn = (AppUserPrincipal) authentication.getPrincipal();
+                            var userId = signedIn.getUserId();
                             if (twoFactor.required(userId)) {
                                 // Not signed in yet: the session waits for the code (POST /api/auth/two-factor).
-                                twoFactor.begin(request, userId, remembered);
+                                twoFactor.begin(request, userId, remembered, signedIn.getSessionVersion());
                                 response.setStatus(HttpServletResponse.SC_ACCEPTED);
                                 response.setContentType("application/json");
                                 response.getWriter().write("{\"code\":\"TWO_FACTOR_REQUIRED\"}");

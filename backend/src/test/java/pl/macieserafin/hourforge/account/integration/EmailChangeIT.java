@@ -32,6 +32,8 @@ class EmailChangeIT extends ApiIntegrationTestSupport {
     @Autowired UserRepository users;
     @Autowired UserCredentialRepository credentials;
     @Autowired PasswordEncoder encoder;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired jakarta.persistence.EntityManager em;
 
     private User user;
 
@@ -52,6 +54,19 @@ class EmailChangeIT extends ApiIntegrationTestSupport {
         session.perform(get("/api/me")).andExpect(status().isOk());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"vıctim-is@is.test", "victim-iſ@is.test"})
+    void aSimilarUnicodeAddressIsADifferentDestinationThatNeedsConfirmation(String unicodeEmail) throws Exception {
+        user.setEmail("victim-is@is.test");
+        users.flush();
+        var session = signIn(user.getEmail());
+        change(session, unicodeEmail, PASSWORD).andExpect(status().isNoContent());
+        assertThat(mail.last().to()).isEqualTo(unicodeEmail);
+        assertThat(user.getEmail()).isEqualTo("victim-is@is.test");
+        confirm(mail.lastToken("confirm-email-change")).andExpect(status().isNoContent());
+        assertThat(users.findById(user.getId()).orElseThrow().getEmail()).isEqualTo(unicodeEmail);
+    }
+
     @Test
     void confirmingSwitchesTheSignInAddressEndsSessionsAndNotifiesTheOldAddress() throws Exception {
         var session = signIn(EMAIL);
@@ -70,6 +85,44 @@ class EmailChangeIT extends ApiIntegrationTestSupport {
         assertThat(mail.last().to()).isEqualTo(EMAIL);
         assertThat(mail.last().body()).contains(NEW_EMAIL);
         confirm(token).andExpect(status().isBadRequest());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"password-change", "sign-out-everywhere", "password-reset"})
+    void aLinkIssuedBeforeAnotherSecurityActionOnTheAccountNoLongerWorks(String action) throws Exception {
+        var session = signIn(EMAIL);
+        change(session, NEW_EMAIL, PASSWORD).andExpect(status().isNoContent());
+        var token = mail.lastToken("confirm-email-change");
+
+        switch (action) {
+            case "password-change" -> session.send(post("/api/account/password").contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"currentPassword\":\"" + PASSWORD + "\",\"newPassword\":\"Another-password-2026\"}")).andExpect(status().isNoContent());
+            case "sign-out-everywhere" -> session.send(post("/api/account/sign-out-everywhere")).andExpect(status().isNoContent());
+            default -> {
+                mvc.perform(post("/api/auth/password-reset/request").with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + EMAIL + "\"}")).andExpect(status().isNoContent());
+                mvc.perform(post("/api/auth/password-reset/confirm").with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"" + mail.lastToken("reset-password") + "\",\"newPassword\":\"Another-password-2026\"}"))
+                        .andExpect(status().isNoContent());
+            }
+        }
+
+        confirm(token).andExpect(status().isBadRequest());
+        assertThat(users.findById(user.getId()).orElseThrow().getEmail()).isEqualTo(EMAIL);
+    }
+
+    @Test
+    void aLinkWithoutACredentialVersionRequiresANewAddressChangeRequest() throws Exception {
+        var session = signIn(EMAIL);
+        change(session, NEW_EMAIL, PASSWORD).andExpect(status().isNoContent());
+        var token = mail.lastToken("confirm-email-change");
+        jdbc.update("update email_tokens set credential_version = null where user_id = ?", user.getId());
+        em.clear();
+
+        confirm(token).andExpect(status().isBadRequest());
+        assertThat(users.findById(user.getId()).orElseThrow().getEmail()).isEqualTo(EMAIL);
+        change(session, NEW_EMAIL, PASSWORD).andExpect(status().isNoContent());
+        confirm(mail.lastToken("confirm-email-change")).andExpect(status().isNoContent());
     }
 
     @Test

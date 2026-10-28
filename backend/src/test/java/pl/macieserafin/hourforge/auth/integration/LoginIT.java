@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.http.MediaType;
@@ -152,6 +153,49 @@ class LoginIT extends ApiIntegrationTestSupport {
         login(PASSWORD, "10.0.0.3").andExpect(status().isNoContent());
         for (int attempt = 0; attempt < 4; attempt++) login("wrong-" + attempt, "10.0.0.3").andExpect(status().isUnauthorized());
         login(PASSWORD, "10.0.0.3").andExpect(status().isNoContent());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\u0001login@example.com\u0002", "\u0000login@example.com\u0000"})
+    void charactersTrimmedByTheAuthenticationFilterCannotBypassTheAccountLimit(String input) throws Exception {
+        for (int attempt = 0; attempt < 5; attempt++) {
+            new BrowserSession(mvc).login(EMAIL, "wrong-password").andExpect(status().isUnauthorized());
+        }
+        new BrowserSession(mvc).login(input, PASSWORD).andExpect(status().isTooManyRequests());
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "'İDA@EXAMPLE.TEST', 'i\u0307da@example.test'",
+            "'ΟΣ@EXAMPLE.TEST', 'ος@example.test'",
+            "'  legacy@example.test  ', 'LEGACY@EXAMPLE.TEST'"
+    })
+    void normalizedUnicodeInputAndExistingMixedCaseAddressesStillIdentifyTheirAccount(String input, String stored) throws Exception {
+        user.setEmail(stored);
+        users.flush();
+        var session = new BrowserSession(mvc);
+        session.login(input, PASSWORD).andExpect(status().isNoContent());
+        session.perform(get("/api/me")).andExpect(jsonPath("$.id").value(user.getId().toString()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"vıctim-is@is.test", "victim-iſ@is.test", "victim-is@ıs.test", "victim-is@iſ.test"})
+    void similarUnicodeAddressesCannotLogInToTheAsciiAccountOrBypassItsBlock(String unicodeEmail) throws Exception {
+        user.setEmail("victim-is@is.test");
+        users.flush();
+        for (int attempt = 0; attempt < 5; attempt++) {
+            new BrowserSession(mvc).login(user.getEmail(), "wrong-password").andExpect(status().isUnauthorized());
+        }
+        new BrowserSession(mvc).login(user.getEmail(), PASSWORD).andExpect(status().isTooManyRequests());
+        // This spelling identifies a different mailbox, not another way into the blocked account.
+        new BrowserSession(mvc).login(unicodeEmail, PASSWORD).andExpect(status().isUnauthorized());
+
+        var distinct = fixtures.user(unicodeEmail, "Different mailbox");
+        credentials.saveAndFlush(new UserCredential(distinct, encoder.encode(PASSWORD)));
+        var session = new BrowserSession(mvc);
+        session.login(unicodeEmail, PASSWORD).andExpect(status().isNoContent());
+        session.perform(get("/api/me")).andExpect(jsonPath("$.id").value(distinct.getId().toString()));
+        new BrowserSession(mvc).login(user.getEmail(), PASSWORD).andExpect(status().isTooManyRequests());
     }
 
     private ResultActions login(String password, String address) throws Exception {
