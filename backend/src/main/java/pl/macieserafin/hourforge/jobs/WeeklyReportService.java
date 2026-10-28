@@ -8,7 +8,10 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import pl.macieserafin.hourforge.mail.EmailSender;
 import pl.macieserafin.hourforge.notification.NotificationKind;
 import pl.macieserafin.hourforge.notification.NotificationService;
@@ -21,6 +24,7 @@ import pl.macieserafin.hourforge.team.TeamRepository;
 /** On Monday from 8:00 (team time) mails last week's PDF report to the team's owner and admins who want it. */
 @Service
 public class WeeklyReportService {
+    private static final Logger log = LoggerFactory.getLogger(WeeklyReportService.class);
     static final LocalTime SEND_AFTER = LocalTime.of(8, 0);
 
     private final TeamRepository teams;
@@ -28,9 +32,12 @@ public class WeeklyReportService {
     private final ReportExportService exports;
     private final NotificationService notifications;
     private final EmailSender sender;
+    private final TransactionTemplate transaction;
 
     public WeeklyReportService(TeamRepository teams, TeamMemberRepository members, ReportExportService exports,
-                               NotificationService notifications, EmailSender sender) {
+                               NotificationService notifications, EmailSender sender,
+                               PlatformTransactionManager transactionManager) {
+        this.transaction = new TransactionTemplate(transactionManager);
         this.teams = teams;
         this.members = members;
         this.exports = exports;
@@ -38,21 +45,33 @@ public class WeeklyReportService {
         this.sender = sender;
     }
 
-    /** Sends the reports that are due at {@code now} and returns how many teams got one. A team is handled once per week. */
-    @Transactional
+    /**
+     * Sends the reports that are due at {@code now} and returns how many teams got one. A team is handled once per week.
+     * Every team has its own transaction: the week is marked and the mail leaves together at its commit, so a team whose
+     * report cannot be built is skipped (and tried again at the next run) without repeating or holding back the others.
+     */
     public int sendDue(Instant now) {
         int sent = 0;
-        for (var team : teams.findByWeeklyReportEnabledTrueAndArchivedAtIsNull()) {
-            var local = now.atZone(ZoneId.of(team.getTimezone()));
-            if (local.getDayOfWeek() != DayOfWeek.MONDAY || local.toLocalTime().isBefore(SEND_AFTER)) continue;
-            var thisMonday = local.toLocalDate();
-            if (thisMonday.equals(team.getWeeklyReportSentFor())) continue;
-            // Marked first: a failure while building one report must not make the others repeat or this one loop.
-            team.setWeeklyReportSentFor(thisMonday);
-            teams.saveAndFlush(team);
-            if (deliver(team, thisMonday.minusWeeks(1))) sent++;
+        for (var teamId : teams.findByWeeklyReportEnabledTrueAndArchivedAtIsNull().stream().map(Team::getId).toList()) {
+            try {
+                if (Boolean.TRUE.equals(transaction.execute(status -> sendIfDue(teamId, now)))) sent++;
+            } catch (RuntimeException exception) {
+                log.error("Weekly report failed for teamId={}", teamId, exception);
+            }
         }
         return sent;
+    }
+
+    private boolean sendIfDue(UUID teamId, Instant now) {
+        var team = teams.findLockedById(teamId).orElse(null);
+        if (team == null || team.isArchived() || !team.isWeeklyReportEnabled()) return false;
+        var local = now.atZone(ZoneId.of(team.getTimezone()));
+        if (local.getDayOfWeek() != DayOfWeek.MONDAY || local.toLocalTime().isBefore(SEND_AFTER)) return false;
+        var thisMonday = local.toLocalDate();
+        if (thisMonday.equals(team.getWeeklyReportSentFor())) return false;
+        team.setWeeklyReportSentFor(thisMonday);
+        teams.saveAndFlush(team);
+        return deliver(team, thisMonday.minusWeeks(1));
     }
 
     private boolean deliver(Team team, java.time.LocalDate from) {

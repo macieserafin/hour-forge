@@ -21,6 +21,7 @@ public class MailConfig {
             throw new IllegalStateException("A mail server is required. Set SPRING_MAIL_HOST (and SPRING_MAIL_PORT); "
                     + "for local development start Mailpit with Docker Compose and use localhost:1025.");
         }
-        return new SmtpEmailSender(sender, from);
+        // Whatever a request or job says in a message is delivered only if its transaction commits.
+        return new AfterCommitEmailSender(new SmtpEmailSender(sender, from));
     }
 }
