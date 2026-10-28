@@ -80,3 +80,15 @@ it('does not offer corrections for ones own row', async () => {
   await screen.findByRole('button', { name: `Korekty czasu: ${worker.displayName}` })
   expect(screen.queryByRole('button', { name: `Korekty czasu: ${owner.displayName}` })).not.toBeInTheDocument()
 })
+
+it('sends the version of the entry with a correction so that a stale form is refused', async () => {
+  const sent: Array<Record<string, unknown>> = []
+  mockApi({ 'GET /api/teams/team/members': () => json(membersPage), [memberEntries]: () => json(history([{ ...entry, version: 4 }])),
+    'PATCH /api/teams/team/time-entries/entry': (_url, options) => { sent.push(JSON.parse(String(options.body))); return json({}) } })
+  panel()
+  await open()
+  await userEvent.click(await screen.findByRole('button', { name: /Popraw wpis/ }))
+  await userEvent.click(screen.getByRole('button', { name: 'Zapisz korektę' }))
+  await waitFor(() => expect(sent).toHaveLength(1))
+  expect(sent[0]).toMatchObject({ expectedVersion: 4 })
+})

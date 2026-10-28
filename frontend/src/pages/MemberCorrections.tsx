@@ -39,7 +39,7 @@ function CorrectionForm({ userId, team, member, entry, onDone }: { userId: strin
     if (duration !== entry?.durationSeconds && duration > MAX_MANUAL_DURATION_SECONDS) { setValidation(maxDurationMessage); return }
     setValidation('')
     const body = { teamId: team.id, projectId, workDate: undated ? null : date, durationSeconds: duration, description: description.trim() || null, ...(tagId ? { tagId } : {}) }
-    if (entry) change.mutate({ ...body, id: entry.id }, { onSuccess: onDone })
+    if (entry) change.mutate({ ...body, id: entry.id, ...(entry.version === undefined ? {} : { expectedVersion: entry.version }) }, { onSuccess: onDone })
     else add.mutate({ ...body, memberId: member.userId }, { onSuccess: onDone })
   }
   return <form onSubmit={submit} onInput={() => setValidation('')}>

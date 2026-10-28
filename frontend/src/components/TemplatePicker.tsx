@@ -8,7 +8,7 @@ interface Props {
   userId: string
   teamId: string
   /** What the form holds now, saved when the person stores a template. */
-  current: { projectId: string; description: string; issue: JiraIssueLink | null }
+  current: { projectId: string; description: string; issue: JiraIssueLink | null; tagId: string }
   onApply: (template: EntryTemplate) => void
 }
 
@@ -31,7 +31,7 @@ export function TemplatePicker({ userId, teamId, current, onApply }: Props) {
     if (!name.trim()) { setValidation('Wpisz nazwę szablonu.'); return }
     if (!current.projectId) { setValidation('Najpierw wybierz projekt, który ma być w szablonie.'); return }
     setValidation('')
-    create.mutate({ name: name.trim(), projectId: current.projectId, description: current.description.trim() || null, jiraIssueId: current.issue?.id ?? null }, {
+    create.mutate({ name: name.trim(), projectId: current.projectId, description: current.description.trim() || null, jiraIssueId: current.issue?.id ?? null, tagId: current.tagId || null }, {
       onSuccess: created => { setSelected(created.id); setSaving(false); setName('') },
     })
   }

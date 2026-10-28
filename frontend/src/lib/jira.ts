@@ -12,6 +12,7 @@ export const jiraOutcomeMessages: Record<string, { tone: 'success' | 'error'; te
   denied: { tone: 'error', text: 'Połączenie z Jira nie zostało zatwierdzone. Możesz spróbować ponownie.' },
   'invalid-state': { tone: 'error', text: 'To połączenie wygasło lub zostało już użyte. Rozpocznij je jeszcze raz.' },
   forbidden: { tone: 'error', text: 'Nie masz już uprawnień do tej operacji w zespole.' },
+  archived: { tone: 'error', text: 'Zespół został zarchiwizowany, więc jego witryna Jira pozostaje bez zmian.' },
   'no-access': { tone: 'error', text: 'Twoje konto Jira nie ma dostępu do witryny tego zespołu. Zaloguj się na właściwe konto Jira.' },
   unavailable: { tone: 'error', text: 'Jira jest teraz niedostępna. Spróbuj ponownie za chwilę.' },
 }

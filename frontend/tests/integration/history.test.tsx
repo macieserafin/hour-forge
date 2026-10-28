@@ -86,3 +86,20 @@ it('retains edit values when another operation has removed the entry', async () 
   expect(await modal.findByRole('alert')).toHaveTextContent('Wpis został usunięty')
   expect(modal.getByLabelText('Opis pracy', { exact: false })).toHaveValue('Original work correction')
 })
+
+it('sends back the version the form was opened with and explains a refusal caused by a newer change', async () => {
+  const sent: Array<Record<string, unknown>> = []
+  let stale = true
+  mockApi({ 'GET /api/time-entries': () => json(history([{ ...entry, version: 3 }])),
+    'PATCH /api/time-entries/entry': (_url, options) => { sent.push(JSON.parse(String(options.body))); return stale ? json({}, 409) : json({}) } })
+  renderApp(<TimeEntryHistory userId="actor" teamId="team" timezone="Europe/Warsaw" />)
+  await userEvent.click(await screen.findByRole('button', { name: 'Edytuj' }))
+  const modal = within(screen.getByRole('dialog'))
+  await userEvent.type(modal.getByLabelText('Opis pracy', { exact: false }), ' again')
+  await userEvent.click(modal.getByRole('button', { name: 'Zapisz zmiany' }))
+  expect(await modal.findByRole('alert')).toHaveTextContent('w międzyczasie zmieniony')
+  expect(sent[0]).toMatchObject({ expectedVersion: 3, description: 'Original work again' })
+  // The typed text is still there, so nothing is lost while the person reloads.
+  expect(modal.getByLabelText('Opis pracy', { exact: false })).toHaveValue('Original work again')
+  stale = false
+})

@@ -37,7 +37,7 @@ export function EditTimeEntry({ userId, entry, projects, timezone, onClose }: {
     }
     if (duration !== entry.durationSeconds && duration > MAX_MANUAL_DURATION_SECONDS) { setValidation(maxDurationMessage); return }
     setValidation('')
-    save.mutate({ id: entry.id, projectId, workDate: undated ? null : date, durationSeconds: duration, description: description.trim() || null, jiraIssueId: issue?.id ?? null, ...(tagId ? { tagId } : {}) }, { onSuccess: onClose })
+    save.mutate({ id: entry.id, projectId, workDate: undated ? null : date, durationSeconds: duration, description: description.trim() || null, jiraIssueId: issue?.id ?? null, ...(tagId ? { tagId } : {}), ...(entry.version === undefined ? {} : { expectedVersion: entry.version }) }, { onSuccess: onClose })
   }
   return <Modal title="Edytuj wpis czasu" busy={save.isPending} onClose={onClose}>
     <p className="dialog-description">Popraw zapisany czas pracy.{entry.entryType === 'TIMER' && ' Korekta czasu nie zmienia oryginalnych momentów uruchomienia i zakończenia timera.'}</p>

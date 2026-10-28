@@ -87,3 +87,9 @@ it('shows no marker and no "new" badge after the news were seen', async () => {
   expect(screen.queryByText('Nowe')).not.toBeInTheDocument()
   expect(screen.queryByLabelText(/Nowości:/)).not.toBeInTheDocument()
 })
+
+it('tells the owner that the site of an archived team was left unchanged when the consent comes back late', async () => {
+  mockApi({ 'GET /api/integrations/jira/status': () => json(connected) })
+  renderApp(<App />, '/integrations?team=team&jira=archived')
+  expect(await screen.findByText('Zespół został zarchiwizowany, więc jego witryna Jira pozostaje bez zmian.')).toBeVisible()
+})

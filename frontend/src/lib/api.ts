@@ -165,6 +165,8 @@ export interface TimeEntryHistoryItem {
   tagId?: string | null
   tagName?: string | null
   tagColor?: string | null
+  /** Raised by every change of the entry; sent back with an edit so that a stale form is refused. */
+  version?: number
 }
 
 export interface TimeEntryHistory {
@@ -666,7 +668,7 @@ export const changeTimerState =({ action, ...body }: { action: 'pause' | 'resume
   timeRequest(`/api/timer/${action}`, body) as Promise<TimeEntry>
 export const createManualTimeEntry = (body: ManualTimeInput) => timeRequest('/api/time-entries', body) as Promise<TimeEntry>
 
-export type UpdateTimeEntryInput = Omit<ManualTimeInput, 'teamId'>
+export type UpdateTimeEntryInput = Omit<ManualTimeInput, 'teamId'> & { expectedVersion?: number }
 
 async function changeTimeEntry(id: string, method: 'PATCH' | 'DELETE', body?: UpdateTimeEntryInput): Promise<void> {
   const csrf = await getCsrf()
@@ -680,7 +682,7 @@ async function changeTimeEntry(id: string, method: 'PATCH' | 'DELETE', body?: Up
       401: 'Sesja wygasła. Zaloguj się ponownie.',
       403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
       404: 'Wpis został usunięty lub nie masz już dostępu do wpisu, projektu lub zespołu.',
-      409: 'Wpis jest aktywnym timerem, wybrany projekt lub tag jest archiwalny. Odśwież historię.',
+      409: 'Wpis został w międzyczasie zmieniony (przez Ciebie lub kogoś innego), jest aktywnym timerem albo wybrany projekt lub tag jest archiwalny. Zamknij formularz, odśwież historię i spróbuj ponownie.',
       422: 'Zespół wymaga opisu pracy albo tagu lub zadania Jira. Uzupełnij wpis i spróbuj ponownie.',
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się zmienić wpisu. Odśwież historię przed ponowieniem operacji.')
@@ -1042,17 +1044,19 @@ export interface CopyDayResult {
   totalSeconds: number
 }
 
-export async function copyDay(input: { teamId: string; fromDate: string; toDate: string }): Promise<CopyDayResult> {
+/** The request id makes a repeated request (after a lost response) return the first result instead of copying again. */
+export async function copyDay(input: { teamId: string; fromDate: string; toDate: string; requestId?: string }): Promise<CopyDayResult> {
   const csrf = await getCsrf()
   const response = await request('/api/time-entries/copy-day', { method: 'POST',
     headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token }, body: JSON.stringify(input) })
   if (!response.ok) {
     const messages: Record<number, string> = {
-      400: 'Nie można skopiować tego dnia: wybierz inny dzień docelowy z ostatnich 2 lat (nie z przyszłości), a wpisów może być najwyżej 100.',
+      400: 'Nie można skopiować tego dnia: wybierz inny dzień docelowy z ostatnich 2 lat (nie z przyszłości); wpisów może być najwyżej 100, a żaden nie może trwać dłużej niż 24 godziny.',
       401: 'Sesja wygasła. Zaloguj się ponownie.',
       403: 'Sesja formularza wygasła. Spróbuj ponownie.',
       404: 'Nie ma wpisów do skopiowania albo nie masz już dostępu do zespołu.',
-      409: 'Zespół jest zarchiwizowany i nie można dodać do niego czasu.',
+      409: 'Nie można dodać czasu: zespół, projekt albo tag któregoś z wpisów jest zarchiwizowany.',
+      422: 'Reguły zespołu nie pozwalają skopiować wszystkich wpisów (np. brakuje wymaganego opisu lub tagu). Popraw wpisy i spróbuj ponownie.',
     }
     throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response) : messages[response.status] ?? 'Nie udało się skopiować wpisów. Spróbuj ponownie.')
   }
@@ -1066,6 +1070,10 @@ export interface EntryTemplate {
   description: string | null
   jiraIssueId: string | null
   jiraIssueKey: string | null
+  tagId?: string | null
+  tagName?: string | null
+  /** The tag was archived after the template was saved; it is not put on new entries. */
+  tagArchived?: boolean
 }
 
 export interface TemplateInput {
@@ -1073,6 +1081,7 @@ export interface TemplateInput {
   projectId: string
   description: string | null
   jiraIssueId: string | null
+  tagId?: string | null
 }
 
 async function templateRequest<T>(teamId: string, method: string, suffix = '', body?: unknown, signal?: AbortSignal): Promise<T> {
@@ -1085,7 +1094,7 @@ async function templateRequest<T>(teamId: string, method: string, suffix = '', b
       401: 'Sesja wygasła. Zaloguj się ponownie.',
       403: 'Sesja formularza wygasła. Spróbuj ponownie.',
       404: 'Nie znaleziono szablonu, projektu lub zadania Jira albo nie masz już dostępu.',
-      409: 'Szablon o takiej nazwie już istnieje, masz ich za dużo (najwyżej 30 w zespole), projekt jest archiwalny albo zespół jest zarchiwizowany.',
+      409: 'Szablon o takiej nazwie już istnieje, masz ich za dużo (najwyżej 30 w zespole), projekt lub tag jest archiwalny albo zespół jest zarchiwizowany.',
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wykonać operacji na szablonie. Spróbuj ponownie.')
   }
@@ -1140,7 +1149,7 @@ async function correctionRequest<T>(path: string, method: 'GET' | 'POST' | 'PATC
       401: 'Sesja wygasła. Zaloguj się ponownie.',
       403: 'Korekty czasu może wykonywać tylko właściciel lub administrator zespołu albo sesja formularza wygasła.',
       404: 'Wpis, osoba lub projekt są niedostępne. Odśwież listę.',
-      409: 'Zespół jest zarchiwizowany, wpis jest uruchomionym timerem albo projekt jest archiwalny.',
+      409: 'Zespół jest zarchiwizowany, wpis jest uruchomionym timerem, projekt jest archiwalny albo wpis został w międzyczasie zmieniony. Odśwież listę i spróbuj ponownie.',
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się zapisać korekty. Odśwież listę przed ponowieniem operacji.')
   }

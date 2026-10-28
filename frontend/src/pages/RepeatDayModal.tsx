@@ -1,12 +1,15 @@
+import { useRef } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { Modal } from '../components/Modal'
-import { addDays, formatDuration, teamToday, useCopyDay, useTimeEntryHistory } from '../lib/time'
+import { addDays, formatDuration, newRequestId, teamToday, useCopyDay, useTimeEntryHistory } from '../lib/time'
 
 /** Copies one day of the person's own work to another day (by default yesterday to today) as manual entries. */
 export function RepeatDayModal({ userId, teamId, timezone, onClose }: { userId: string; teamId: string; timezone: string; onClose: () => void }) {
   const today = teamToday(timezone)
   const yesterday = addDays(today, -1)
   const copy = useCopyDay(userId)
+  // One id per opening of the dialog: a retry after a lost answer is the same request, a new opening is a new copy.
+  const requestId = useRef(newRequestId())
   const source = useTimeEntryHistory(userId, teamId, { projectId: '', from: yesterday, to: yesterday }, 0)
   const items = source.data?.content ?? []
   const total = items.reduce((sum, entry) => sum + entry.durationSeconds, 0)
@@ -29,7 +32,7 @@ export function RepeatDayModal({ userId, teamId, timezone, onClose }: { userId: 
     <footer className="dialog-actions">
       <button type="button" className="button-secondary" disabled={copy.isPending} onClick={onClose}>{done ? 'Zamknij' : 'Anuluj'}</button>
       {!done && items.length > 0 && <button type="button" className="button-primary" disabled={copy.isPending}
-        onClick={() => copy.mutate({ teamId, fromDate: yesterday, toDate: today })}>{copy.isPending && <LoaderCircle size={16} className="spin" />}{copy.isPending ? 'Kopiowanie…' : 'Skopiuj wpisy'}</button>}
+        onClick={() => copy.mutate({ teamId, fromDate: yesterday, toDate: today, requestId: requestId.current })}>{copy.isPending && <LoaderCircle size={16} className="spin" />}{copy.isPending ? 'Kopiowanie…' : 'Skopiuj wpisy'}</button>}
     </footer>
   </Modal>
 }

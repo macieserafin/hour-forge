@@ -64,8 +64,8 @@ function ManualTimeModal({ userId, team, projects, projectId, initial, onClose, 
         <div className="field-group"><label htmlFor="manual-description">Opis pracy <span className="optional-label">(opcjonalnie)</span></label><textarea className="text-input project-description-input" id="manual-description" rows={3} maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></div>
         <TagSelect userId={userId} teamId={team.id} value={tagId} onChange={setTagId} canCreate={canManage(team.role)} />
         <JiraIssuePicker userId={userId} teamId={team.id} value={issue} onChange={setIssue} />
-        <TemplatePicker userId={userId} teamId={team.id} current={{ projectId: selected, description, issue }}
-          onApply={template => { setSelected(template.projectId); setDescription(template.description ?? ''); setIssue(template.jiraIssueId && template.jiraIssueKey ? { id: template.jiraIssueId, key: template.jiraIssueKey, summary: '' } : null) }} />
+        <TemplatePicker userId={userId} teamId={team.id} current={{ projectId: selected, description, issue, tagId }}
+          onApply={template => { setSelected(template.projectId); setDescription(template.description ?? ''); setTagId(template.tagId && !template.tagArchived ? template.tagId : ''); setIssue(template.jiraIssueId && template.jiraIssueKey ? { id: template.jiraIssueId, key: template.jiraIssueKey, summary: '' } : null) }} />
       </fieldset>
       {(validation || save.isError) && <p className="form-error" role="alert">{validation || save.error?.message}</p>}
       <footer className="dialog-actions"><button type="button" className="button-secondary" disabled={save.isPending} onClick={onClose}>Anuluj</button><button type="submit" className="button-primary" disabled={save.isPending}>{save.isPending && <LoaderCircle size={16} className="spin" />}{save.isPending ? 'Zapisywanie…' : 'Zapisz wpis'}</button></footer>
@@ -159,8 +159,8 @@ function TeamTimeEntry({ userId, team, start, canStart, onSaved, onStarted }: {
           <div className="field-group"><label htmlFor="time-description">Opis pracy <span className="optional-label">(opcjonalnie)</span></label><textarea className="text-input timer-description" id="time-description" rows={3} maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></div>
           <TagSelect userId={userId} teamId={team.id} value={tagId} onChange={setTagId} canCreate={canManage(team.role)} />
           <JiraIssuePicker userId={userId} teamId={team.id} value={issue} onChange={setIssue} />
-          <TemplatePicker userId={userId} teamId={team.id} current={{ projectId, description, issue }}
-            onApply={template => { setProjectId(template.projectId); setDescription(template.description ?? ''); setIssue(template.jiraIssueId && template.jiraIssueKey ? { id: template.jiraIssueId, key: template.jiraIssueKey, summary: '' } : null); setValidation('') }} />
+          <TemplatePicker userId={userId} teamId={team.id} current={{ projectId, description, issue, tagId }}
+            onApply={template => { setProjectId(template.projectId); setDescription(template.description ?? ''); setTagId(template.tagId && !template.tagArchived ? template.tagId : ''); setIssue(template.jiraIssueId && template.jiraIssueKey ? { id: template.jiraIssueId, key: template.jiraIssueKey, summary: '' } : null); setValidation('') }} />
         </fieldset>
         {validation && <p className="form-error" role="alert">{validation}</p>}
         <div className="time-entry-actions"><button type="submit" className="button-primary" disabled={!canStart || start.isPending || projects.isFetching}>{start.isPending ? <LoaderCircle size={16} className="spin" /> : <Play size={16} />}{start.isPending ? 'Uruchamianie…' : 'Uruchom timer'}</button></div>
