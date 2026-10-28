@@ -165,4 +165,50 @@ class EntryTemplateIT extends ApiIntegrationTestSupport {
         entityManager.flush();
         assertThat(jdbc.queryForObject("select count(*) from entry_templates where team_id = ?", Integer.class, team.getId())).isZero();
     }
+
+    @Autowired pl.macieserafin.hourforge.tag.TagRepository tags;
+
+    private String bodyWithTag(String name, String tagId) {
+        return body(name, project, null).replaceFirst("}$", ",\"tagId\":" + (tagId == null ? "null" : "\"" + tagId + "\"") + "}");
+    }
+
+    @Test
+    void aTemplateRemembersItsTagAndCanDropIt() throws Exception {
+        var review = tags.saveAndFlush(new pl.macieserafin.hourforge.tag.Tag(team, "Review", null));
+        var json = send(post(url()), memberPrincipal, bodyWithTag("Tagged", review.getId().toString()))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.tagId").value(review.getId().toString()))
+                .andExpect(jsonPath("$.tagName").value("Review")).andReturn().getResponse().getContentAsString();
+        var id = JsonPath.<String>read(json, "$.id");
+        mvc.perform(get(url()).with(user(memberPrincipal))).andExpect(jsonPath("$[0].tagId").value(review.getId().toString()));
+
+        send(put(url() + "/" + id), memberPrincipal, bodyWithTag("Tagged", null)).andExpect(status().isOk()).andExpect(jsonPath("$.tagId").doesNotExist());
+    }
+
+    @Test
+    void aTagOfAnotherTeamOrAnArchivedTagCannotBeSetOnATemplate() throws Exception {
+        var foreignTeam = fixtures.team("Foreign", "UTC");
+        var foreign = tags.saveAndFlush(new pl.macieserafin.hourforge.tag.Tag(foreignTeam, "Foreign tag", null));
+        send(post(url()), memberPrincipal, bodyWithTag("Foreign", foreign.getId().toString())).andExpect(status().isNotFound());
+
+        var old = tags.saveAndFlush(new pl.macieserafin.hourforge.tag.Tag(team, "Old", null));
+        old.setArchivedAt(Instant.now());
+        tags.saveAndFlush(old);
+        send(post(url()), memberPrincipal, bodyWithTag("Archived", old.getId().toString())).andExpect(status().isConflict());
+    }
+
+    @Test
+    void aTagArchivedLaterIsKeptByTheTemplateButSaysSo() throws Exception {
+        var review = tags.saveAndFlush(new pl.macieserafin.hourforge.tag.Tag(team, "Review", null));
+        var json = send(post(url()), memberPrincipal, bodyWithTag("Tagged", review.getId().toString())).andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        var id = JsonPath.<String>read(json, "$.id");
+        review.setArchivedAt(Instant.now());
+        tags.saveAndFlush(review);
+        entityManager.clear();
+
+        mvc.perform(get(url()).with(user(memberPrincipal))).andExpect(jsonPath("$[0].tagId").value(review.getId().toString()))
+                .andExpect(jsonPath("$[0].tagArchived").value(true));
+        // Saving the template as it is does not trip over the archived tag it already has.
+        send(put(url() + "/" + id), memberPrincipal, bodyWithTag("Tagged", review.getId().toString())).andExpect(status().isOk());
+    }
 }

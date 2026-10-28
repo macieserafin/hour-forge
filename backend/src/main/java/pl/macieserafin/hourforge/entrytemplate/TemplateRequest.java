@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.UUID;
 
-public record TemplateRequest(@NotBlank @Size(max = 80) String name, @NotNull UUID projectId, @Size(max = 2000) String description,
+public record TemplateRequest(@NotBlank @Size(max = 80) String name, @NotNull UUID projectId, @Size(max = 2000) String description, UUID tagId,
                               @Pattern(regexp = "[0-9]{1,20}") String jiraIssueId) {
     public TemplateRequest {
         name = name == null ? null : name.strip();

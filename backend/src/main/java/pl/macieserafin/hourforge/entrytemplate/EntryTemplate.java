@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import pl.macieserafin.hourforge.tag.Tag;
 import pl.macieserafin.hourforge.team.Team;
 import pl.macieserafin.hourforge.timeentry.IssueLink;
 import pl.macieserafin.hourforge.user.User;
@@ -42,6 +43,10 @@ public class EntryTemplate {
     @Column(name = "description", columnDefinition = "text")
     private String description;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tag_id")
+    private Tag tag;
+
     @Column(name = "jira_connection_id")
     private UUID jiraConnectionId;
 
@@ -67,7 +72,8 @@ public class EntryTemplate {
         this.team = team;
     }
 
-    public void apply(String name, UUID projectId, String description, IssueLink link) {
+    public void apply(String name, UUID projectId, String description, Tag tag, IssueLink link) {
+        this.tag = tag;
         this.name = name;
         this.projectId = projectId;
         this.description = description;
@@ -76,6 +82,9 @@ public class EntryTemplate {
         this.jiraIssueKey = link == null ? null : link.issueKey();
     }
 
+    public Tag getTag() { return tag; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
     public UUID getId() { return id; }
     public User getUser() { return user; }
     public Team getTeam() { return team; }

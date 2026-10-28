@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.project.ProjectRepository;
+import pl.macieserafin.hourforge.tag.Tag;
+import pl.macieserafin.hourforge.tag.TagRepository;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
 import pl.macieserafin.hourforge.timeentry.IssueLink;
@@ -22,9 +24,11 @@ public class EntryTemplateService {
     private final TeamMemberRepository members;
     private final ProjectRepository projects;
     private final UserRepository users;
+    private final TagRepository tags;
 
     public EntryTemplateService(EntryTemplateRepository templates, TeamRepository teams, TeamMemberRepository members,
-                                ProjectRepository projects, UserRepository users) {
+                                ProjectRepository projects, UserRepository users, TagRepository tags) {
+        this.tags = tags;
         this.templates = templates;
         this.teams = teams;
         this.members = members;
@@ -58,7 +62,7 @@ public class EntryTemplateService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A template with this name already exists");
         }
         var template = new EntryTemplate(users.getReferenceById(userId), team);
-        template.apply(request.name(), request.projectId(), request.description(), link);
+        template.apply(request.name(), request.projectId(), request.description(), tagFor(teamId, request.tagId(), null), link);
         return save(template, link);
     }
 
@@ -72,7 +76,7 @@ public class EntryTemplateService {
                 && templates.existsByUserIdAndTeamIdAndNameIgnoreCase(userId, teamId, request.name())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A template with this name already exists");
         }
-        template.apply(request.name(), request.projectId(), request.description(), link);
+        template.apply(request.name(), request.projectId(), request.description(), tagFor(teamId, request.tagId(), template.getTag()), link);
         return save(template, link);
     }
 
@@ -106,6 +110,15 @@ public class EntryTemplateService {
         var team = teams.findLockedById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (team.isArchived()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived teams cannot be changed");
         return team;
+    }
+
+    /** A tag of the template's team that is active; the one the template already has may stay after it was archived. */
+    private Tag tagFor(UUID teamId, UUID tagId, Tag current) {
+        if (tagId == null) return null;
+        if (current != null && current.getId().equals(tagId)) return current;
+        var tag = tags.findByIdAndTeamId(tagId, teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (tag.getArchivedAt() != null) throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived tags cannot be used");
+        return tag;
     }
 
     private void requireUsableProject(UUID teamId, UUID projectId) {

@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 public interface EntryTemplateRepository extends JpaRepository<EntryTemplate, UUID> {
+    List<EntryTemplate> findByUserIdOrderByCreatedAtAscIdAsc(UUID userId);
+
     List<EntryTemplate> findByUserIdAndTeamIdOrderByNameAsc(UUID userId, UUID teamId);
 
     Optional<EntryTemplate> findByIdAndUserId(UUID id, UUID userId);
