@@ -8,6 +8,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
 import pl.macieserafin.hourforge.security.DatabaseUserDetailsService;
+import pl.macieserafin.hourforge.session.LoginEvent;
 import pl.macieserafin.hourforge.session.SignInCompletion;
 import pl.macieserafin.hourforge.support.UnitFixtures;
 import pl.macieserafin.hourforge.twofactor.TwoFactorService;
@@ -147,5 +148,47 @@ class TwoFactorSignInTest {
         } finally {
             SecurityContextHolder.clearContext();
         }
+    }
+
+    @Test
+    void aWrongCodeAfterGoogleIsRecordedAsAGoogleSignIn() {
+        var userId = UUID.randomUUID();
+        var request = new MockHttpServletRequest();
+        at(START).begin(request, userId, false, 1, LoginEvent.Method.GOOGLE);
+        when(credentials.findSessionVersion(userId)).thenReturn(Optional.of(1));
+        when(twoFactor.verifySignIn(userId, "123456")).thenReturn(false);
+
+        assertThat(at(START).answer(request, new MockHttpServletResponse(), "123456")).isEqualTo(TwoFactorSignIn.Result.WRONG_CODE);
+        verify(completion).failSecondStep(request, userId, LoginEvent.Method.GOOGLE);
+    }
+
+    @Test
+    void theRightCodeAfterGoogleFinishesAGoogleSignIn() {
+        var user = UnitFixtures.user();
+        var request = new MockHttpServletRequest();
+        at(START).begin(request, user.getId(), true, 1, LoginEvent.Method.GOOGLE);
+        when(credentials.findSessionVersion(user.getId())).thenReturn(Optional.of(1));
+        when(twoFactor.verifySignIn(user.getId(), "123456")).thenReturn(true);
+        when(users.findById(user.getId())).thenReturn(Optional.of(user));
+        when(userDetails.loadUserByUsername(user.getEmail())).thenReturn(new AppUserPrincipal(user.getId(), user.getEmail(), "hash", 1));
+
+        try {
+            assertThat(at(START).answer(request, new MockHttpServletResponse(), "123456")).isEqualTo(TwoFactorSignIn.Result.SIGNED_IN);
+            verify(completion).complete(request, user.getId(), true, LoginEvent.Method.GOOGLE);
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    @Test
+    void aPasswordStepIsStillRecordedAsAPasswordSignIn() {
+        var userId = UUID.randomUUID();
+        var request = new MockHttpServletRequest();
+        at(START).begin(request, userId, false, 1);
+        when(credentials.findSessionVersion(userId)).thenReturn(Optional.of(1));
+        when(twoFactor.verifySignIn(userId, "123456")).thenReturn(false);
+
+        at(START).answer(request, new MockHttpServletResponse(), "123456");
+        verify(completion).failSecondStep(request, userId, LoginEvent.Method.PASSWORD);
     }
 }

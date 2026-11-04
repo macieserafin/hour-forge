@@ -2,9 +2,10 @@
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
     <conversionRule conversionWord="redactInvites" class="pl.macieserafin.hourforge.security.InvitationTokenRedactor"/>
+    <conversionRule conversionWord="redactOAuth" class="pl.macieserafin.hourforge.security.OAuthSecretRedactor"/>
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%redactInvites(${CONSOLE_LOG_PATTERN}){}%nopex</pattern>
+            <pattern>%redactOAuth(%redactInvites(${CONSOLE_LOG_PATTERN}){}){}%nopex</pattern>
             <charset>UTF-8</charset>
         </encoder>
     </appender>

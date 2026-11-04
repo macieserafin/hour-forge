@@ -17,6 +17,9 @@ public class RequestRateLimits {
 
     public void registration(String ip) { acquire("registration:" + ip, limits.registration()); }
 
+    /** Every start of a Google sign-in and every return from Google counts, per client address. */
+    public void googleSignIn(String ip) { acquire("google-sign-in:" + ip, limits.googleSignIn()); }
+
     public void teamCreation(UUID userId) { acquire("team-creation:" + userId, limits.teamCreation()); }
 
     public void invitationCreation(UUID userId) { acquire("invitation-creation:" + userId, limits.invitationCreation()); }

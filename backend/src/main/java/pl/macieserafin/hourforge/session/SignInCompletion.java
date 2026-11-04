@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 import java.util.UUID;
 
 /**
- * The last part of every successful sign-in, after the password and, when it is on, the second step: the session
+ * The last part of every successful sign-in, after the password or Google and, when it is on, the second step: the session
  * gets its lifetime and device, and the sign-in is written to the history (which may send the new-device e-mail).
  */
 @Component
@@ -22,6 +22,11 @@ public class SignInCompletion {
     }
 
     public void complete(HttpServletRequest request, UUID userId, boolean remembered) {
+        complete(request, userId, remembered, LoginEvent.Method.PASSWORD);
+    }
+
+    /** As above, for a sign-in whose first step was made with {@code method} (the password or Google). */
+    public void complete(HttpServletRequest request, UUID userId, boolean remembered, LoginEvent.Method method) {
         if (remembered) {
             // "Zapamiętaj mnie": idle for up to 30 days, and a cookie that outlives the browser (see SessionConfig).
             request.getSession().setMaxInactiveInterval((int) SessionConfig.REMEMBER_FOR.toSeconds());
@@ -29,7 +34,7 @@ public class SignInCompletion {
         }
         var device = DeviceInfo.of(request, locator);
         devices.recordSignIn(request, device, remembered);
-        logins.recordSuccess(userId, device);
+        logins.recordSuccess(userId, method, device);
     }
 
     /** A wrong password for the given address (only existing accounts are recorded). */
@@ -39,6 +44,11 @@ public class SignInCompletion {
 
     /** A wrong code in the second step, after a right password. */
     public void failSecondStep(HttpServletRequest request, UUID userId) {
-        logins.recordFailure(userId, DeviceInfo.of(request, locator));
+        failSecondStep(request, userId, LoginEvent.Method.PASSWORD);
+    }
+
+    /** A wrong code in the second step, after a right first step made with {@code method}. */
+    public void failSecondStep(HttpServletRequest request, UUID userId, LoginEvent.Method method) {
+        logins.recordFailure(userId, method, DeviceInfo.of(request, locator));
     }
 }

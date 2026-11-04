@@ -43,6 +43,19 @@ public class AccountMailService {
                         + frontendUrl + "/forgot-password\n\nJeśli to nie Ty, nic nie musisz robić.\n");
     }
 
+    /**
+     * Sent to the owner of an address when somebody signed in with a Google account that has the same address. Nothing
+     * was linked or created (A13-D1); only the person who proved that Google account learns that the address is taken.
+     */
+    public void sendGoogleSignInAttempt(User existing) {
+        sender.send(existing.getEmail(), "Ktoś próbował zalogować się przez Google na Twój adres",
+                "Cześć " + existing.getDisplayName() + ",\n\nktoś próbował zalogować się do HourForge kontem Google z adresem e-mail "
+                        + "Twojego konta. Nie połączyliśmy tego konta Google z Twoim kontem i niczego nie zmieniliśmy.\n\n"
+                        + "Jeśli to Ty, zaloguj się tak jak zwykle, a potem połącz Google w ustawieniach konta:\n"
+                        + frontendUrl + "/account#google\n\nJeśli nie pamiętasz hasła, ustaw nowe:\n" + frontendUrl + "/forgot-password\n\n"
+                        + "Jeśli to nie Ty, nic nie musisz robić.\n");
+    }
+
     @Transactional
     public void sendEmailChange(User user, String newEmail) {
         var token = tokens.issue(user, EmailTokenPurpose.CHANGE_EMAIL, newEmail);

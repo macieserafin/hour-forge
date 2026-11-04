@@ -5,6 +5,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,7 +20,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
+import pl.macieserafin.hourforge.google.GoogleSignIn;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
 import pl.macieserafin.hourforge.security.LoginAttemptService;
 import pl.macieserafin.hourforge.security.SessionVersionFilter;
@@ -49,13 +52,22 @@ public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, LoginAttemptService loginAttempts,
                                             UserCredentialRepository credentials, SignInCompletion signIns,
-                                            TwoFactorSignIn twoFactor, UserRepository users, Clock clock) throws Exception {
+                                            TwoFactorSignIn twoFactor, UserRepository users, Clock clock,
+                                            ObjectProvider<GoogleSignIn> googleSignIn) throws Exception {
+        // Without GOOGLE_CLIENT_ID there is no GoogleSignIn bean: no OAuth2 filter is added and both addresses answer 404.
+        var google = googleSignIn.getIfAvailable();
+        if (google != null) {
+            http.addFilterBefore(google.guard(), OAuth2AuthorizationRequestRedirectFilter.class)
+                    .oauth2Login(login -> google.configure(login.loginPage(LOGIN_URL)));
+        }
         return http
                 .headers(headers -> headers.referrerPolicy(policy -> policy.policy(
                         org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
                 .authorizeHttpRequests(authorize -> authorize
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf", "/api/config").permitAll()
+                        // Sign-in with Google (start and return); handled by OAuth2 filters before this point when it is on.
+                        .requestMatchers(HttpMethod.GET, GoogleSignIn.START_PATH, GoogleSignIn.CALLBACK_PATH).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/email-verification/confirm",
                                 "/api/auth/email-verification/resend", "/api/auth/password-reset/request",

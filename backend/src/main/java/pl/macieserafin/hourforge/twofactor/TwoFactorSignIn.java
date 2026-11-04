@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
 import pl.macieserafin.hourforge.security.DatabaseUserDetailsService;
+import pl.macieserafin.hourforge.session.LoginEvent;
 import pl.macieserafin.hourforge.session.SignInCompletion;
 import pl.macieserafin.hourforge.user.UserRepository;
 
@@ -32,8 +33,14 @@ public class TwoFactorSignIn {
     static final Duration TIME_TO_ANSWER = Duration.ofMinutes(5);
     static final int ATTEMPTS = 5;
 
-    /** Who passed the password step, whether to remember the device, and until when the code is awaited. */
-    record Pending(UUID userId, boolean remembered, Instant expiresAt, int failures) implements Serializable {
+    /**
+     * Who passed the first step, whether to remember the device, until when the code is awaited, and how the first
+     * step was made. A session stored before the method was kept has none: that first step was the password.
+     */
+    record Pending(UUID userId, boolean remembered, Instant expiresAt, int failures, LoginEvent.Method method) implements Serializable {
+        LoginEvent.Method firstStep() {
+            return method == null ? LoginEvent.Method.PASSWORD : method;
+        }
     }
 
     public enum Result { SIGNED_IN, WRONG_CODE, START_AGAIN }
@@ -64,11 +71,16 @@ public class TwoFactorSignIn {
      * was checked against is kept, so a password change, reset or "sign out everywhere" ends the waiting sign-in.
      */
     public void begin(HttpServletRequest request, UUID userId, boolean remembered, Integer credentialVersion) {
+        begin(request, userId, remembered, credentialVersion, LoginEvent.Method.PASSWORD);
+    }
+
+    /** As above, for a first step made with {@code method}; the second step is then recorded with that method. */
+    public void begin(HttpServletRequest request, UUID userId, boolean remembered, Integer credentialVersion, LoginEvent.Method method) {
         SecurityContextHolder.clearContext();
         var session = request.getSession();
         session.removeAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
         session.setAttribute(PENDING_VERSION, credentialVersion);
-        session.setAttribute(PENDING, new Pending(userId, remembered, clock.instant().plus(TIME_TO_ANSWER), 0));
+        session.setAttribute(PENDING, new Pending(userId, remembered, clock.instant().plus(TIME_TO_ANSWER), 0, method));
     }
 
     public Result answer(HttpServletRequest request, HttpServletResponse response, String code) {
@@ -85,13 +97,13 @@ public class TwoFactorSignIn {
             return Result.START_AGAIN;
         }
         if (!twoFactor.verifySignIn(pending.userId(), code)) {
-            completion.failSecondStep(request, pending.userId());
+            completion.failSecondStep(request, pending.userId(), pending.firstStep());
             var failures = pending.failures() + 1;
             if (failures >= ATTEMPTS) {
                 forget(session);
                 return Result.START_AGAIN;
             }
-            session.setAttribute(PENDING, new Pending(pending.userId(), pending.remembered(), pending.expiresAt(), failures));
+            session.setAttribute(PENDING, new Pending(pending.userId(), pending.remembered(), pending.expiresAt(), failures, pending.method()));
             return Result.WRONG_CODE;
         }
         forget(session);
@@ -113,7 +125,7 @@ public class TwoFactorSignIn {
         context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(principal, null, List.of()));
         SecurityContextHolder.setContext(context);
         new HttpSessionSecurityContextRepository().saveContext(context, request, response);
-        completion.complete(request, pending.userId(), pending.remembered());
+        completion.complete(request, pending.userId(), pending.remembered(), pending.firstStep());
         return Result.SIGNED_IN;
     }
 
