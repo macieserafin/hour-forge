@@ -5,7 +5,7 @@ import { AuthLayout } from '../components/AuthLayout'
 import { BotCheckWidget } from '../components/BotCheckWidget'
 import { usePublicConfig } from '../lib/operator'
 import { useRegister } from '../lib/auth'
-import { loginUrl, safeReturnTo } from '../lib/navigation'
+import { googleSignInUrl, loginUrl, safeReturnTo } from '../lib/navigation'
 import { registrationError } from '../lib/registration'
 
 export function RegisterPage() {
@@ -18,6 +18,7 @@ export function RegisterPage() {
   const registration = useRegister()
   const config = usePublicConfig()
   const siteKey = config.data?.botCheckSiteKey ?? null
+  const google = config.data?.googleSignIn === true
   const [botCheckToken, setBotCheckToken] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
   const navigate = useNavigate()
@@ -69,6 +70,7 @@ export function RegisterPage() {
         {registration.isPending ? <><LoaderCircle size={17} className="spin" />Tworzenie konta…</> : <>Utwórz konto<ArrowRight size={17} /></>}
       </button>
     </form>
+    {google && <a className="button-secondary login-submit" href={googleSignInUrl({ returnTo: search.get('returnTo') })}>Załóż konto przez Google</a>}
     <p className="auth-alternative">Masz już konto? <Link className="text-link" to={loginUrl(returnTo)}>Zaloguj się</Link></p>
   </AuthLayout>
 }

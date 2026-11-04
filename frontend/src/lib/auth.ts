@@ -1,4 +1,5 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { usePublicConfig } from './operator'
 import { answerTwoFactor, confirmEmail, confirmEmailChange, confirmPasswordReset, getUser, login, logout, register, requestPasswordReset, resendVerification } from './api'
 
 export const sessionOptions = queryOptions({
@@ -8,6 +9,11 @@ export const sessionOptions = queryOptions({
 
 export function useSession() {
   return useQuery(sessionOptions)
+}
+
+/** Google controls appear only when the server says so; while the settings load, or if they fail, nothing about Google is shown. */
+export function useGoogleSignIn() {
+  return usePublicConfig().data?.googleSignIn === true
 }
 
 export function useRegister() {

@@ -1,10 +1,10 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { ArrowRight, Eye, EyeOff, KeyRound, LoaderCircle, LockKeyhole, Mail } from 'lucide-react'
 import { AuthLayout } from '../components/AuthLayout'
-import { useAnswerTwoFactor, useLogin, useResendVerification } from '../lib/auth'
-import { ApiError } from '../lib/api'
+import { useAnswerTwoFactor, useGoogleSignIn, useLogin, useResendVerification } from '../lib/auth'
+import { ApiError, googleOutcome } from '../lib/api'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
-import { registrationUrl, safeReturnTo } from '../lib/navigation'
+import { googleSignInUrl, registrationUrl, safeReturnTo } from '../lib/navigation'
 
 export function LoginPage() {
   const location = useLocation()
@@ -21,10 +21,20 @@ export function LoginPage() {
   const resend = useResendVerification()
   const [search] = useSearchParams()
   const isInvitation = safeReturnTo(search.get('returnTo')).startsWith('/invite/')
+  const google = useGoogleSignIn()
+  const [googleNoticeHidden, setGoogleNoticeHidden] = useState(false)
+  const googleNotice = google && !googleNoticeHidden ? googleOutcome(search.get('google'), 'login') : null
+  const [urlStepTaken, setUrlStepTaken] = useState(false)
+
+  // After Google the server may still ask for the code (A13-D3); it sends the browser here with ?step=two-factor.
+  useEffect(() => {
+    if (!google || urlStepTaken || search.get('step') !== 'two-factor') return
+    setUrlStepTaken(true); setCode(''); setStep('code')
+  }, [google, urlStepTaken, search])
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setRestartReason('')
+    setRestartReason(''); setGoogleNoticeHidden(true)
     login.mutate({ email, password, rememberMe }, { onSuccess: result => {
       setPassword('')
       if (result === 'TWO_FACTOR_REQUIRED') { setCode(''); setStep('code') }
@@ -63,6 +73,9 @@ export function LoginPage() {
   return <AuthLayout>
         <h2>Zaloguj się</h2>
         <p className="form-intro">{isInvitation ? 'Zaloguj się, aby wrócić do zaproszenia i potwierdzić dołączenie do zespołu.' : 'Użyj adresu e-mail przypisanego do Twojego konta.'}</p>
+        {googleNotice && (googleNotice.tone === 'success'
+          ? <p className="project-notice auth-success" role="status">{googleNotice.text}</p>
+          : <p className="form-error" role="alert">{googleNotice.text}</p>)}
         {registered && <p className="project-notice auth-success" role="status">Rejestracja przyjęta. Wysłaliśmy wiadomość na podany adres e-mail. Potwierdź adres linkiem z wiadomości, a potem zaloguj się.</p>}
 
         <form onSubmit={submit} aria-label="Logowanie">
@@ -101,6 +114,7 @@ export function LoginPage() {
             {login.isPending ? <><LoaderCircle size={17} className="spin" />Logowanie…</> : <>Zaloguj się<ArrowRight size={17} /></>}
           </button>
         </form>
+        {google && <a className="button-secondary login-submit" href={googleSignInUrl({ rememberMe, returnTo: search.get('returnTo') })}>Zaloguj się przez Google</a>}
         <p className="auth-alternative">Nie masz konta? <Link className="text-link" to={registrationUrl(safeReturnTo(search.get('returnTo')))}>Utwórz konto</Link></p>
   </AuthLayout>
 }

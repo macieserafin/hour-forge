@@ -104,3 +104,50 @@ it('removes what the browser keeps for the deleted account but not for other peo
   expect(left.filter(key => key.includes(`:${user.id}`))).toEqual([])
   expect(left).toContain('hourforge:timer-draft:somebody-else:entry')
 })
+
+it('sends a deletion link to an account without a password and keeps it signed in until the link is used', async () => {
+  let body: unknown
+  const signedIn = { ...user, hasPassword: false, google: { linked: true, email: 'actor@gmail.test', linkedAt: '2026-10-19T10:00:00Z' } }
+  mockApi({ 'GET /api/me': () => json(signedIn),
+    'POST /api/account/delete': (_url, options) => { body = JSON.parse(String(options.body)); return json(null, 202) } })
+  renderApp(<App />, '/account')
+  await userEvent.click(await screen.findByRole('button', { name: 'Usuń konto' }))
+  const dialog = within(screen.getByRole('dialog'))
+  expect(dialog.queryByLabelText('Obecne hasło')).not.toBeInTheDocument()
+  expect(dialog.getByText(/wyślemy link potwierdzający na adres/)).toHaveTextContent(user.email)
+  await userEvent.click(dialog.getByRole('button', { name: 'Wyślij link potwierdzający' }))
+  expect(await dialog.findByRole('status')).toHaveTextContent('Wysłaliśmy link potwierdzający.')
+  expect(body).toEqual({ confirmByEmail: true })
+  expect(screen.queryByRole('heading', { name: /Zaloguj/i })).not.toBeInTheDocument()
+  expect(dialog.queryByRole('button', { name: 'Wyślij link potwierdzający' })).not.toBeInTheDocument()
+  expect(dialog.getByRole('button', { name: 'Zamknij' })).toHaveFocus()
+})
+
+it('tells an owner without a password to hand over the teams before a deletion link is sent', async () => {
+  mockApi({ 'GET /api/me': () => json({ ...user, hasPassword: false }), 'POST /api/account/delete': () => json({}, 409) })
+  renderApp(<App />, '/account')
+  await userEvent.click(await screen.findByRole('button', { name: 'Usuń konto' }))
+  const dialog = within(screen.getByRole('dialog'))
+  await userEvent.click(dialog.getByRole('button', { name: 'Wyślij link potwierdzający' }))
+  expect(await dialog.findByRole('alert')).toHaveTextContent('przekaż własność lub usuń zespoły')
+})
+
+it('says when the server cannot send the deletion link', async () => {
+  mockApi({ 'GET /api/me': () => json({ ...user, hasPassword: false }), 'POST /api/account/delete': () => json({}, 503) })
+  renderApp(<App />, '/account')
+  await userEvent.click(await screen.findByRole('button', { name: 'Usuń konto' }))
+  const dialog = within(screen.getByRole('dialog'))
+  await userEvent.click(dialog.getByRole('button', { name: 'Wyślij link potwierdzający' }))
+  expect(await dialog.findByRole('alert')).toHaveTextContent('Wysyłanie e-maili nie jest skonfigurowane na tym serwerze.')
+})
+
+it('explains a missing password when deleting while the account still looks like it has one', async () => {
+  mockApi({ 'POST /api/account/delete': () => json({ code: 'PASSWORD_NOT_SET' }, 400) })
+  renderApp(<App />, '/account')
+  await userEvent.click(await screen.findByRole('button', { name: 'Usuń konto' }))
+  const dialog = within(screen.getByRole('dialog'))
+  await userEvent.type(dialog.getByLabelText('Obecne hasło'), 'Anything-typed-2026')
+  await userEvent.click(dialog.getByRole('button', { name: 'Usuń konto na stałe' }))
+  expect(await dialog.findByRole('alert')).toHaveTextContent('Twoje konto nie ma jeszcze hasła. Użyj przycisku „Ustaw hasło”')
+  expect(screen.queryByRole('heading', { name: /Zaloguj/i })).not.toBeInTheDocument()
+})

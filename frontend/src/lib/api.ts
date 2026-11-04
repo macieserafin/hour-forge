@@ -7,6 +7,17 @@ export interface User {
   operator?: boolean
   /** When the profile picture last changed; absent or null without a picture. */
   avatarUpdatedAt?: string | null
+  /** False for an account created with Google that has never set a password; absent means a password exists. */
+  hasPassword?: boolean
+  /** The connected Google account; absent or null when the server does not report one. */
+  google?: GoogleIdentity | null
+}
+
+export interface GoogleIdentity {
+  linked: boolean
+  /** The Google address at the time of the last sign-in, shown so the person knows which account is connected. */
+  email: string | null
+  linkedAt: string | null
 }
 
 export type TeamRole = 'OWNER' | 'ADMIN' | 'MEMBER'
@@ -337,6 +348,8 @@ export interface PublicConfig {
   botCheckSiteKey: string | null
   /** The notice the instance operator shows to everybody. */
   announcement?: Announcement | null
+  /** True only when the server has a Google client; anything else hides every Google control. */
+  googleSignIn?: boolean
 }
 
 export async function getPublicConfig(signal?: AbortSignal): Promise<PublicConfig> {
@@ -373,11 +386,16 @@ export async function logout(): Promise<void> {
   }
 }
 
+/** Shown when the server says the account has no password, although the page still thought it had one (A13-C8). */
+export const passwordNotSetMessage = 'Twoje konto nie ma jeszcze hasła. Użyj przycisku „Ustaw hasło”, a wyślemy link na adres konta.'
+
 async function accountRequest(path: string, method: 'PATCH' | 'POST', body: unknown, messages: Record<number, string>, fallback: string) {
   const csrf = await getCsrf()
   const response = await request(path, { method, headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
     body: JSON.stringify(body) })
   if (!response.ok) {
+    const code = response.status === 400 ? (await response.json().catch(() => null) as { code?: string } | null)?.code : undefined
+    if (code === 'PASSWORD_NOT_SET') throw new ApiError(400, passwordNotSetMessage, code)
     throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
       : { 401: 'Sesja wygasła. Zaloguj się ponownie.', 403: 'Sesja formularza wygasła. Spróbuj ponownie.', ...messages }[response.status] ?? fallback)
   }
@@ -419,8 +437,19 @@ export interface DeviceSession {
   remembered: boolean
 }
 
+export interface LoginEvent {
+  occurredAt: string
+  successful: boolean
+  browser: string | null
+  system: string | null
+  address: string | null
+  location: string | null
+  /** How the person signed in; absent on servers without sign-in methods in the history. */
+  method?: 'PASSWORD' | 'GOOGLE'
+}
+
 export interface LoginHistory {
-  entries: { occurredAt: string; successful: boolean; browser: string | null; system: string | null; address: string | null; location: string | null }[]
+  entries: LoginEvent[]
   /** Credit required by the location database licence; null when places are not shown. */
   locationSource: string | null
 }
@@ -924,10 +953,68 @@ export async function downloadAccountData(): Promise<{ blob: Blob; filename: str
   return { blob: await response.blob(), filename: filenameFrom(response, 'hourforge-export.json') }
 }
 
+const deleteAccountMessages = { 400: 'Obecne hasło jest nieprawidłowe.', 409: 'Najpierw przekaż własność lub usuń zespoły, których jesteś właścicielem.' }
+
 export async function deleteAccount(currentPassword: string): Promise<void> {
-  await accountRequest('/api/account/delete', 'POST', { currentPassword },
-    { 400: 'Obecne hasło jest nieprawidłowe.', 409: 'Najpierw przekaż własność lub usuń zespoły, których jesteś właścicielem.' },
-    'Nie udało się usunąć konta. Spróbuj ponownie.')
+  await accountRequest('/api/account/delete', 'POST', { currentPassword }, deleteAccountMessages, 'Nie udało się usunąć konta. Spróbuj ponownie.')
+}
+
+/** An account without a password confirms the deletion with a link sent to its address (A13-D8); nothing is removed yet. */
+export async function requestAccountDeletionByEmail(): Promise<void> {
+  await accountRequest('/api/account/delete', 'POST', { confirmByEmail: true },
+    { ...deleteAccountMessages, 400: 'Nie udało się wysłać linku potwierdzającego. Spróbuj ponownie.', 503: 'Wysyłanie e-maili nie jest skonfigurowane na tym serwerze.' },
+    'Nie udało się wysłać linku potwierdzającego. Spróbuj ponownie.')
+}
+
+/** Codes the server adds as `?google=` when it sends the browser back from Google, with what to tell the person. */
+const googleOutcomes: Record<string, { tone: 'success' | 'error'; login: string; link?: string }> = {
+  LINKED: { tone: 'success', login: 'Konto Google zostało połączone.' },
+  GOOGLE_CANCELLED: { tone: 'error', login: 'Logowanie przez Google zostało anulowane.', link: 'Łączenie z Google zostało anulowane.' },
+  GOOGLE_FAILED: { tone: 'error', login: 'Nie udało się zalogować przez Google. Spróbuj ponownie.', link: 'Nie udało się połączyć konta Google. Spróbuj ponownie.' },
+  GOOGLE_DISABLED: { tone: 'error', login: 'Logowanie przez Google jest niedostępne na tym serwerze.' },
+  GOOGLE_EMAIL_UNVERIFIED: { tone: 'error', login: 'Google nie potwierdził adresu e-mail tego konta. Użyj innego konta Google albo zarejestruj się adresem e-mail i hasłem.' },
+  GOOGLE_ACCOUNT_EXISTS: { tone: 'error', login: 'Konto z tym adresem już istnieje. Zaloguj się hasłem, a potem połącz Google w ustawieniach konta.' },
+  GOOGLE_ALREADY_LINKED: { tone: 'error', login: 'To konto Google jest już połączone z innym kontem HourForge.' },
+  GOOGLE_ALREADY_LINKED_TO_YOU: { tone: 'error', login: 'Twoje konto jest już połączone z innym kontem Google. Najpierw je odłącz.' },
+  LINK_EXPIRED: { tone: 'error', login: 'Czas na połączenie z Google minął. Spróbuj ponownie.' },
+  ACCOUNT_BLOCKED: { tone: 'error', login: 'To konto zostało zablokowane przez operatora serwisu. Jeśli to pomyłka, skontaktuj się z administratorem.' },
+  EMAIL_NOT_VERIFIED: { tone: 'error', login: 'Potwierdź adres e-mail, aby się zalogować. Link wysłaliśmy na adres konta.' },
+}
+
+/** The message for a `?google=` code; unknown codes are ignored rather than guessed. */
+export function googleOutcome(code: string | null, context: 'login' | 'link'): { tone: 'success' | 'error'; text: string } | null {
+  const outcome = code && Object.hasOwn(googleOutcomes, code) ? googleOutcomes[code] : undefined
+  if (!outcome) return null
+  return { tone: outcome.tone, text: (context === 'link' ? outcome.link : undefined) ?? outcome.login }
+}
+
+async function googleAccountRequest(path: string, body: unknown, messages: Record<number, string>, codes: Record<string, string>, fallback: string) {
+  const csrf = await getCsrf()
+  const response = await request(path, { method: 'POST', headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
+    body: JSON.stringify(body) })
+  if (!response.ok) {
+    const code = response.status === 409 ? (await response.json().catch(() => null) as { code?: string } | null)?.code : undefined
+    throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
+      : (code && codes[code]) || ({ 401: 'Sesja wygasła. Zaloguj się ponownie.', 403: 'Sesja formularza wygasła. Spróbuj ponownie.',
+        404: 'Logowanie przez Google jest niedostępne na tym serwerze.', ...messages }[response.status] ?? fallback), code)
+  }
+  return response
+}
+
+/** Starts connecting Google to the signed-in account; the browser then goes to the returned address. */
+export async function startGoogleLink(currentPassword?: string): Promise<{ authorizationUrl: string }> {
+  const response = await googleAccountRequest('/api/account/google/link', currentPassword === undefined ? {} : { currentPassword },
+    { 400: 'Obecne hasło jest nieprawidłowe.' },
+    { GOOGLE_ALREADY_LINKED_TO_YOU: 'Twoje konto jest już połączone z kontem Google. Odśwież stronę.' },
+    'Nie udało się rozpocząć łączenia z Google. Spróbuj ponownie.')
+  return response.json() as Promise<{ authorizationUrl: string }>
+}
+
+export async function unlinkGoogle(currentPassword: string): Promise<void> {
+  await googleAccountRequest('/api/account/google/unlink', { currentPassword },
+    { 400: 'Obecne hasło jest nieprawidłowe.', 404: 'Konto nie jest już połączone z Google. Odśwież stronę.' },
+    { LAST_SIGN_IN_METHOD: 'Nie możesz odłączyć Google, dopóki nie ustawisz hasła.' },
+    'Nie udało się odłączyć Google. Spróbuj ponownie.')
 }
 
 export interface JiraStatus {

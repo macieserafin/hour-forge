@@ -1,11 +1,12 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { LoaderCircle } from 'lucide-react'
 import { Modal } from '../components/Modal'
-import type { Preferences, User } from '../lib/api'
+import { googleOutcome, type Preferences, type User } from '../lib/api'
 import { defaultPreferences, usePreferences, useSavePreferences } from '../lib/preferences'
 import { useTeams } from '../lib/teams'
-import { deviceLabel, passwordChangeError, useChangePassword, useDeleteAccount, useDownloadAccountData, useEndSession, useLoginHistory, useRequestEmailChange, useSessions, useSignOutEverywhere, useProfilePicture, useTwoFactorActions, useTwoFactorStatus, useUpdateProfile } from '../lib/account'
+import { deviceLabel, passwordChangeError, useChangePassword, useDeleteAccount, useDownloadAccountData, useEndSession, useLoginHistory, useRequestAccountDeletionByEmail, useRequestEmailChange, useSessions, useSignOutEverywhere, useProfilePicture, useStartGoogleLink, useTwoFactorActions, useTwoFactorStatus, useUnlinkGoogle, useUpdateProfile } from '../lib/account'
+import { useGoogleSignIn, useRequestPasswordReset } from '../lib/auth'
 import { useActiveTimer } from '../lib/time'
 import { Avatar } from '../components/Avatar'
 import { PictureEditor } from '../components/PictureEditor'
@@ -125,7 +126,27 @@ function PreferencesSection({ userId }: { userId: string }) {
   </section>
 }
 
-function EmailChangeSection() {
+/** Accounts created with Google have no password yet; the usual reset link sets the first one (A13-D6, D7). */
+function SetPasswordPrompt({ email, reason }: { email: string; reason: string }) {
+  const reset = useRequestPasswordReset()
+  return <>
+    <p className="field-hint">{reason} Wyślemy link do ustawienia hasła na adres <strong>{email}</strong>.</p>
+    {reset.isError && <p className="form-error" role="alert">{reset.error.message}</p>}
+    {reset.isSuccess && <p className="project-notice" role="status">Wysłaliśmy link do ustawienia hasła. Po ustawieniu hasła zaloguj się ponownie.</p>}
+    <button className="button-secondary" type="button" disabled={reset.isPending} onClick={() => reset.mutate(email)}>
+      {reset.isPending && <LoaderCircle size={16} className="spin" />}{reset.isPending ? 'Wysyłanie…' : 'Ustaw hasło'}</button>
+  </>
+}
+
+function EmailChangeSection({ user }: { user: User }) {
+  if (user.hasPassword === false) return <section className="overview-panel account-section" aria-labelledby="account-email-title">
+    <h2 id="account-email-title">Zmiana adresu e-mail</h2>
+    <SetPasswordPrompt email={user.email} reason="Adres e-mail zmienisz po ustawieniu hasła." />
+  </section>
+  return <EmailChangeForm />
+}
+
+function EmailChangeForm() {
   const change = useRequestEmailChange()
   const [newEmail, setNewEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -156,7 +177,15 @@ function EmailChangeSection() {
   </section>
 }
 
-function PasswordSection() {
+function PasswordSection({ user }: { user: User }) {
+  if (user.hasPassword === false) return <section className="overview-panel account-section" aria-labelledby="account-password-title">
+    <h2 id="account-password-title">Zmiana hasła</h2>
+    <SetPasswordPrompt email={user.email} reason="Twoje konto nie ma jeszcze hasła. Logujesz się przez Google." />
+  </section>
+  return <PasswordForm />
+}
+
+function PasswordForm() {
   const change = useChangePassword()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
@@ -249,16 +278,33 @@ function DataSection() {
   </section>
 }
 
-function DeleteSection({ userId }: { userId: string }) {
+function DeleteSection({ user }: { user: User }) {
+  const userId = user.id
   const remove = useDeleteAccount(userId)
+  const byEmail = useRequestAccountDeletionByEmail()
+  const withoutPassword = user.hasPassword === false
+  const closeAfterLink = useRef<HTMLButtonElement>(null)
+  // The send button disappears once the link is out; keep the focus inside the dialog.
+  useEffect(() => { if (byEmail.isSuccess) closeAfterLink.current?.focus() }, [byEmail.isSuccess])
   const runningTimer = useActiveTimer(userId).data
   const [open, setOpen] = useState(false)
   const [password, setPassword] = useState('')
   return <section className="overview-panel account-section" aria-labelledby="account-delete-title">
     <h2 id="account-delete-title">Usuń konto</h2>
     <p className="field-hint">Usuniemy Twoje imię, adres e-mail i hasło. Zapisane godziny pozostaną w raportach zespołów pod nazwą „Użytkownik usunięty”. Trwający timer zostanie odrzucony bez zapisania jego czasu. Najpierw przekaż własność lub usuń zespoły, których jesteś właścicielem.</p>
-    <button className="button-secondary" type="button" onClick={() => { remove.reset(); setPassword(''); setOpen(true) }}>Usuń konto</button>
-    {open && <Modal title="Usuń konto" busy={remove.isPending} onClose={() => setOpen(false)}>
+    <button className="button-secondary" type="button" onClick={() => { remove.reset(); byEmail.reset(); setPassword(''); setOpen(true) }}>Usuń konto</button>
+    {open && withoutPassword && <Modal title="Usuń konto" busy={byEmail.isPending} onClose={() => setOpen(false)}>
+      <form onSubmit={event => { event.preventDefault(); byEmail.mutate() }}>
+        <p className="dialog-description">Tej operacji nie można cofnąć. Twoje konto nie ma hasła, więc wyślemy link potwierdzający na adres <strong>{user.email}</strong>. Konto usuniemy dopiero po otwarciu linku.</p>
+        {runningTimer && <p className="form-error">Masz uruchomiony timer. Po usunięciu konta zostanie odrzucony, a jego czas nie zostanie zapisany. Jeśli chcesz zachować te godziny, zatrzymaj timer przed usunięciem konta.</p>}
+        {byEmail.isError && <p className="form-error" role="alert">{byEmail.error.message}{byEmail.error.message.includes('zespoły') && <> <Link className="text-link" to="/teams">Przejdź do zespołów</Link></>}</p>}
+        {byEmail.isSuccess && <p className="project-notice" role="status">Wysłaliśmy link potwierdzający. Otwórz go, aby usunąć konto.</p>}
+        <footer className="dialog-actions"><button ref={closeAfterLink} type="button" className="button-secondary" disabled={byEmail.isPending} onClick={() => setOpen(false)}>{byEmail.isSuccess ? 'Zamknij' : 'Anuluj'}</button>
+          {!byEmail.isSuccess && <button type="submit" className="button-primary button-danger" disabled={byEmail.isPending}>
+            {byEmail.isPending && <LoaderCircle size={16} className="spin" />}{byEmail.isPending ? 'Wysyłanie…' : 'Wyślij link potwierdzający'}</button>}</footer>
+      </form>
+    </Modal>}
+    {open && !withoutPassword && <Modal title="Usuń konto" busy={remove.isPending} onClose={() => setOpen(false)}>
       <form onSubmit={event => { event.preventDefault(); if (password) remove.mutate(password) }}>
         <p className="dialog-description">Tej operacji nie można cofnąć. Opuścisz wszystkie zespoły, a szkice opisów zapisane w tej przeglądarce zostaną usunięte. Podaj hasło, aby potwierdzić.</p>
         {runningTimer && <p className="form-error">Masz uruchomiony timer. Po usunięciu konta zostanie odrzucony, a jego czas nie zostanie zapisany. Jeśli chcesz zachować te godziny, zatrzymaj timer przed usunięciem konta.</p>}
@@ -301,7 +347,15 @@ function PasswordConfirm({ title, description, action, busy, error, onConfirm, o
   </Modal>
 }
 
-function TwoFactorSection({ userId }: { userId: string }) {
+function TwoFactorSection({ user }: { user: User }) {
+  if (user.hasPassword === false) return <section className="overview-panel account-section" aria-labelledby="account-two-factor-title">
+    <h2 id="account-two-factor-title">Logowanie dwuetapowe</h2>
+    <SetPasswordPrompt email={user.email} reason="Logowanie dwuetapowe włączysz po ustawieniu hasła." />
+  </section>
+  return <TwoFactorSettings userId={user.id} />
+}
+
+function TwoFactorSettings({ userId }: { userId: string }) {
   const status = useTwoFactorStatus(userId)
   const { setup, enable, disable, renew } = useTwoFactorActions(userId)
   const [code, setCode] = useState('')
@@ -366,8 +420,68 @@ function TwoFactorSection({ userId }: { userId: string }) {
   </section>
 }
 
+function GoogleSection({ user }: { user: User }) {
+  const start = useStartGoogleLink()
+  const unlink = useUnlinkGoogle()
+  const [search, setSearch] = useSearchParams()
+  const [dialog, setDialog] = useState<'link' | 'unlink' | null>(null)
+  const [unlinked, setUnlinked] = useState(false)
+  const outcome = googleOutcome(search.get('google'), 'link')
+  const linked = user.google?.linked === true
+  const hasPassword = user.hasPassword !== false
+
+  // The answer from Google stays in the address until the next action here.
+  function clearOutcome() {
+    setUnlinked(false)
+    if (!search.has('google')) return
+    const next = new URLSearchParams(search)
+    next.delete('google')
+    setSearch(next, { replace: true })
+  }
+
+  function connect() {
+    clearOutcome(); start.reset()
+    // D2: the password confirms the link; an account without one is already signed in through Google.
+    if (hasPassword) setDialog('link')
+    else start.mutate(undefined)
+  }
+
+  return <section id="google" className="overview-panel account-section" aria-labelledby="account-google-title">
+    <h2 id="account-google-title">Logowanie przez Google</h2>
+    {outcome && (outcome.tone === 'success'
+      ? <p className="project-notice" role="status">{outcome.text}</p>
+      : <p className="form-error" role="alert">{outcome.text}</p>)}
+    {unlinked && <p className="project-notice" role="status">Konto Google zostało odłączone.</p>}
+    {linked ? <>
+      <p className="field-hint">Połączone z kontem Google{user.google?.email && <> <strong>{user.google.email}</strong></>}
+        {user.google?.linkedAt && <> od <time dateTime={user.google.linkedAt}>{dateTime(user.google.linkedAt)}</time></>}.</p>
+      {hasPassword
+        ? <button type="button" className="button-secondary" onClick={() => { clearOutcome(); unlink.reset(); setDialog('unlink') }}>Odłącz Google</button>
+        : <p className="field-hint">Nie możesz odłączyć Google, dopóki nie ustawisz hasła.</p>}
+    </> : <>
+      <p className="field-hint">Połącz konto Google, aby logować się przyciskiem „Zaloguj się przez Google”. Adres e-mail konta się nie zmieni.</p>
+      <button type="button" className="button-secondary" disabled={start.isPending} onClick={connect}>
+        {start.isPending && dialog === null && <LoaderCircle size={16} className="spin" />}Połącz z Google</button>
+      {dialog === null && start.isError && <p className="form-error" role="alert">{start.error.message}</p>}
+    </>}
+    {dialog === 'link' && <PasswordConfirm title="Połącz z Google" action="Przejdź do Google"
+      description="Po potwierdzeniu hasła przejdziesz do Google i wybierzesz konto do połączenia."
+      busy={start.isPending} error={start.error?.message}
+      onConfirm={currentPassword => start.mutate(currentPassword)} onClose={() => setDialog(null)} />}
+    {dialog === 'unlink' && <PasswordConfirm title="Odłącz Google" action="Odłącz"
+      description="Nie zalogujesz się już przez Google. Inne urządzenia zostaną wylogowane."
+      busy={unlink.isPending} error={unlink.error?.message}
+      onConfirm={currentPassword => unlink.mutate(currentPassword, { onSuccess: () => { setDialog(null); setUnlinked(true) } })} onClose={() => setDialog(null)} />}
+  </section>
+}
+
+const methodLabel = (method: 'PASSWORD' | 'GOOGLE') => ({ PASSWORD: 'Hasło', GOOGLE: 'Google' })[method]
+
 function LoginHistorySection({ userId }: { userId: string }) {
   const history = useLoginHistory(userId)
+  const google = useGoogleSignIn()
+  // D11: the sign-in method is a column only where the server reports it.
+  const methods = google && history.data?.entries.some(entry => entry.method) === true
   return <section className="overview-panel account-section" aria-labelledby="account-logins-title">
     <h2 id="account-logins-title">Historia logowań</h2>
     <p className="field-hint">Ostatnie logowania z 90 dni, także nieudane próby. Jeśli widzisz logowanie, którego nie rozpoznajesz, zmień hasło.</p>
@@ -378,10 +492,11 @@ function LoginHistorySection({ userId }: { userId: string }) {
       : <>
         <div className="team-table-wrap" tabIndex={0} role="region" aria-label="Historia logowań">
           <table className="team-table"><caption className="sr-only">Logowania od najnowszego</caption>
-            <thead><tr><th scope="col">Czas</th><th scope="col">Wynik</th><th scope="col">Urządzenie</th><th scope="col">Miejsce</th></tr></thead>
+            <thead><tr><th scope="col">Czas</th><th scope="col">Wynik</th>{methods && <th scope="col">Metoda</th>}<th scope="col">Urządzenie</th><th scope="col">Miejsce</th></tr></thead>
             <tbody>{history.data.entries.map(entry => <tr key={`${entry.occurredAt}-${entry.successful}`}>
               <td><time dateTime={entry.occurredAt}>{dateTime(entry.occurredAt)}</time></td>
               <td>{entry.successful ? 'Udane' : 'Nieudane'}</td>
+              {methods && <td>{entry.method ? methodLabel(entry.method) : '–'}</td>}
               <td>{deviceLabel(entry)}</td>
               <td>{entry.location || 'Nieznane'}</td>
             </tr>)}</tbody>
@@ -394,18 +509,20 @@ function LoginHistorySection({ userId }: { userId: string }) {
 
 export function AccountPanel({ user }: { user: User }) {
   const { hash } = useLocation()
+  const google = useGoogleSignIn()
   // The new-device e-mail links to #sessions; the section exists only after the first render.
   useEffect(() => { if (hash) document.getElementById(hash.slice(1))?.scrollIntoView?.() }, [hash])
   return <div className="account-panel">
     <ProfileSection user={user} />
     <PictureSection user={user} />
     <PreferencesSection userId={user.id} />
-    <EmailChangeSection />
-    <PasswordSection />
-    <TwoFactorSection userId={user.id} />
+    <EmailChangeSection user={user} />
+    <PasswordSection user={user} />
+    <TwoFactorSection user={user} />
+    {google && <GoogleSection user={user} />}
     <SignOutSection userId={user.id} />
     <LoginHistorySection userId={user.id} />
     <DataSection />
-    <DeleteSection userId={user.id} />
+    <DeleteSection user={user} />
   </div>
 }

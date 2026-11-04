@@ -1,9 +1,10 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, changePassword, deleteAccount, disableTwoFactor, downloadAccountData, enableTwoFactor, endSession, getLoginHistory, getSessions,
+import { ApiError, changePassword, deleteAccount, requestAccountDeletionByEmail, startGoogleLink, unlinkGoogle, disableTwoFactor, downloadAccountData, enableTwoFactor, endSession, getLoginHistory, getSessions,
   getTwoFactorStatus, removeAvatar, removeTeamLogo, renewBackupCodes, requestEmailChange, signOutEverywhere, startTwoFactorSetup, updateProfile,
   uploadAvatar, uploadTeamLogo } from './api'
 import { saveBlob } from './download'
+import { googleNavigation } from './navigation'
 import { sessionOptions } from './auth'
 import { clearBrowserStateOf } from './localState'
 import { teamsKey, useAuthError } from './teams'
@@ -15,13 +16,23 @@ export function useUpdateProfile() {
     onSuccess: user => client.setQueryData(sessionOptions.queryKey, user) })
 }
 
-export function useChangePassword() {
+/** Like {@link useAuthError}; when the server says the account has no password, the session is read again so "Ustaw hasło" appears (A13-C8). */
+function useAccountError() {
+  const client = useQueryClient()
   const handleError = useAuthError()
+  return useCallback((error: Error) => {
+    handleError(error)
+    if (error instanceof ApiError && error.code === 'PASSWORD_NOT_SET') void client.invalidateQueries({ queryKey: sessionOptions.queryKey })
+  }, [client, handleError])
+}
+
+export function useChangePassword() {
+  const handleError = useAccountError()
   return useMutation({ mutationFn: changePassword, retry: false, gcTime: 0, onError: handleError })
 }
 
 export function useRequestEmailChange() {
-  const handleError = useAuthError()
+  const handleError = useAccountError()
   return useMutation({ mutationFn: requestEmailChange, retry: false, gcTime: 0, onError: handleError })
 }
 
@@ -82,7 +93,7 @@ export function useDownloadAccountData() {
 
 export function useDeleteAccount(userId: string) {
   const client = useQueryClient()
-  const handleError = useAuthError()
+  const handleError = useAccountError()
   return useMutation({ mutationFn: deleteAccount, retry: false, gcTime: 0, onError: handleError,
     onSuccess: async () => {
       await client.cancelQueries()
@@ -90,6 +101,26 @@ export function useDeleteAccount(userId: string) {
       client.removeQueries({ predicate: query => query.queryKey[0] !== 'session' })
       client.setQueryData(sessionOptions.queryKey, null)
     } })
+}
+
+/** An account without a password asks for a deletion link by e-mail; the account stays until the link is used. */
+export function useRequestAccountDeletionByEmail() {
+  const handleError = useAuthError()
+  return useMutation({ mutationFn: requestAccountDeletionByEmail, retry: false, gcTime: 0, onError: handleError })
+}
+
+/** Connecting Google leaves the app: the server keeps the intent in the session and the browser goes to Google. */
+export function useStartGoogleLink() {
+  const handleError = useAuthError()
+  return useMutation({ mutationFn: startGoogleLink, retry: false, gcTime: 0, onError: handleError,
+    onSuccess: ({ authorizationUrl }) => googleNavigation.go(authorizationUrl) })
+}
+
+export function useUnlinkGoogle() {
+  const client = useQueryClient()
+  const handleError = useAuthError()
+  return useMutation({ mutationFn: unlinkGoogle, retry: false, gcTime: 0, onError: handleError,
+    onSuccess: () => client.invalidateQueries({ queryKey: sessionOptions.queryKey }) })
 }
 
 export const twoFactorKey = (userId: string) => ['two-factor', userId] as const
@@ -105,7 +136,7 @@ export function useTwoFactorStatus(userId: string) {
 /** Setup, turning on and off and new backup codes; every change refreshes the status. */
 export function useTwoFactorActions(userId: string) {
   const client = useQueryClient()
-  const onError = useAuthError()
+  const onError = useAccountError()
   const onSettled = () => client.invalidateQueries({ queryKey: twoFactorKey(userId) })
   return {
     setup: useMutation({ mutationFn: startTwoFactorSetup, retry: false, gcTime: 0, onError }),
