@@ -18,6 +18,9 @@ import java.util.UUID;
 public class LoginEvent {
     public enum Outcome { SUCCESS, FAILED }
 
+    /** The first step of the sign-in; rows from before V37 are PASSWORD, the only method there was. */
+    public enum Method { PASSWORD, GOOGLE }
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -31,6 +34,10 @@ public class LoginEvent {
     @Enumerated(EnumType.STRING)
     @Column(name = "outcome", nullable = false, updatable = false)
     private Outcome outcome;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "method", nullable = false, updatable = false)
+    private Method method;
 
     @Column(name = "browser", updatable = false)
     private String browser;
@@ -47,10 +54,11 @@ public class LoginEvent {
     protected LoginEvent() {
     }
 
-    public LoginEvent(UUID userId, Instant occurredAt, Outcome outcome, DeviceInfo device) {
+    public LoginEvent(UUID userId, Instant occurredAt, Outcome outcome, Method method, DeviceInfo device) {
         this.userId = userId;
         this.occurredAt = occurredAt;
         this.outcome = outcome;
+        this.method = method;
         this.browser = device.browser();
         this.system = device.system();
         this.address = device.address();
@@ -61,6 +69,7 @@ public class LoginEvent {
     public UUID getUserId() { return userId; }
     public Instant getOccurredAt() { return occurredAt; }
     public Outcome getOutcome() { return outcome; }
+    public Method getMethod() { return method; }
     public String getBrowser() { return browser; }
     public String getSystem() { return system; }
     public String getAddress() { return address; }

@@ -9,6 +9,9 @@ import pl.macieserafin.hourforge.auth.AccountMailService;
 import pl.macieserafin.hourforge.auth.EmailTokenRepository;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.entrytemplate.EntryTemplateRepository;
+import pl.macieserafin.hourforge.identity.PasswordNotSetException;
+import pl.macieserafin.hourforge.identity.SignInMethodLookup;
+import pl.macieserafin.hourforge.identity.UserIdentityRepository;
 import pl.macieserafin.hourforge.image.ImageStore;
 import pl.macieserafin.hourforge.invitation.TeamInviteRepository;
 import pl.macieserafin.hourforge.jira.JiraUserAuthorizationRepository;
@@ -49,6 +52,8 @@ public class AccountDataService {
     private final EntryTemplateRepository entryTemplates;
     private final LoginEventRepository logins;
     private final TwoFactorService twoFactor;
+    private final UserIdentityRepository identities;
+    private final SignInMethodLookup signInMethods;
     private final ImageStore images;
     private final PreferencesService preferences;
     private final PasswordEncoder encoder;
@@ -62,7 +67,8 @@ public class AccountDataService {
                               TeamRepository teams, TimeEntryRepository entries, TeamInviteRepository invites,
                               EmailTokenRepository tokens, JiraUserAuthorizationRepository jiraAuthorizations,
                               OAuthStateRepository oauthStates, UserPreferencesRepository preferenceRows, EntryTemplateRepository entryTemplates,
-                              LoginEventRepository logins, TwoFactorService twoFactor, ImageStore images,
+                              LoginEventRepository logins, TwoFactorService twoFactor, UserIdentityRepository identities,
+                              SignInMethodLookup signInMethods, ImageStore images,
                               PreferencesService preferences, PasswordEncoder encoder, PasswordChangeAttempts attempts,
                               AccountMailService mail, RateLimiter limiter, RateLimitProperties limits, Clock clock) {
         this.users = users;
@@ -78,6 +84,8 @@ public class AccountDataService {
         this.entryTemplates = entryTemplates;
         this.logins = logins;
         this.twoFactor = twoFactor;
+        this.identities = identities;
+        this.signInMethods = signInMethods;
         this.images = images;
         this.preferences = preferences;
         this.encoder = encoder;
@@ -114,28 +122,33 @@ public class AccountDataService {
         var authorizations = jiraAuthorizations.findAllByUserIdOrderByUpdatedAtDesc(userId).stream()
                 .map(grant -> new AccountExport.JiraAuthorization(grant.getCloudId(), grant.getGrantedScopes(), grant.getConnectedAt(), grant.getUpdatedAt())).toList();
         var twoFactorStatus = twoFactor.status(userId);
+        var google = signInMethods.google(userId)
+                .map(identity -> new AccountExport.GoogleIdentity(identity.getEmail(), identity.getLinkedAt(), identity.getLastUsedAt(),
+                        identity.getSubject())).orElse(null);
         return new AccountExport(clock.instant(),
                 new AccountExport.Profile(user.getId(), user.getEmail(), user.getDisplayName(), user.getCreatedAt(),
                         user.getEmailVerifiedAt(), images.avatar(userId).map(java.util.Base64.getEncoder()::encodeToString).orElse(null)),
                 teamsOfUser, timeEntries, preferences.get(userId),
                 logins.findByUserIdOrderByOccurredAtAsc(userId).stream()
-                        .map(login -> new AccountExport.Login(login.getOccurredAt(), login.getOutcome().name(), login.getBrowser(),
+                        .map(login -> new AccountExport.Login(login.getOccurredAt(), login.getOutcome().name(), login.getMethod().name(), login.getBrowser(),
                                 login.getSystem(), login.getAddress(), login.getLocation())).toList(),
-                templates, authorizations, new AccountExport.TwoFactor(twoFactorStatus.enabled(), twoFactorStatus.backupCodesLeft()));
+                templates, authorizations, new AccountExport.TwoFactor(twoFactorStatus.enabled(), twoFactorStatus.backupCodesLeft()),
+                new AccountExport.SignInMethods(signInMethods.hasPassword(userId), google));
     }
 
     /**
-     * Anonymizes the account: name, address and password are removed, time entries stay in the reports of the
+     * Anonymizes the account: name, address, password and linked Google account are removed, time entries stay in the reports of the
      * teams under a placeholder name. Teams the user owns must be handed over or deleted first.
      */
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public void deleteAccount(UUID userId, String password) {
         attempts.requireNotBlocked(userId);
+        var credential = credentials.findLockedByUserId(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        if (!credential.hasPassword()) throw new PasswordNotSetException();
         if (password == null || password.isEmpty() || password.length() > 1024) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is required");
         }
-        var credential = credentials.findLockedByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         if (!encoder.matches(password, credential.getPasswordHash())) {
             attempts.recordFailure(userId);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect");
@@ -175,6 +188,7 @@ public class AccountDataService {
         entryTemplates.deleteAllByUserId(userId);
         logins.deleteByUserId(userId);
         twoFactor.remove(userId);
+        identities.deleteAllByUserId(userId);
         images.deleteAvatar(userId);
         var user = users.findById(userId).orElseThrow();
         var oldEmail = user.getEmail();

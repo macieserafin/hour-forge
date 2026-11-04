@@ -19,7 +19,8 @@ import java.util.UUID;
 public class LoginHistory {
     static final int SHOWN = 50;
 
-    public record Entry(Instant occurredAt, boolean successful, String browser, String system, String address, String location) {
+    /** One sign-in; {@code method} is PASSWORD or GOOGLE. */
+    public record Entry(Instant occurredAt, boolean successful, String method, String browser, String system, String address, String location) {
     }
 
     /** The latest sign-ins and, when places are shown, the credit for the location data. */
@@ -46,10 +47,15 @@ public class LoginHistory {
      */
     @Transactional
     public void recordSuccess(UUID userId, DeviceInfo device) {
+        recordSuccess(userId, LoginEvent.Method.PASSWORD, device);
+    }
+
+    @Transactional
+    public void recordSuccess(UUID userId, LoginEvent.Method method, DeviceInfo device) {
         var now = clock.instant();
         var firstEver = !events.existsByUserIdAndOutcome(userId, LoginEvent.Outcome.SUCCESS);
         var known = !firstEver && events.signedInBeforeFrom(userId, device.browser(), device.system());
-        events.save(new LoginEvent(userId, now, LoginEvent.Outcome.SUCCESS, device));
+        events.save(new LoginEvent(userId, now, LoginEvent.Outcome.SUCCESS, method, device));
         if (!firstEver && !known) users.findById(userId).ifPresent(user -> mail.sendNewDeviceSignIn(user, device, now));
     }
 
@@ -59,19 +65,26 @@ public class LoginHistory {
         if (email == null || email.isBlank() || email.length() > 320) return;
         users.findByEmailIgnoreCase(email.trim())
                 .filter(user -> user.getDeletedAt() == null)
-                .ifPresent(user -> events.save(new LoginEvent(user.getId(), clock.instant(), LoginEvent.Outcome.FAILED, device)));
+                .ifPresent(user -> events.save(new LoginEvent(user.getId(), clock.instant(), LoginEvent.Outcome.FAILED,
+                        LoginEvent.Method.PASSWORD, device)));
+    }
+
+    /** A failed second step (code) after a right first step made with the password. */
+    @Transactional
+    public void recordFailure(UUID userId, DeviceInfo device) {
+        recordFailure(userId, LoginEvent.Method.PASSWORD, device);
     }
 
     @Transactional
-    public void recordFailure(UUID userId, DeviceInfo device) {
-        events.save(new LoginEvent(userId, clock.instant(), LoginEvent.Outcome.FAILED, device));
+    public void recordFailure(UUID userId, LoginEvent.Method method, DeviceInfo device) {
+        events.save(new LoginEvent(userId, clock.instant(), LoginEvent.Outcome.FAILED, method, device));
     }
 
     @Transactional(readOnly = true)
     public History list(UUID userId) {
         var entries = events.findByUserIdOrderByOccurredAtDesc(userId, PageRequest.of(0, SHOWN)).stream()
                 .map(event -> new Entry(event.getOccurredAt(), event.getOutcome() == LoginEvent.Outcome.SUCCESS,
-                        event.getBrowser(), event.getSystem(), event.getAddress(), event.getLocation()))
+                        event.getMethod().name(), event.getBrowser(), event.getSystem(), event.getAddress(), event.getLocation()))
                 .toList();
         return new History(entries, locator.attribution());
     }

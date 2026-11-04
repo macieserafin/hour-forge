@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.auth.AccountMailService;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
+import pl.macieserafin.hourforge.identity.PasswordNotSetException;
 import pl.macieserafin.hourforge.jira.TokenCipher;
 import pl.macieserafin.hourforge.security.PasswordChangeAttempts;
 import pl.macieserafin.hourforge.security.RateLimitProperties;
@@ -199,12 +200,14 @@ public class TwoFactorService {
         return new BackupCodes(codes);
     }
 
+    /** Two-step sign-in is for accounts with a password; one without sets a password first. */
     private void requirePassword(UUID userId, String password) {
         passwordAttempts.requireNotBlocked(userId);
+        var credential = credentials.findById(userId).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        if (!credential.hasPassword()) throw new PasswordNotSetException();
         if (password == null || password.isEmpty() || password.length() > 1024) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is required");
         }
-        var credential = credentials.findById(userId).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         if (!encoder.matches(password, credential.getPasswordHash())) {
             passwordAttempts.recordFailure(userId);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect");

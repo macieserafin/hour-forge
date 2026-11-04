@@ -264,4 +264,19 @@ class TwoFactorIT extends ApiIntegrationTestSupport {
     private String codeAt(int offset) {
         return Totp.code(secret, Totp.step(Instant.now()) + offset);
     }
+
+    @Autowired org.springframework.security.core.userdetails.UserDetailsService userDetails;
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/account/two-factor/enable", "/api/account/two-factor/disable", "/api/account/two-factor/backup-codes"})
+    void anAccountWithoutAPasswordIsToldToSetOneBeforeTwoStepSignIn(String path) throws Exception {
+        var passwordless = pl.macieserafin.hourforge.support.PasswordlessAccounts.create(fixtures, credentials, "google-only@example.com", "Google only");
+        var signedIn = pl.macieserafin.hourforge.support.PasswordlessAccounts.signedIn(userDetails, passwordless);
+        mvc.perform(post("/api/account/two-factor/setup").with(signedIn).with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf())).andExpect(status().isOk());
+        mvc.perform(post(path).with(signedIn).with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"000000\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("PASSWORD_NOT_SET"));
+        mvc.perform(get("/api/account/two-factor").with(signedIn)).andExpect(jsonPath("$.enabled").value(false));
+        assertThat(mail.sent()).isEmpty();
+    }
 }

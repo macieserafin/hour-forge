@@ -10,6 +10,7 @@ import pl.macieserafin.hourforge.auth.AccountMailService;
 import pl.macieserafin.hourforge.auth.EmailTokenPurpose;
 import pl.macieserafin.hourforge.auth.EmailTokenService;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
+import pl.macieserafin.hourforge.identity.PasswordNotSetException;
 import pl.macieserafin.hourforge.security.PasswordChangeAttempts;
 import pl.macieserafin.hourforge.security.RateLimitProperties;
 import pl.macieserafin.hourforge.security.RateLimiter;
@@ -47,17 +48,18 @@ public class EmailChangeService {
 
     /**
      * Sends a link to the new address. The answer is the same whether or not another account already uses that
-     * address, so the form cannot be used to discover accounts.
+     * address, so the form cannot be used to discover accounts. An account without a password sets one first.
      */
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public void request(UUID userId, EmailChangeRequest request) {
         attempts.requireNotBlocked(userId);
+        var credential = credentials.findLockedByUserId(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        if (!credential.hasPassword()) throw new PasswordNotSetException();
         var password = request.currentPassword();
         if (password == null || password.isEmpty() || password.length() > 1024) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is required");
         }
-        var credential = credentials.findLockedByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         if (!encoder.matches(password, credential.getPasswordHash())) {
             attempts.recordFailure(userId);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect");

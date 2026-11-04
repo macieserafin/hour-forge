@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import pl.macieserafin.hourforge.auth.UserCredential;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.support.ApiIntegrationTestSupport;
+import pl.macieserafin.hourforge.support.PasswordlessAccounts;
 import pl.macieserafin.hourforge.user.User;
 import pl.macieserafin.hourforge.user.UserRepository;
 
@@ -39,6 +40,8 @@ class LoginIT extends ApiIntegrationTestSupport {
     @Autowired PasswordEncoder encoder;
     @Autowired ApplicationContext context;
     @Autowired FindByIndexNameSessionRepository<? extends Session> sessions;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired jakarta.persistence.EntityManager em;
 
     private User user;
 
@@ -121,6 +124,37 @@ class LoginIT extends ApiIntegrationTestSupport {
         mvc.perform(post("/api/auth/login").with(csrf())
                         .param("email", "no-password@example.com").param("password", PASSWORD))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {PASSWORD, "", "unused"})
+    void anAccountWithoutAPasswordRefusesEveryPasswordLikeAWrongOne(String password) throws Exception {
+        var passwordless = PasswordlessAccounts.create(fixtures, credentials, "google-only@example.com", "Google only");
+        var wrongPassword = new BrowserSession(mvc).login(EMAIL, "wrong-password-value")
+                .andExpect(status().isUnauthorized()).andReturn().getResponse();
+        var session = new BrowserSession(mvc);
+        var noPassword = session.login("google-only@example.com", password)
+                .andExpect(status().isUnauthorized()).andReturn().getResponse();
+        // Nothing in the answer tells such an account apart from a wrong password on a password account.
+        assertThat(noPassword.getContentAsString()).isEqualTo(wrongPassword.getContentAsString());
+        assertThat(noPassword.getContentType()).isEqualTo(wrongPassword.getContentType());
+        session.perform(get("/api/me")).andExpect(status().isUnauthorized());
+        em.flush();
+        assertThat(jdbc.queryForList("select outcome || ':' || method from login_events where user_id = ?", String.class, passwordless.getId()))
+                .containsExactly("FAILED:PASSWORD");
+        assertThat(credentials.findById(passwordless.getId()).orElseThrow().hasPassword()).isFalse();
+    }
+
+    @Test
+    void theProfileTellsThatTheAccountHasAPasswordAndNoGoogleAccount() throws Exception {
+        var session = new BrowserSession(mvc);
+        session.login(EMAIL, PASSWORD).andExpect(status().isNoContent());
+        session.perform(get("/api/me")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasPassword").value(true))
+                .andExpect(jsonPath("$.google").value((Object) null));
+        em.flush();
+        assertThat(jdbc.queryForList("select outcome || ':' || method from login_events where user_id = ?", String.class, user.getId()))
+                .containsExactly("SUCCESS:PASSWORD");
     }
 
     @Test

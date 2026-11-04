@@ -254,4 +254,63 @@ class AccountDataIT extends ApiIntegrationTestSupport {
                 .andExpect(content().string(not(containsString("BACKUP-HASH-VALUE"))))
                 .andExpect(content().string(not(containsString(PASSWORD))));
     }
+
+    @Autowired org.springframework.security.core.userdetails.UserDetailsService userDetails;
+    @Autowired pl.macieserafin.hourforge.identity.UserIdentityRepository identities;
+
+    @Test
+    void exportShowsHowThePersonSignsInWithTheGoogleIdentifierAndTheSignInMethod() throws Exception {
+        var session = signIn();
+        session.perform(get("/api/account/export")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.signInMethods.password").value(true))
+                .andExpect(jsonPath("$.signInMethods.google").value((Object) null))
+                .andExpect(jsonPath("$.logins[0].outcome").value("SUCCESS"))
+                .andExpect(jsonPath("$.logins[0].method").value("PASSWORD"));
+
+        var linkedAt = Instant.parse("2026-11-01T08:30:00Z");
+        var identity = identities.saveAndFlush(new pl.macieserafin.hourforge.identity.UserIdentity(user,
+                pl.macieserafin.hourforge.identity.IdentityProvider.GOOGLE, "1098765432123456789", "data.person@gmail.com", linkedAt));
+        identity.recordUse(Instant.parse("2026-11-02T09:00:00Z"), "data.person@gmail.com");
+        identities.flush();
+        session.perform(get("/api/account/export")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.signInMethods.password").value(true))
+                .andExpect(jsonPath("$.signInMethods.google.email").value("data.person@gmail.com"))
+                .andExpect(jsonPath("$.signInMethods.google.linkedAt").value("2026-11-01T08:30:00Z"))
+                .andExpect(jsonPath("$.signInMethods.google.lastUsedAt").value("2026-11-02T09:00:00Z"))
+                .andExpect(jsonPath("$.signInMethods.google.subject").value("1098765432123456789"));
+    }
+
+    @Test
+    void anAccountWithoutAPasswordExportsItAndIsNotDeletedWithAPassword() throws Exception {
+        var passwordless = pl.macieserafin.hourforge.support.PasswordlessAccounts.create(fixtures, credentials, "google-only@example.com", "Google only");
+        var signedIn = pl.macieserafin.hourforge.support.PasswordlessAccounts.signedIn(userDetails, passwordless);
+        mvc.perform(get("/api/account/export").with(signedIn)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.signInMethods.password").value(false));
+        mvc.perform(post("/api/account/delete").with(signedIn).with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("PASSWORD_NOT_SET"));
+        assertThat(users.findById(passwordless.getId()).orElseThrow().getDeletedAt()).isNull();
+    }
+
+    @Test
+    void deletingTheAccountRemovesTheLinkedGoogleAccountSoItCannotSignInAgain() throws Exception {
+        identities.saveAndFlush(new pl.macieserafin.hourforge.identity.UserIdentity(user,
+                pl.macieserafin.hourforge.identity.IdentityProvider.GOOGLE, "1098765432123456789", "data.person@gmail.com", Instant.now()));
+        delete(signIn(), PASSWORD).andExpect(status().isNoContent());
+        assertThat(jdbc.queryForObject("select count(*) from user_identities where user_id = ?", Integer.class, user.getId())).isZero();
+        assertThat(identities.findByProviderAndSubject(pl.macieserafin.hourforge.identity.IdentityProvider.GOOGLE, "1098765432123456789")).isEmpty();
+    }
+
+    @Test
+    void theOperatorAndTheRemovalOfInactiveAccountsCanDeleteAnAccountWithoutAPassword() {
+        var passwordless = pl.macieserafin.hourforge.support.PasswordlessAccounts.create(fixtures, credentials, "google-only@example.com", "Google only");
+        identities.saveAndFlush(new pl.macieserafin.hourforge.identity.UserIdentity(passwordless,
+                pl.macieserafin.hourforge.identity.IdentityProvider.GOOGLE, "google-only-sub", null, Instant.now()));
+        accountData.deleteWithoutPassword(passwordless.getId());
+        assertThat(users.findById(passwordless.getId()).orElseThrow().getDeletedAt()).isNotNull();
+        assertThat(credentials.findById(passwordless.getId())).isEmpty();
+        assertThat(identities.findByProviderAndSubject(pl.macieserafin.hourforge.identity.IdentityProvider.GOOGLE, "google-only-sub")).isEmpty();
+    }
+
+    @Autowired pl.macieserafin.hourforge.account.AccountDataService accountData;
 }

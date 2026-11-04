@@ -58,9 +58,35 @@ class FlywayMigrationIT {
                                (gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'VERIFY_EMAIL',
                                 repeat('c', 64), NULL, CURRENT_TIMESTAMP + interval '1 day')
                         """);
+                // A password account and its sign-in from before V37, which adds accounts without a password,
+                // linked sign-in providers and the sign-in method.
+                statement.execute("""
+                        INSERT INTO user_credentials (user_id, password_hash)
+                        VALUES ('00000000-0000-0000-0000-000000000001', '$2a$12$legacy.hash.kept.as.it.was');
+                        INSERT INTO login_events (id, user_id, occurred_at, outcome)
+                        VALUES ('00000000-0000-0000-0000-000000000008', '00000000-0000-0000-0000-000000000001',
+                                CURRENT_TIMESTAMP, 'SUCCESS')
+                        """);
                 upgraded = Flyway.configure().dataSource(database.getJdbcUrl(), database.getUsername(), database.getPassword()).load();
-                // V33 binds links to credential versions, V34 adds the repeat-day request records, V35 the template tag, V36 the entry version.
-                assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(4);
+                // V33 binds links to credential versions, V34 adds the repeat-day request records, V35 the template tag,
+                // V36 the entry version, V37 accounts without a password, linked providers and the sign-in method.
+                assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(5);
+                try (var result = statement.executeQuery("""
+                        SELECT c.password_hash, e.method, (SELECT count(*) FROM user_identities)
+                        FROM user_credentials c JOIN login_events e ON e.user_id = c.user_id
+                        """)) {
+                    assertThat(result.next()).isTrue();
+                    assertThat(result.getString(1)).isEqualTo("$2a$12$legacy.hash.kept.as.it.was");
+                    assertThat(result.getString(2)).isEqualTo("PASSWORD");
+                    assertThat(result.getInt(3)).isZero();
+                }
+                try (var result = statement.executeQuery("""
+                        SELECT is_nullable FROM information_schema.columns
+                        WHERE table_name = 'user_credentials' AND column_name = 'password_hash'
+                        """)) {
+                    assertThat(result.next()).isTrue();
+                    assertThat(result.getString(1)).isEqualTo("YES");
+                }
                 try (var result = statement.executeQuery("SELECT min(version), (SELECT count(tag_id) FROM entry_templates) FROM time_entries")) {
                     assertThat(result.next()).isTrue();
                     assertThat(result.getInt(1)).isZero();

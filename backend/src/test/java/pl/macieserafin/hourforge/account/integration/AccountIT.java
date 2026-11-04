@@ -50,7 +50,9 @@ class AccountIT extends ApiIntegrationTestSupport {
         var session = signIn(PASSWORD);
         send(patch("/api/account/profile"), session, "{\"displayName\":\"  New Name  \"}")
                 .andExpect(status().isOk()).andExpect(jsonPath("$.displayName").value("New Name"))
-                .andExpect(jsonPath("$.email").value(EMAIL));
+                .andExpect(jsonPath("$.email").value(EMAIL))
+                .andExpect(jsonPath("$.hasPassword").value(true))
+                .andExpect(jsonPath("$.google").value((Object) null));
         assertThat(users.findById(user.getId()).orElseThrow().getDisplayName()).isEqualTo("New Name");
         session.perform(get("/api/me")).andExpect(jsonPath("$.displayName").value("New Name"));
         send(patch("/api/account/profile"), session, "{\"displayName\":\"" + "x".repeat(255) + "\"}").andExpect(status().isOk());
@@ -171,5 +173,18 @@ class AccountIT extends ApiIntegrationTestSupport {
                                BrowserSession session, String body) throws Exception {
         if (body != null) builder.contentType(MediaType.APPLICATION_JSON).content(body);
         return session.send(builder);
+    }
+
+    @Autowired org.springframework.security.core.userdetails.UserDetailsService userDetails;
+
+    @Test
+    void anAccountWithoutAPasswordIsToldToSetOneInsteadOfChangingIt() throws Exception {
+        var passwordless = pl.macieserafin.hourforge.support.PasswordlessAccounts.create(fixtures, credentials, "google-only@example.com", "Google only");
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/account/password").with(pl.macieserafin.hourforge.support.PasswordlessAccounts.signedIn(userDetails, passwordless)).with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"currentPassword\":\"\",\"newPassword\":\"" + NEW_PASSWORD + "\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("PASSWORD_NOT_SET"));
+        var credential = credentials.findById(passwordless.getId()).orElseThrow();
+        assertThat(credential.hasPassword()).isFalse();
+        assertThat(credential.getSessionVersion()).isZero();
     }
 }

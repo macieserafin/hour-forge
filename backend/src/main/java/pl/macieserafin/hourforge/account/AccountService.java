@@ -8,6 +8,7 @@ import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.auth.PasswordPolicy;
 import pl.macieserafin.hourforge.auth.UserCredential;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
+import pl.macieserafin.hourforge.identity.PasswordNotSetException;
 import pl.macieserafin.hourforge.security.PasswordChangeAttempts;
 import pl.macieserafin.hourforge.user.User;
 import pl.macieserafin.hourforge.user.UserRepository;
@@ -36,16 +37,20 @@ public class AccountService {
         return users.saveAndFlush(user);
     }
 
-    /** Returns the new session version; every other session of the user stops working. */
+    /**
+     * Returns the new session version; every other session of the user stops working. An account without a password
+     * sets one through the password reset instead.
+     */
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public int changePassword(UUID userId, PasswordChangeRequest request) {
         attempts.requireNotBlocked(userId);
+        var credential = lockedCredential(userId);
+        if (!credential.hasPassword()) throw new PasswordNotSetException();
         PasswordPolicy.require(request.newPassword());
         var current = request.currentPassword();
         if (current == null || current.isEmpty() || current.length() > 1024) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is required");
         }
-        var credential = lockedCredential(userId);
         if (!encoder.matches(current, credential.getPasswordHash())) {
             attempts.recordFailure(userId);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect");

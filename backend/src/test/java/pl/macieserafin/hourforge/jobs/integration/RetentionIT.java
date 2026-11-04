@@ -74,6 +74,28 @@ class RetentionIT extends ApiIntegrationTestSupport {
         assertThat(exists(verified)).isTrue();
     }
 
+    @Autowired pl.macieserafin.hourforge.identity.UserIdentityRepository identities;
+
+    @Test
+    void removesAnUnconfirmedAccountWithItsLinkedGoogleAccountAndStillSweepsTheRest() {
+        var linked = unconfirmed("google-unconfirmed@example.com", 8);
+        identities.saveAndFlush(new pl.macieserafin.hourforge.identity.UserIdentity(linked,
+                pl.macieserafin.hourforge.identity.IdentityProvider.GOOGLE, "unconfirmed-sub", "someone@company.example", now.minus(8, ChronoUnit.DAYS)));
+        var person = fixtures.user("swept@example.com", "Swept");
+        var oldSignIn = loginEvent(person, now.minus(91, ChronoUnit.DAYS));
+        token(person, "VERIFY_EMAIL", now.plus(1, ChronoUnit.DAYS), now.minus(8, ChronoUnit.DAYS));
+        entityManager.clear();
+
+        var purged = retention.purge(now);
+        entityManager.clear();
+
+        assertThat(exists(linked)).isFalse();
+        assertThat(jdbc.queryForObject("select count(*) from user_identities where user_id = ?", Integer.class, linked.getId())).isZero();
+        assertThat(purged.logins()).isGreaterThanOrEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from login_events where id = ?", Integer.class, oldSignIn)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from email_tokens where user_id = ?", Integer.class, person.getId())).isZero();
+    }
+
     @Test
     void neverRemovesAnUnconfirmedAccountThatOwnsData() {
         var old = unconfirmed("owner@example.com", 30);

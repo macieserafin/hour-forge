@@ -245,4 +245,23 @@ class PasswordResetIT extends ApiIntegrationTestSupport {
     private ResultActions login(String password, BrowserSession session) throws Exception {
         return session.login(EMAIL, password);
     }
+
+    @Autowired org.springframework.security.core.userdetails.UserDetailsService userDetails;
+
+    @Test
+    void anAccountWithoutAPasswordSetsItsFirstPasswordThroughTheResetAndCanThenSignInWithIt() throws Exception {
+        var passwordless = pl.macieserafin.hourforge.support.PasswordlessAccounts.create(fixtures, credentials, "google-only@example.com", "Google only");
+        var signedIn = pl.macieserafin.hourforge.support.PasswordlessAccounts.signedIn(userDetails, passwordless);
+        request("google-only@example.com").andExpect(status().isNoContent());
+        assertThat(mail.last().to()).isEqualTo("google-only@example.com");
+
+        confirm(mail.lastToken("reset-password"), NEW_PASSWORD).andExpect(status().isNoContent());
+        var credential = credentials.findById(passwordless.getId()).orElseThrow();
+        assertThat(encoder.matches(NEW_PASSWORD, credential.getPasswordHash())).isTrue();
+        // Like every reset, it ends the sessions that existed before.
+        mvc.perform(get("/api/me").with(signedIn)).andExpect(status().isUnauthorized());
+        var session = new BrowserSession(mvc);
+        session.login("google-only@example.com", NEW_PASSWORD).andExpect(status().isNoContent());
+        session.perform(get("/api/me")).andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.hasPassword").value(true));
+    }
 }

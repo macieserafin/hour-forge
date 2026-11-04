@@ -113,4 +113,21 @@ class LoginHistoryIT extends ApiIntegrationTestSupport {
     private BrowserSession browser(String userAgent, String address) {
         return new BrowserSession(mvc).device(userAgent, address);
     }
+
+    @Test
+    void eachSignInShowsItsMethodAndRowsFromBeforeTheColumnCountAsPassword() throws Exception {
+        browser(FIREFOX_WINDOWS, "10.0.0.1").login(EMAIL, "wrong-password-value").andExpect(status().isUnauthorized());
+        // Written the way a server without the method column would write it.
+        jdbc.update("insert into login_events (id, user_id, occurred_at, outcome) values (gen_random_uuid(), ?, now() - interval '1 day', 'SUCCESS')", user.getId());
+        var signedIn = browser(FIREFOX_WINDOWS, "10.0.0.1");
+        signedIn.login(EMAIL, PASSWORD).andExpect(status().isNoContent());
+
+        signedIn.perform(get("/api/account/logins")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.entries", hasSize(3)))
+                .andExpect(jsonPath("$.entries[0].method").value("PASSWORD"))
+                .andExpect(jsonPath("$.entries[1].method").value("PASSWORD"))
+                .andExpect(jsonPath("$.entries[2].method").value("PASSWORD"));
+        assertThat(jdbc.queryForList("select method from login_events where user_id = ?", String.class, user.getId()))
+                .containsOnly("PASSWORD");
+    }
 }

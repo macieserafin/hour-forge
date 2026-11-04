@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pl.macieserafin.hourforge.auth.EmailTokenRepository;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
+import pl.macieserafin.hourforge.identity.UserIdentityRepository;
 import pl.macieserafin.hourforge.invitation.TeamInviteRepository;
 import pl.macieserafin.hourforge.jira.OAuthStateRepository;
 import pl.macieserafin.hourforge.session.LoginEventRepository;
@@ -25,10 +26,13 @@ public class RetentionService {
     private final TeamInviteRepository invitations;
     private final LoginEventRepository logins;
     private final CopyDayOperationRepository copyDayRequests;
+    private final UserIdentityRepository identities;
 
     public RetentionService(JobsProperties properties, UserRepository users, UserCredentialRepository credentials,
                             EmailTokenRepository tokens, OAuthStateRepository oauthStates, TeamInviteRepository invitations,
-                            LoginEventRepository logins, CopyDayOperationRepository copyDayRequests) {
+                            LoginEventRepository logins, CopyDayOperationRepository copyDayRequests,
+                            UserIdentityRepository identities) {
+        this.identities = identities;
         this.copyDayRequests = copyDayRequests;
         this.properties = properties;
         this.users = users;
@@ -47,6 +51,8 @@ public class RetentionService {
             tokens.deleteByUserId(id);
             logins.deleteByUserId(id);
             credentials.deleteByUserId(id);
+            // A linked Google account has no cascade: left behind, it would stop the whole purge.
+            identities.deleteAllByUserId(id);
             users.deleteById(id);
             accounts++;
         }

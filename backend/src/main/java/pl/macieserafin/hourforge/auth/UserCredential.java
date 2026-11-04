@@ -24,7 +24,8 @@ public class UserCredential {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "password_hash", nullable = false)
+    // Null for an account that signs in only through a linked provider; the row stays for the session version.
+    @Column(name = "password_hash")
     private String passwordHash;
 
     @Column(name = "session_version", nullable = false)
@@ -38,6 +39,11 @@ public class UserCredential {
         this.passwordHash = passwordHash;
     }
 
+    /** The credential of an account without a password; one can be set later through the password reset. */
+    public static UserCredential withoutPassword(User user) {
+        return new UserCredential(user, null);
+    }
+
     public UUID getUserId() {
         return userId;
     }
@@ -48,6 +54,10 @@ public class UserCredential {
 
     public String getPasswordHash() {
         return passwordHash;
+    }
+
+    public boolean hasPassword() {
+        return passwordHash != null;
     }
 
     public int getSessionVersion() {

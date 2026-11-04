@@ -52,7 +52,10 @@ public class PasswordResetService {
         });
     }
 
-    /** Sets a new password and ends every session. The link is only used up when the new password is acceptable. */
+    /**
+     * Sets a new password and ends every session. The link is only used up when the new password is acceptable. An
+     * account that signs in only through Google gets its first password this way: its credential row exists without one.
+     */
     @Transactional
     public void confirm(String rawToken, String newPassword) {
         PasswordPolicy.require(newPassword);

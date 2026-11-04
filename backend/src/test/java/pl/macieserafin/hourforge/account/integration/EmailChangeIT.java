@@ -191,4 +191,16 @@ class EmailChangeIT extends ApiIntegrationTestSupport {
     private ResultActions login(String email, String password, BrowserSession session) throws Exception {
         return session.login(email, password);
     }
+
+    @Autowired org.springframework.security.core.userdetails.UserDetailsService userDetails;
+
+    @Test
+    void anAccountWithoutAPasswordCannotChangeTheAddressUntilItSetsOne() throws Exception {
+        var passwordless = pl.macieserafin.hourforge.support.PasswordlessAccounts.create(fixtures, credentials, "google-only@example.com", "Google only");
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/account/email").with(pl.macieserafin.hourforge.support.PasswordlessAccounts.signedIn(userDetails, passwordless)).with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf())
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"newEmail\":\"" + NEW_EMAIL + "\"}"))
+                .andExpect(status().isBadRequest()).andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.code").value("PASSWORD_NOT_SET"));
+        assertThat(mail.sent()).isEmpty();
+        assertThat(users.findById(passwordless.getId()).orElseThrow().getEmail()).isEqualTo("google-only@example.com");
+    }
 }
