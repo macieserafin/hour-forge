@@ -326,6 +326,12 @@ export const confirmEmailChange = (token: string) => publicPost('/api/auth/email
   { 400: 'Link jest nieprawidłowy albo wygasł. Poproś o nowy link w ustawieniach konta.', 409: 'Ten adres jest już używany przez inne konto.' },
   'Nie udało się potwierdzić zmiany adresu. Spróbuj ponownie.')
 
+/** Redeems the deletion link from the e-mail (A13-D8); only after the person presses the button, never on opening the page. */
+export const confirmAccountDeletion = (token: string) => publicPost('/api/account/delete/confirm', { token },
+  { 400: 'Link jest nieprawidłowy, został już użyty albo wygasł. Konto nie zostało usunięte. Jeśli nadal chcesz je usunąć, wyślij nowy link w ustawieniach konta.',
+    409: 'Najpierw przekaż własność lub usuń zespoły, których jesteś właścicielem. Link pozostaje ważny, więc możesz potem wrócić do tej strony.' },
+  'Nie udało się usunąć konta. Spróbuj ponownie.')
+
 export const resendVerification =(email: string) => publicPost('/api/auth/email-verification/resend', { email: email.trim() },
   {}, 'Nie udało się wysłać linku. Spróbuj ponownie później.')
 

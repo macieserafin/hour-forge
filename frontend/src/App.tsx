@@ -9,6 +9,7 @@ import { InvitePage } from './pages/InvitePage'
 import { UnsubscribePage } from './pages/UnsubscribePage'
 import { VerifyEmailPage } from './pages/VerifyEmailPage'
 import { ConfirmEmailChangePage } from './pages/ConfirmEmailChangePage'
+import { ConfirmAccountDeletionPage } from './pages/ConfirmAccountDeletionPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { loginUrl, safeReturnTo } from './lib/navigation'
@@ -54,6 +55,7 @@ export function App() {
     <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
     <Route path="/unsubscribe/:token" element={<UnsubscribePage />} />
     <Route path="/confirm-email-change/:token" element={<ConfirmEmailChangePage />} />
+    <Route path="/confirm-account-deletion/:token" element={<ConfirmAccountDeletionPage />} />
     <Route path="/forgot-password" element={user ? <Navigate to="/dashboard" replace /> : <ForgotPasswordPage />} />
     <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
     <Route path="/integrations" element={user ? <DashboardPage user={user} section="integrations" /> : signIn} />

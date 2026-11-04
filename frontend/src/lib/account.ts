@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, changePassword, deleteAccount, requestAccountDeletionByEmail, startGoogleLink, unlinkGoogle, disableTwoFactor, downloadAccountData, enableTwoFactor, endSession, getLoginHistory, getSessions,
+import { ApiError, changePassword, confirmAccountDeletion, deleteAccount, getUser, type User, requestAccountDeletionByEmail, startGoogleLink, unlinkGoogle, disableTwoFactor, downloadAccountData, enableTwoFactor, endSession, getLoginHistory, getSessions,
   getTwoFactorStatus, removeAvatar, removeTeamLogo, renewBackupCodes, requestEmailChange, signOutEverywhere, startTwoFactorSetup, updateProfile,
   uploadAvatar, uploadTeamLogo } from './api'
 import { saveBlob } from './download'
@@ -100,6 +100,28 @@ export function useDeleteAccount(userId: string) {
       clearBrowserStateOf(userId)
       client.removeQueries({ predicate: query => query.queryKey[0] !== 'session' })
       client.setQueryData(sessionOptions.queryKey, null)
+    } })
+}
+
+/**
+ * The link may be opened by the deleted account itself, by somebody else signed in, or with no session at all.
+ * Without a session nothing is read. Otherwise the session is read outside the cache, so a failed read never turns into
+ * the app's error screen; a failure counts as "signed out". Only when the signed-in account is gone is its browser data
+ * cleared, as after deleting from the settings.
+ */
+export function useConfirmAccountDeletion() {
+  const client = useQueryClient()
+  return useMutation({ mutationFn: confirmAccountDeletion, retry: false, gcTime: 0,
+    onSuccess: async () => {
+      const before = client.getQueryData<User | null>(sessionOptions.queryKey)
+      if (!before) return
+      let after: User | null
+      try { after = await getUser() } catch { after = null }
+      if (after?.id === before.id) return
+      await client.cancelQueries()
+      clearBrowserStateOf(before.id)
+      client.removeQueries({ predicate: query => query.queryKey[0] !== 'session' })
+      client.setQueryData(sessionOptions.queryKey, after)
     } })
 }
 
