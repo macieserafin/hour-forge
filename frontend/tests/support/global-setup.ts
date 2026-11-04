@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { startFakeAtlassian, type FakeAtlassian } from './fake-atlassian'
+import { googleClientId, googleClientSecret, startFakeGoogle, type FakeGoogle } from './fake-google'
 
 const exec = promisify(execFile)
 const backendPath = fileURLToPath(new URL('../../../backend', import.meta.url))
@@ -17,6 +18,7 @@ export default async function globalSetup() {
   const backendPort = process.env.E2E_BACKEND_PORT ?? '18086'
   let backend: ChildProcess | undefined
   let atlassian: FakeAtlassian | undefined
+  let google: FakeGoogle | undefined
   let started = false
   let mailStarted = false
   const directory = await mkdtemp(join(tmpdir(), 'hour-forge-e2e-'))
@@ -33,6 +35,7 @@ export default async function globalSetup() {
     }
     output.end()
     await atlassian?.close()
+    await google?.close()
     if (mailStarted) await exec('docker', ['rm', '-f', mailContainer])
     if (started) await exec('docker', ['rm', '-f', container])
   }
@@ -58,6 +61,9 @@ export default async function globalSetup() {
     // Jira is switched on against a local stand-in for Atlassian, so scenarios can follow the whole consent flow.
     const redirectUri = `http://127.0.0.1:${backendPort}/api/integrations/jira/callback`
     atlassian = await startFakeAtlassian(redirectUri)
+    // Google sign-in against a local stand-in; the backend reads its discovery at start, so it runs first. The callback
+    // uses the browser's host (127.0.0.1), or the session cookie of the start would not come back.
+    google = await startFakeGoogle()
     backend = spawn('java', ['-jar', 'target/hour-forge-0.0.1-SNAPSHOT.jar', `--server.port=${backendPort}`], {
       cwd: backendPath,
       env: { ...process.env, DB_URL: `jdbc:postgresql://127.0.0.1:${databasePort}/hourforge_e2e`,
@@ -72,7 +78,9 @@ export default async function globalSetup() {
         JIRA_REDIRECT_URI: redirectUri, JIRA_TOKEN_ENCRYPTION_KEY: randomBytes(32).toString('base64'), TWO_FACTOR_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
         // The seeded owner also runs the instance, so the operator panel can be exercised.
         OPERATOR_EMAILS: 'owner@hourforge-e2e.test',
-        APP_JIRA_AUTHBASEURL: atlassian.url, APP_JIRA_APIBASEURL: atlassian.url },
+        APP_JIRA_AUTHBASEURL: atlassian.url, APP_JIRA_APIBASEURL: atlassian.url,
+        GOOGLE_CLIENT_ID: googleClientId, GOOGLE_CLIENT_SECRET: googleClientSecret, APP_GOOGLE_ISSUERURI: google.url,
+        GOOGLE_REDIRECT_URI: `http://127.0.0.1:${backendPort}/api/auth/oauth2/callback/google`, APP_RATELIMIT_GOOGLESIGNIN_MAX: '100000' },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     backend.stdout!.pipe(output, { end: false })
@@ -92,6 +100,7 @@ export default async function globalSetup() {
     }
     process.env.HOUR_FORGE_E2E_CONTAINER = container
     process.env.HOUR_FORGE_E2E_MAIL_API = `http://127.0.0.1:${mailApiPort}`
+    process.env.HOUR_FORGE_E2E_GOOGLE = google.url
     return cleanup
   } catch (error) {
     await cleanup()
