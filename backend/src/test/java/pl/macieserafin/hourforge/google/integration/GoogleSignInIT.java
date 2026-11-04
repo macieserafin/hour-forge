@@ -403,7 +403,7 @@ class GoogleSignInIT extends GoogleSignInTestSupport {
 
     @ParameterizedTest
     @EnumSource(value = FakeGoogle.Fault.class, names = {"WRONG_AUDIENCE", "WRONG_ISSUER", "UNKNOWN_KEY", "WRONG_NONCE", "NO_NONCE",
-            "EXPIRED", "TOKEN_SERVER_ERROR", "PROVIDER_ERROR"})
+            "EXPIRED", "ACCESS_TOKEN_TYPE", "TOKEN_SERVER_ERROR", "PROVIDER_ERROR"})
     void anIdTokenThatFailsAnyCheckOrAFailingGoogleSignsNobodyIn(FakeGoogle.Fault fault) throws Exception {
         GOOGLE.fault = fault;
         GOOGLE.account = Account.gmail("sub-fault", "fault@gmail.com");

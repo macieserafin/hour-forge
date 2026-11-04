@@ -2,6 +2,7 @@ package pl.macieserafin.hourforge.session;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Component;
+import pl.macieserafin.hourforge.google.GoogleLinkIntent;
 
 import java.util.UUID;
 
@@ -27,6 +28,8 @@ public class SignInCompletion {
 
     /** As above, for a sign-in whose first step was made with {@code method} (the password or Google). */
     public void complete(HttpServletRequest request, UUID userId, boolean remembered, LoginEvent.Method method) {
+        // A new person in this session: nothing they did not start themselves may link Google or sign somebody in.
+        GoogleLinkIntent.forgetOnSignIn(request);
         if (remembered) {
             // "Zapamiętaj mnie": idle for up to 30 days, and a cookie that outlives the browser (see SessionConfig).
             request.getSession().setMaxInactiveInterval((int) SessionConfig.REMEMBER_FOR.toSeconds());

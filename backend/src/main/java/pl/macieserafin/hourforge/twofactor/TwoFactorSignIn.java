@@ -8,6 +8,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.stereotype.Component;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
+import pl.macieserafin.hourforge.google.GoogleLinkIntent;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
 import pl.macieserafin.hourforge.security.DatabaseUserDetailsService;
 import pl.macieserafin.hourforge.session.LoginEvent;
@@ -79,6 +80,8 @@ public class TwoFactorSignIn {
         SecurityContextHolder.clearContext();
         var session = request.getSession();
         session.removeAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
+        // The first step already ends what the previous person of this session started with Google.
+        GoogleLinkIntent.forgetOnSignIn(request);
         session.setAttribute(PENDING_VERSION, credentialVersion);
         session.setAttribute(PENDING, new Pending(userId, remembered, clock.instant().plus(TIME_TO_ANSWER), 0, method));
     }

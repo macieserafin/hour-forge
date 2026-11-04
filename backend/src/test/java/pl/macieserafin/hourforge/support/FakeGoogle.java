@@ -51,7 +51,7 @@ public final class FakeGoogle {
     }
 
     public enum Fault {
-        NONE, WRONG_AUDIENCE, WRONG_ISSUER, UNKNOWN_KEY, WRONG_NONCE, NO_NONCE, EXPIRED, TOKEN_SERVER_ERROR, CANCEL_CONSENT, PROVIDER_ERROR
+        NONE, WRONG_AUDIENCE, WRONG_ISSUER, UNKNOWN_KEY, WRONG_NONCE, NO_NONCE, EXPIRED, ACCESS_TOKEN_TYPE, TOKEN_SERVER_ERROR, CANCEL_CONSENT, PROVIDER_ERROR
     }
 
     /** What the authorization endpoint received for one consent. */
@@ -213,7 +213,9 @@ public final class FakeGoogle {
         else if (fault != Fault.NO_NONCE && grant.nonce() != null) claims.claim("nonce", grant.nonce());
         try {
             var signing = fault == Fault.UNKNOWN_KEY ? unknownKey : key;
-            var jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(signing.getKeyID()).type(JOSEObjectType.JWT).build(), claims.build());
+            var jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(signing.getKeyID())
+                    // An access token in JWT form (RFC 9068) must not pass as an ID token.
+                    .type(fault == Fault.ACCESS_TOKEN_TYPE ? new JOSEObjectType("at+jwt") : JOSEObjectType.JWT).build(), claims.build());
             jwt.sign(new RSASSASigner(signing));
             return jwt.serialize();
         } catch (JOSEException exception) {

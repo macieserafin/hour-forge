@@ -9,6 +9,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import pl.macieserafin.hourforge.auth.EmailTokenPurpose;
+import pl.macieserafin.hourforge.auth.EmailTokenService;
 import pl.macieserafin.hourforge.auth.UserCredential;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.identity.IdentityProvider;
@@ -49,6 +51,7 @@ class AccountDeletionByEmailIT extends ApiIntegrationTestSupport {
     @Autowired TeamMemberRepository members;
     @Autowired UserDetailsService userDetails;
     @Autowired PasswordEncoder encoder;
+    @Autowired EmailTokenService emailTokens;
     @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     private User user;
@@ -97,6 +100,32 @@ class AccountDeletionByEmailIT extends ApiIntegrationTestSupport {
 
         confirm(laptop, mail.lastToken(LINK)).andExpect(status().isNoContent());
         laptop.perform(get("/api/me")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void aLinkOfOnePurposeWorksNowhereElse() throws Exception {
+        requestLink(signedIn()).andExpect(status().isAccepted());
+        var deletion = mail.lastToken(LINK);
+        var reset = emailTokens.issue(user, EmailTokenPurpose.RESET_PASSWORD, null);
+        var verification = emailTokens.issue(user, EmailTokenPurpose.VERIFY_EMAIL, null);
+        var change = emailTokens.issue(user, EmailTokenPurpose.CHANGE_EMAIL, "changed@example.com");
+        var browser = new BrowserSession(mvc);
+
+        // The removal link opens none of the other confirmations.
+        browser.send(post("/api/auth/password-reset/confirm").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"token\":\"" + deletion + "\",\"newPassword\":\"New-password-2026!\"}")).andExpect(status().isBadRequest());
+        browser.send(post("/api/auth/email-verification/confirm").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"token\":\"" + deletion + "\"}")).andExpect(status().isBadRequest());
+        browser.send(post("/api/auth/email-change/confirm").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"token\":\"" + deletion + "\"}")).andExpect(status().isBadRequest());
+        // And their links do not remove the account.
+        for (var other : java.util.List.of(reset, verification, change)) confirm(browser, other).andExpect(status().isBadRequest());
+
+        assertThat(credentials.findById(user.getId()).orElseThrow().hasPassword()).isFalse();
+        assertThat(users.findById(user.getId()).orElseThrow().getEmail()).isEqualTo(EMAIL);
+        assertThat(users.findById(user.getId()).orElseThrow().getDeletedAt()).isNull();
+        // A refusal for the wrong purpose does not use the link up.
+        confirm(browser, deletion).andExpect(status().isNoContent());
     }
 
     @Test

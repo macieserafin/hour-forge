@@ -21,6 +21,22 @@ public record GoogleLinkIntent(UUID userId, int sessionVersion, Instant expiresA
         request.getSession().setAttribute(ATTRIBUTE, new GoogleLinkIntent(userId, sessionVersion, now.plus(VALID_FOR)));
     }
 
+    /** Where Spring keeps the authorization request that waits for Google's answer (HttpSessionOAuth2AuthorizationRequestRepository). */
+    private static final String WAITING_AUTHORIZATION_REQUEST =
+            "org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizationRequestRepository.AUTHORIZATION_REQUEST";
+
+    /**
+     * Called at every new sign-in in a session (password, Google, the second step): whatever the previous person of a
+     * shared browser started with Google ends here. The intent to link goes, and so does a request still waiting for
+     * Google, so an abandoned return can neither link their Google account nor replace the new sign-in.
+     */
+    public static void forgetOnSignIn(HttpServletRequest request) {
+        var session = request.getSession(false);
+        if (session == null) return;
+        session.removeAttribute(ATTRIBUTE);
+        session.removeAttribute(WAITING_AUTHORIZATION_REQUEST);
+    }
+
     /** The waiting intent, if it has not expired; it stays in the session. */
     static GoogleLinkIntent peek(HttpServletRequest request, Instant now) {
         var session = request.getSession(false);

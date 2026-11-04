@@ -19,6 +19,7 @@ import pl.macieserafin.hourforge.support.BrowserSession;
 import pl.macieserafin.hourforge.support.FakeGoogle;
 import pl.macieserafin.hourforge.support.FakeGoogle.Account;
 import pl.macieserafin.hourforge.support.GoogleSignInTestSupport;
+import pl.macieserafin.hourforge.twofactor.Totp;
 import pl.macieserafin.hourforge.user.User;
 
 import java.net.URI;
@@ -215,6 +216,69 @@ class GoogleLinkIT extends GoogleSignInTestSupport {
         browser.perform(get("/api/me")).andExpect(status().isOk());
     }
 
+    // --- A shared browser: a new sign-in ends what the previous person started (review K3 D5) ----------------------
+
+    @Test
+    void anAbandonedLinkOfThePreviousPersonNeitherLinksNorReplacesAPasswordSignIn() throws Exception {
+        var callback = abandonedLink();
+        var next = passwordAccount("next@example.com");
+
+        browser.login("next@example.com", PASSWORD).andExpect(status().isNoContent());
+        assertThat(intentOf(browser)).isNull();
+        browser.perform(get(callback)).andExpect(redirectedUrl(FRONTEND + "/login?google=GOOGLE_FAILED"));
+
+        assertThat(GOOGLE.tokenCalls.get()).isZero();
+        assertThat(identities.findByProviderAndSubject(IdentityProvider.GOOGLE, "sub-owner")).isEmpty();
+        browser.perform(get("/api/me")).andExpect(status().isOk()).andExpect(jsonPath("$.id").value(next.getId().toString()));
+        start(browser, "mode=link").andExpect(redirectedUrl(FRONTEND + "/account?google=LINK_EXPIRED#google"));
+    }
+
+    @Test
+    void anAbandonedLinkOfThePreviousPersonEndsWhenSomebodySignsInWithGoogle() throws Exception {
+        var callback = abandonedLink();
+        GOOGLE.account = Account.gmail("sub-next", "next.person@gmail.com");
+
+        signInWithGoogle(browser).andExpect(redirectedUrl(FRONTEND + "/dashboard"));
+        assertThat(intentOf(browser)).isNull();
+        browser.perform(get(callback)).andExpect(redirectedUrl(FRONTEND + "/login?google=GOOGLE_FAILED"));
+
+        assertThat(identities.findByUserIdAndProvider(owner.getId(), IdentityProvider.GOOGLE)).isEmpty();
+        browser.perform(get("/api/me")).andExpect(status().isOk()).andExpect(jsonPath("$.email").value("next.person@gmail.com"));
+    }
+
+    @Test
+    void anAbandonedLinkOfThePreviousPersonEndsAtTheFirstStepOfATwoStepSignIn() throws Exception {
+        var callback = abandonedLink();
+        var next = passwordAccount("two-step-next@example.com");
+        var secret = turnOnTwoFactor("two-step-next@example.com");
+
+        browser.login("two-step-next@example.com", PASSWORD).andExpect(status().isAccepted());
+        assertThat(intentOf(browser)).isNull();
+        browser.perform(get(callback)).andExpect(redirectedUrl(FRONTEND + "/login?google=GOOGLE_FAILED"));
+        browser.send(post("/api/auth/two-factor").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"" + Totp.code(secret, Totp.step(Instant.now()) + 1) + "\"}"))
+                .andExpect(status().isNoContent());
+
+        assertThat(identities.findByProviderAndSubject(IdentityProvider.GOOGLE, "sub-owner")).isEmpty();
+        browser.perform(get("/api/me")).andExpect(status().isOk()).andExpect(jsonPath("$.id").value(next.getId().toString()));
+    }
+
+    @Test
+    void theSecondStepAlsoEndsALinkStartedWhileTheCodeWasAwaited() throws Exception {
+        var next = passwordAccount("waiting@example.com");
+        var secret = turnOnTwoFactor("waiting@example.com");
+        browser.login("waiting@example.com", PASSWORD).andExpect(status().isAccepted());
+        // Not reachable through the API while signed out; placed directly, as a left-over would be.
+        storeIntent(browser, new GoogleLinkIntent(owner.getId(), 0, Instant.now().plusSeconds(600)));
+
+        browser.send(post("/api/auth/two-factor").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"" + Totp.code(secret, Totp.step(Instant.now()) + 1) + "\"}"))
+                .andExpect(status().isNoContent());
+
+        assertThat(intentOf(browser)).isNull();
+        browser.perform(get("/api/me")).andExpect(jsonPath("$.id").value(next.getId().toString()));
+    }
+
     // --- F5: unlinking --------------------------------------------------------------------------------------------
 
     @Test
@@ -284,6 +348,41 @@ class GoogleLinkIT extends GoogleSignInTestSupport {
     private ResultActions unlink(BrowserSession session, String password) throws Exception {
         return session.send(post("/api/account/google/unlink").contentType(MediaType.APPLICATION_JSON)
                 .content(password == null ? "{}" : "{\"currentPassword\":\"" + password + "\"}"));
+    }
+
+    /** The owner asks to link, leaves for Google and never comes back: the answer waits to be replayed. */
+    private URI abandonedLink() throws Exception {
+        requestLink(browser, PASSWORD).andExpect(status().isOk());
+        var authorization = start(browser, "mode=link").andExpect(status().isFound()).andReturn().getResponse().getRedirectedUrl();
+        return GOOGLE.consent(authorization);
+    }
+
+    private User passwordAccount(String email) {
+        var user = fixtures.user(email, "Next");
+        credentials.saveAndFlush(new UserCredential(user, encoder.encode(PASSWORD)));
+        return user;
+    }
+
+    private String turnOnTwoFactor(String email) throws Exception {
+        var setup = new BrowserSession(mvc);
+        setup.login(email, PASSWORD).andExpect(status().isNoContent());
+        String secret = JsonPath.read(setup.send(post("/api/account/two-factor/setup")).andReturn().getResponse().getContentAsString(), "$.secret");
+        setup.send(post("/api/account/two-factor/enable").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"code\":\"" + Totp.code(secret, Totp.step(Instant.now())) + "\",\"currentPassword\":\"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk());
+        return secret;
+    }
+
+    private GoogleLinkIntent intentOf(BrowserSession session) {
+        var stored = (org.springframework.session.Session) sessionStore.findById(session.sessionId());
+        return stored.getAttribute(GoogleLinkIntent.class.getName());
+    }
+
+    @SuppressWarnings("unchecked")
+    private void storeIntent(BrowserSession session, GoogleLinkIntent intent) {
+        var stored = (org.springframework.session.Session) sessionStore.findById(session.sessionId());
+        stored.setAttribute(GoogleLinkIntent.class.getName(), intent);
+        sessionStore.save(stored);
     }
 
     @SuppressWarnings("unchecked")
