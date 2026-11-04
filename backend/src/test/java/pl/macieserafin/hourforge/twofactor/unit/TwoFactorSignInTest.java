@@ -191,4 +191,22 @@ class TwoFactorSignInTest {
         at(START).answer(request, new MockHttpServletResponse(), "123456");
         verify(completion).failSecondStep(request, userId, LoginEvent.Method.PASSWORD);
     }
+
+    @Test
+    void aSessionStoredBeforeTheMethodWasKeptIsAPasswordSignIn() throws Exception {
+        // A Pending read from a session saved by the previous version has no method: records fill it with null.
+        var userId = UUID.randomUUID();
+        var request = new MockHttpServletRequest();
+        at(START).begin(request, userId, false, 1);
+        var pendingType = Class.forName("pl.macieserafin.hourforge.twofactor.TwoFactorSignIn$Pending");
+        var constructor = pendingType.getDeclaredConstructors()[0];
+        constructor.setAccessible(true);
+        request.getSession().setAttribute(TwoFactorSignIn.class.getName() + ".PENDING",
+                constructor.newInstance(userId, false, START.plusSeconds(300), 0, null));
+        when(credentials.findSessionVersion(userId)).thenReturn(Optional.of(1));
+        when(twoFactor.verifySignIn(userId, "123456")).thenReturn(false);
+
+        assertThat(at(START).answer(request, new MockHttpServletResponse(), "123456")).isEqualTo(TwoFactorSignIn.Result.WRONG_CODE);
+        verify(completion).failSecondStep(request, userId, LoginEvent.Method.PASSWORD);
+    }
 }

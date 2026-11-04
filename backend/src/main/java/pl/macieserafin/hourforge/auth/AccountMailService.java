@@ -56,6 +56,32 @@ public class AccountMailService {
                         + "Jeśli to nie Ty, nic nie musisz robić.\n");
     }
 
+    /** The link that confirms the removal of an account without a password (A13-D8). */
+    public void sendAccountDeletionLink(User user, String token) {
+        sender.send(user.getEmail(), "Potwierdź usunięcie konta w HourForge",
+                "Cześć " + user.getDisplayName() + ",\n\nktoś poprosił o usunięcie Twojego konta w HourForge. Aby je usunąć, otwórz link "
+                        + "(ważny 24 godziny):\n" + frontendUrl + "/confirm-account-deletion/" + token + "\n\n"
+                        + "Usuniemy Twoje imię, adres e-mail i połączone konto Google. Zapisane godziny pracy zostaną w raportach zespołów "
+                        + "pod nazwą „Użytkownik usunięty”.\n\nJeśli to nie Ty, zignoruj tę wiadomość. Konto zostanie bez zmian.\n");
+    }
+
+    /** A security message: always sent, whatever the notification settings say. */
+    public void sendGoogleLinked(User user, String googleEmail) {
+        sender.send(user.getEmail(), "Połączono konto Google z HourForge",
+                "Cześć " + user.getDisplayName() + ",\n\ndo Twojego konta połączono konto Google"
+                        + (googleEmail == null ? "" : " " + googleEmail) + ". Od teraz możesz logować się także przez Google.\n\n"
+                        + "Jeśli to nie Ty, od razu odłącz Google i zmień hasło:\n" + frontendUrl + "/account#google\n");
+    }
+
+    /** A security message: always sent, whatever the notification settings say. */
+    public void sendGoogleUnlinked(User user, String googleEmail) {
+        sender.send(user.getEmail(), "Odłączono konto Google od HourForge",
+                "Cześć " + user.getDisplayName() + ",\n\nod Twojego konta odłączono konto Google"
+                        + (googleEmail == null ? "" : " " + googleEmail) + ". Logowanie przez nie już nie działa, "
+                        + "a pozostałe urządzenia zostały wylogowane.\n\n"
+                        + "Jeśli to nie Ty, od razu zmień hasło:\n" + frontendUrl + "/account#sessions\n");
+    }
+
     @Transactional
     public void sendEmailChange(User user, String newEmail) {
         var token = tokens.issue(user, EmailTokenPurpose.CHANGE_EMAIL, newEmail);

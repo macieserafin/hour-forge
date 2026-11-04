@@ -3,6 +3,7 @@ package pl.macieserafin.hourforge.account;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -82,11 +83,31 @@ public class AccountController {
     @PostMapping("/delete")
     public ResponseEntity<Void> delete(@AuthenticationPrincipal AppUserPrincipal principal, @RequestBody DeleteAccountRequest request,
                                        Authentication authentication, HttpServletRequest httpRequest, HttpServletResponse response) {
+        if (request.byEmail()) {
+            // D8: the link is sent; the account and this session stay until it is opened.
+            data.requestDeletionByEmail(principal.getUserId());
+            return ResponseEntity.accepted().build();
+        }
         data.deleteAccount(principal.getUserId(), request.currentPassword());
         devices.endAllExcept(principal.getUserId(), null);
         new SecurityContextLogoutHandler().logout(httpRequest, response, authentication);
         new CookieClearingLogoutHandler(SessionConfig.COOKIE_NAME).logout(httpRequest, response, authentication);
         return ResponseEntity.noContent().build();
+    }
+
+    /** Public (the link may be opened signed out or in another browser); CSRF as for every POST. Every session ends. */
+    @PostMapping("/delete/confirm")
+    public ResponseEntity<Void> confirmDeletion(@RequestBody DeletionConfirmation request) {
+        var userId = data.confirmDeletion(request.token());
+        devices.endAllExcept(userId, null);
+        return ResponseEntity.noContent().build();
+    }
+
+    public record DeletionConfirmation(@JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String token) {
+        @Override
+        public String toString() {
+            return "DeletionConfirmation[redacted]";
+        }
     }
 
     @PostMapping("/sign-out-everywhere")

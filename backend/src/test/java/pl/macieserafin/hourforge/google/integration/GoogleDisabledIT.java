@@ -42,6 +42,17 @@ class GoogleDisabledIT extends ApiIntegrationTestSupport {
         mvc.perform(get(address)).andExpect(status().isUnauthorized());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/account/google/link", "/api/account/google/unlink"})
+    void linkingAndUnlinkingDoNotExist(String address) throws Exception {
+        var principal = new pl.macieserafin.hourforge.security.AppUserPrincipal(java.util.UUID.randomUUID(), "someone@example.com", "unused");
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(address)
+                        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user(principal))
+                        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf())
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isNotFound());
+    }
+
     @Test
     void noClientRegistrationNorOAuth2FilterExists() {
         assertThat(context.getBeansOfType(ClientRegistrationRepository.class)).isEmpty();

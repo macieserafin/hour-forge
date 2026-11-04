@@ -22,8 +22,10 @@ import pl.macieserafin.hourforge.security.DatabaseUserDetailsService;
 import pl.macieserafin.hourforge.session.LoginEvent;
 import pl.macieserafin.hourforge.session.SignInCompletion;
 import pl.macieserafin.hourforge.twofactor.TwoFactorSignIn;
+import pl.macieserafin.hourforge.user.UserRepository;
 
 import java.io.IOException;
+import java.time.Clock;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -40,17 +42,23 @@ final class GoogleSignInHandler implements AuthenticationSuccessHandler, Authent
     private static final Pattern ERROR_CODE = Pattern.compile("[a-z_]{1,64}");
 
     private final GoogleAccounts accounts;
+    private final GoogleLinks links;
     private final DatabaseUserDetailsService userDetails;
+    private final UserRepository users;
     private final TwoFactorSignIn twoFactor;
     private final SignInCompletion completion;
+    private final Clock clock;
     private final String frontendUrl;
 
-    GoogleSignInHandler(GoogleAccounts accounts, DatabaseUserDetailsService userDetails, TwoFactorSignIn twoFactor,
-                        SignInCompletion completion, String frontendUrl) {
+    GoogleSignInHandler(GoogleAccounts accounts, GoogleLinks links, DatabaseUserDetailsService userDetails, UserRepository users,
+                        TwoFactorSignIn twoFactor, SignInCompletion completion, Clock clock, String frontendUrl) {
         this.accounts = accounts;
+        this.links = links;
         this.userDetails = userDetails;
+        this.users = users;
         this.twoFactor = twoFactor;
         this.completion = completion;
+        this.clock = clock;
         this.frontendUrl = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
     }
 
@@ -60,16 +68,16 @@ final class GoogleSignInHandler implements AuthenticationSuccessHandler, Authent
         var intent = GoogleIntent.current(request);
         // Spring has just stored its own authentication (with the ID token) in the session: it never stays there.
         forgetAuthentication(request);
+        if (intent.mode() == GoogleIntent.Mode.LINK) {
+            link(request, response, intent, authentication);
+            return;
+        }
         if (!(authentication.getPrincipal() instanceof OidcUser google)) {
             redirect(response, refusal(intent, GoogleOutcome.GOOGLE_FAILED));
             return;
         }
         try {
-            switch (intent.mode()) {
-                case LOGIN -> signIn(request, response, intent, GoogleClaims.of(google));
-                // A13 K3 links Google to the signed-in account here; until then the start refuses this mode.
-                case LINK -> redirect(response, refusal(intent, GoogleOutcome.GOOGLE_FAILED));
-            }
+            signIn(request, response, intent, GoogleClaims.of(google));
         } catch (DataIntegrityViolationException exception) {
             forgetAuthentication(request);
             redirect(response, refusal(intent, GoogleAccounts.raceOutcome(exception)));
@@ -122,11 +130,61 @@ final class GoogleSignInHandler implements AuthenticationSuccessHandler, Authent
         redirect(response, intent.returnTo());
     }
 
+    /**
+     * F4: links the Google account to the person who asked for it from the account page. The intent is used once,
+     * whatever happens, and the person's own sign-in is put back in the session (C15); Spring replaced it on the way.
+     */
+    private void link(HttpServletRequest request, HttpServletResponse response, GoogleIntent intent, Authentication authentication)
+            throws IOException {
+        var linkIntent = GoogleLinkIntent.take(request);
+        GoogleOutcome outcome;
+        if (linkIntent == null || !linkIntent.validAt(clock.instant())) {
+            outcome = GoogleOutcome.LINK_EXPIRED;
+        } else if (!(authentication.getPrincipal() instanceof OidcUser google)) {
+            outcome = GoogleOutcome.GOOGLE_FAILED;
+        } else {
+            try {
+                outcome = links.link(linkIntent, GoogleClaims.of(google));
+            } catch (DataIntegrityViolationException exception) {
+                outcome = GoogleLinks.raceOutcome(exception);
+            } catch (RuntimeException exception) {
+                log.warn("Linking Google could not be finished: {}", exception.getClass().getName());
+                outcome = GoogleOutcome.GOOGLE_FAILED;
+            }
+        }
+        restore(request, response, linkIntent);
+        redirect(response, refusal(intent, outcome));
+    }
+
+    /** Signs the person of the intent in again, only while the account and its credential version are unchanged. */
+    private void restore(HttpServletRequest request, HttpServletResponse response, GoogleLinkIntent linkIntent) {
+        if (linkIntent == null) return;
+        var user = users.findById(linkIntent.userId()).filter(found -> found.getDeletedAt() == null);
+        if (user.isEmpty()) return;
+        AppUserPrincipal principal;
+        try {
+            principal = (AppUserPrincipal) userDetails.loadUserByUsername(user.get().getEmail());
+        } catch (UsernameNotFoundException exception) {
+            return;
+        }
+        if (!linkIntent.userId().equals(principal.getUserId()) || principal.isBlocked()
+                || !Integer.valueOf(linkIntent.sessionVersion()).equals(principal.getSessionVersion())) return;
+        principal.eraseCredentials();
+        var context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(principal, null, List.of()));
+        SecurityContextHolder.setContext(context);
+        new HttpSessionSecurityContextRepository().saveContext(context, request, response);
+    }
+
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response, AuthenticationException exception)
             throws IOException {
         var intent = GoogleIntent.current(request);
-        forgetAuthentication(request);
+        // Spring stores nothing on a failure, so a session that was signed in stays signed in; only this thread forgets.
+        SecurityContextHolder.clearContext();
+        request.removeAttribute(RequestAttributeSecurityContextRepository.DEFAULT_REQUEST_ATTR_NAME);
+        // A link that did not happen uses its intent up as well.
+        if (intent.mode() == GoogleIntent.Mode.LINK) GoogleLinkIntent.take(request);
         var error = exception instanceof OAuth2AuthenticationException oauth ? oauth.getError().getErrorCode() : null;
         var cancelled = OAuth2ErrorCodes.ACCESS_DENIED.equals(error);
         // Only the error code: descriptions, the code, the state and the tokens stay out of the log.
@@ -134,7 +192,7 @@ final class GoogleSignInHandler implements AuthenticationSuccessHandler, Authent
         redirect(response, refusal(intent, cancelled ? GoogleOutcome.GOOGLE_CANCELLED : GoogleOutcome.GOOGLE_FAILED));
     }
 
-    /** Where a sign-in that did not happen goes; the account page for a link (C9), the sign-in page otherwise. */
+    /** Where the browser goes back to: the account page for a link (C9), the sign-in page otherwise. */
     static String refusal(GoogleIntent intent, GoogleOutcome outcome) {
         if (intent.mode() == GoogleIntent.Mode.LINK) return "/account?google=" + outcome.name() + "#google";
         return "/login?google=" + outcome.name() + returnToParameter(intent);

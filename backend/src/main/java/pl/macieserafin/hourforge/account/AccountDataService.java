@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.auth.AccountMailService;
+import pl.macieserafin.hourforge.auth.EmailTokenPurpose;
+import pl.macieserafin.hourforge.auth.EmailTokenService;
 import pl.macieserafin.hourforge.auth.EmailTokenRepository;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.entrytemplate.EntryTemplateRepository;
@@ -61,6 +63,7 @@ public class AccountDataService {
     private final AccountMailService mail;
     private final RateLimiter limiter;
     private final RateLimitProperties limits;
+    private final EmailTokenService emailTokens;
     private final Clock clock;
 
     public AccountDataService(UserRepository users, UserCredentialRepository credentials, TeamMemberRepository members,
@@ -70,7 +73,8 @@ public class AccountDataService {
                               LoginEventRepository logins, TwoFactorService twoFactor, UserIdentityRepository identities,
                               SignInMethodLookup signInMethods, ImageStore images,
                               PreferencesService preferences, PasswordEncoder encoder, PasswordChangeAttempts attempts,
-                              AccountMailService mail, RateLimiter limiter, RateLimitProperties limits, Clock clock) {
+                              AccountMailService mail, RateLimiter limiter, RateLimitProperties limits,
+                              EmailTokenService emailTokens, Clock clock) {
         this.users = users;
         this.credentials = credentials;
         this.members = members;
@@ -93,6 +97,7 @@ public class AccountDataService {
         this.mail = mail;
         this.limiter = limiter;
         this.limits = limits;
+        this.emailTokens = emailTokens;
         this.clock = clock;
     }
 
@@ -155,6 +160,39 @@ public class AccountDataService {
         }
         anonymize(userId);
         attempts.reset(userId);
+    }
+
+    /**
+     * D8: an account without a password asks for a link instead (C2). Nothing is removed yet; the same checks as the
+     * removal itself run first (owned teams: 409), so the link is not sent for nothing. At most three links an hour.
+     * An account with a password gives the password (400 here).
+     */
+    @Transactional
+    public void requestDeletionByEmail(UUID userId) {
+        var credential = credentials.findLockedByUserId(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        if (credential.hasPassword()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "An account with a password is deleted with the password");
+        }
+        if (members.findActiveByUserId(userId).stream().anyMatch(member -> member.getRole() == TeamRole.OWNER)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Hand over or delete the teams you own first");
+        }
+        limiter.tryAcquire("account-deletion-link:" + userId, limits.emailVerification())
+                .ifPresent(retryAfter -> { throw new TooManyRequestsException(retryAfter); });
+        var user = credential.getUser();
+        mail.sendAccountDeletionLink(user, emailTokens.issue(user, EmailTokenPurpose.DELETE_ACCOUNT, null));
+    }
+
+    /**
+     * Opens the link from {@link #requestDeletionByEmail}: one use, 24 hours, only for the credentials it was sent for.
+     * A refusal (owned teams since) rolls back, so the link keeps working once the teams are handed over.
+     * Returns the id of the removed account.
+     */
+    @Transactional
+    public UUID confirmDeletion(String rawToken) {
+        var userId = emailTokens.redeem(rawToken, EmailTokenPurpose.DELETE_ACCOUNT).getUser().getId();
+        anonymize(userId);
+        return userId;
     }
 
     /**

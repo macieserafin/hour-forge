@@ -95,8 +95,12 @@ class GoogleSignInIT extends GoogleSignInTestSupport {
                 where s.session_id = ? and a.attribute_name = ?""", Integer.class, browser.sessionId(), AUTHORIZATION_REQUEST_ATTRIBUTE)).isOne();
 
         var callback = GOOGLE.consent(location);
+        var waitingSession = browser.sessionId();
         // Each request reads the session from the database, so the request was serialized and read back.
         browser.perform(get(callback)).andExpect(redirectedUrl(FRONTEND + "/dashboard"));
+        // Signing in gives the session a new id (no fixation through the session that waited for Google).
+        assertThat(browser.sessionId()).isNotNull().isNotEqualTo(waitingSession);
+        assertThat(sessions.findById(waitingSession)).isNull();
         assertThat(GOOGLE.verifiedProofKeys.get()).isOne();
 
         // The same answer again (a replay) no longer finds a waiting request.
@@ -111,6 +115,31 @@ class GoogleSignInIT extends GoogleSignInTestSupport {
                 .andExpect(redirectedUrl(FRONTEND + "/login?google=GOOGLE_FAILED"));
         assertThat(GOOGLE.tokenCalls.get()).isZero();
         browser.perform(get("/api/me")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void anyOtherAddressUnderTheGooglePrefixesIsRefusedWithoutAnError() throws Exception {
+        var browser = new BrowserSession(mvc);
+        browser.perform(get("/api/auth/oauth2/authorization/github")).andExpect(redirectedUrl(FRONTEND + "/login?google=GOOGLE_FAILED"));
+        browser.perform(get("/api/auth/oauth2/authorization/google/extra")).andExpect(redirectedUrl(FRONTEND + "/login?google=GOOGLE_FAILED"));
+        // Other methods: a POST is stopped by the CSRF protection before, one with a token by the guard.
+        browser.perform(post("/api/auth/oauth2/authorization/google")).andExpect(status().isForbidden());
+        browser.send(post("/api/auth/oauth2/authorization/google")).andExpect(redirectedUrl(FRONTEND + "/login?google=GOOGLE_FAILED"));
+
+        // A real answer from Google sent to another callback suffix is refused before Spring reads it.
+        var callback = GOOGLE.consent(start(browser, "mode=login").andReturn().getResponse().getRedirectedUrl());
+        browser.perform(get(URI.create("/api/auth/oauth2/callback/other?" + callback.getRawQuery())))
+                .andExpect(redirectedUrl(FRONTEND + "/login?google=GOOGLE_FAILED"));
+        assertThat(GOOGLE.tokenCalls.get()).isZero();
+        // The waiting request was left alone and the right callback still works.
+        browser.perform(get(callback)).andExpect(redirectedUrl(FRONTEND + "/dashboard"));
+    }
+
+    @Test
+    void addressesUnderTheGooglePrefixesCountTowardsTheLimit() throws Exception {
+        var browser = new BrowserSession(mvc).device(null, "198.51.100.9");
+        for (int i = 0; i < 30; i++) browser.perform(get("/api/auth/oauth2/callback/other")).andExpect(status().isFound());
+        browser.perform(get("/api/auth/oauth2/callback/other")).andExpect(header().exists("Retry-After"));
     }
 
     // --- F1: a new account ----------------------------------------------------------------------------------------
@@ -355,8 +384,8 @@ class GoogleSignInIT extends GoogleSignInTestSupport {
 
     @ParameterizedTest
     @ValueSource(strings = {"mode=link", "mode=other", "mode=LOGIN"})
-    void onlyTheSignInModeLeavesForGoogleForNow(String query) throws Exception {
-        var expected = query.equals("mode=link") ? "/account?google=GOOGLE_FAILED#google" : "/login?google=GOOGLE_FAILED";
+    void unknownModesAndALinkWithoutItsIntentDoNotLeaveForGoogle(String query) throws Exception {
+        var expected = query.equals("mode=link") ? "/account?google=LINK_EXPIRED#google" : "/login?google=GOOGLE_FAILED";
         start(new BrowserSession(mvc), query).andExpect(redirectedUrl(FRONTEND + expected));
         assertThat(GOOGLE.authorizations()).isEmpty();
     }

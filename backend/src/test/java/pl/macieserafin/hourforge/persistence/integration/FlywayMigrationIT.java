@@ -67,10 +67,39 @@ class FlywayMigrationIT {
                         VALUES ('00000000-0000-0000-0000-000000000008', '00000000-0000-0000-0000-000000000001',
                                 CURRENT_TIMESTAMP, 'SUCCESS')
                         """);
-                upgraded = Flyway.configure().dataSource(database.getJdbcUrl(), database.getUsername(), database.getPassword()).load();
+                upgraded = Flyway.configure().dataSource(database.getJdbcUrl(), database.getUsername(), database.getPassword())
+                        .target("37").load();
                 // V33 binds links to credential versions, V34 adds the repeat-day request records, V35 the template tag,
                 // V36 the entry version, V37 accounts without a password, linked providers and the sign-in method.
                 assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(5);
+                // The unnamed CHECK of V10 has the name PostgreSQL gives it; V38 drops it by that name.
+                try (var result = statement.executeQuery("""
+                        SELECT conname FROM pg_constraint
+                        WHERE conrelid = 'email_tokens'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%RESET_PASSWORD%'
+                        """)) {
+                    assertThat(result.next()).isTrue();
+                    assertThat(result.getString(1)).isEqualTo("email_tokens_purpose_check");
+                    assertThat(result.next()).isFalse();
+                }
+                upgraded = Flyway.configure().dataSource(database.getJdbcUrl(), database.getUsername(), database.getPassword()).load();
+                // V38 lets a link confirm the removal of an account without a password (DELETE_ACCOUNT).
+                assertThat(upgraded.migrate().migrationsExecuted).isOne();
+                statement.execute("""
+                        INSERT INTO email_tokens (id, user_id, purpose, token_hash, new_email, expires_at)
+                        VALUES ('00000000-0000-0000-0000-000000000009', '00000000-0000-0000-0000-000000000001', 'DELETE_ACCOUNT',
+                                repeat('d', 64), NULL, CURRENT_TIMESTAMP + interval '1 day')
+                        """);
+                org.assertj.core.api.Assertions.assertThatThrownBy(() -> statement.execute("""
+                        INSERT INTO email_tokens (id, user_id, purpose, token_hash, new_email, expires_at)
+                        VALUES (gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'UNKNOWN_PURPOSE',
+                                repeat('e', 64), NULL, CURRENT_TIMESTAMP + interval '1 day')
+                        """)).isInstanceOf(java.sql.SQLException.class).hasMessageContaining("ck_email_tokens_purpose");
+                org.assertj.core.api.Assertions.assertThatThrownBy(() -> statement.execute("""
+                        INSERT INTO email_tokens (id, user_id, purpose, token_hash, new_email, expires_at)
+                        VALUES (gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'DELETE_ACCOUNT',
+                                repeat('f', 64), 'other@example.test', CURRENT_TIMESTAMP + interval '1 day')
+                        """)).isInstanceOf(java.sql.SQLException.class).hasMessageContaining("ck_email_tokens_new_email");
+                statement.execute("DELETE FROM email_tokens WHERE id = '00000000-0000-0000-0000-000000000009'");
                 try (var result = statement.executeQuery("""
                         SELECT c.password_hash, e.method, (SELECT count(*) FROM user_identities)
                         FROM user_credentials c JOIN login_events e ON e.user_id = c.user_id
@@ -95,6 +124,7 @@ class FlywayMigrationIT {
                     assertThat(result.next()).isTrue();
                     assertThat(result.getInt(1)).isZero();
                 }
+                // The three links from before V33 survive V37 and V38 unchanged.
                 try (var result = statement.executeQuery("SELECT count(*), bool_and(credential_version IS NULL) FROM email_tokens")) {
                     assertThat(result.next()).isTrue();
                     assertThat(result.getInt(1)).isEqualTo(3);
