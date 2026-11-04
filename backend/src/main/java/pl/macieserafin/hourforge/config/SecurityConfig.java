@@ -20,6 +20,12 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
+import org.springframework.security.web.csrf.CsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestHandler;
+import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
+import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.google.GoogleSignIn;
@@ -60,9 +66,12 @@ public class SecurityConfig {
             http.addFilterBefore(google.guard(), OAuth2AuthorizationRequestRedirectFilter.class)
                     .oauth2Login(login -> google.configure(login.loginPage(LOGIN_URL)));
         }
+        // Spring's default token store, shared with the sign-in strategy below (HF-W-014).
+        var csrfTokens = new HttpSessionCsrfTokenRepository();
         return http
                 .headers(headers -> headers.referrerPolicy(policy -> policy.policy(
                         org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
+                .csrf(csrf -> csrf.csrfTokenRepository(csrfTokens).sessionAuthenticationStrategy(new StoreNewCsrfTokenAtSignIn(csrfTokens)))
                 .authorizeHttpRequests(authorize -> authorize
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf", "/api/config").permitAll()
@@ -130,6 +139,30 @@ public class SecurityConfig {
                         .logoutSuccessHandler((request, response, authentication) ->
                                 response.setStatus(HttpServletResponse.SC_NO_CONTENT)))
                 .build();
+    }
+
+    /**
+     * A sign-in replaces the CSRF token, as Spring's {@code CsrfAuthenticationStrategy} does, but stores the new one at
+     * once instead of at its first use. Otherwise the first requests after a sign-in that need the token (the frontend
+     * asks for it before every change) each create one and add the same session attribute; with sessions stored in the
+     * database all but one then fail on the attribute's unique key (500). Applies to every sign-in that goes through
+     * Spring's authentication filters: the password and Google; the second step keeps the token of the first.
+     */
+    private static final class StoreNewCsrfTokenAtSignIn implements SessionAuthenticationStrategy {
+        private final CsrfTokenRepository tokens;
+        private final CsrfTokenRequestHandler requestHandler = new XorCsrfTokenRequestAttributeHandler();
+
+        private StoreNewCsrfTokenAtSignIn(CsrfTokenRepository tokens) {
+            this.tokens = tokens;
+        }
+
+        @Override
+        public void onAuthentication(Authentication authentication, HttpServletRequest request, HttpServletResponse response) {
+            tokens.saveToken(null, request, response);
+            var token = tokens.generateToken(request);
+            tokens.saveToken(token, request, response);
+            requestHandler.handle(request, response, () -> token);
+        }
     }
 
     // Not a bean: a Filter bean would also be registered in the servlet container outside the security chain.

@@ -490,6 +490,65 @@ class GoogleSignInIT extends GoogleSignInTestSupport {
         assertThat(mail.last().subject()).isEqualTo("Nowe logowanie na Twoje konto HourForge");
     }
 
+    /**
+     * The return from Google replaces the CSRF token and stores the new one at once (HF-W-014), so the first requests
+     * for it in parallel all succeed. Real commits: the parallel requests run outside the test transaction.
+     */
+    @Test
+    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void theReturnFromGoogleReplacesTheCsrfTokenAndParallelFirstRequestsForItSucceed() throws Exception {
+        GOOGLE.account = Account.gmail("sub-csrf", "csrf.parallel@gmail.com");
+        var browser = new BrowserSession(mvc);
+        try {
+            var before = browser.csrfToken();
+            signInWithGoogle(browser).andExpect(redirectedUrl(FRONTEND + "/dashboard"));
+            // One ordinary request first, as in CsrfConcurrencyIT: without HF-W-012 it would add the activity day itself.
+            // Nothing that checks a token may run before the parallel requests: a check stores a missing token itself.
+            browser.perform(get("/api/me")).andExpect(status().isOk());
+
+            var pool = java.util.concurrent.Executors.newFixedThreadPool(8);
+            var tokens = new java.util.concurrent.CopyOnWriteArrayList<String>();
+            var statuses = new java.util.ArrayList<java.util.concurrent.Future<Integer>>();
+            var start = new java.util.concurrent.CountDownLatch(1);
+            try {
+                for (int i = 0; i < 8; i++) {
+                    statuses.add(pool.submit(() -> {
+                        start.await();
+                        try {
+                            var response = mvc.perform(get("/api/auth/csrf").cookie(browser.cookie())).andReturn().getResponse();
+                            if (response.getStatus() == 200) tokens.add(JsonPath.read(response.getContentAsString(), "$.token"));
+                            return response.getStatus();
+                        } catch (Exception exception) {
+                            return 500;
+                        }
+                    }));
+                }
+                start.countDown();
+                for (var status : statuses) assertThat(status.get(30, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(200);
+            } finally {
+                pool.shutdownNow();
+            }
+            assertThat(tokens).hasSize(8);
+            browser.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/account/profile")
+                    .header("X-CSRF-TOKEN", before).contentType(MediaType.APPLICATION_JSON).content("{\"displayName\":\"Old token\"}"))
+                    .andExpect(status().isForbidden());
+            for (var token : tokens) {
+                browser.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/account/profile")
+                        .header("X-CSRF-TOKEN", token).contentType(MediaType.APPLICATION_JSON).content("{\"displayName\":\"New token\"}"))
+                        .andExpect(status().isOk());
+            }
+        } finally {
+            users.findByEmailIgnoreCase("csrf.parallel@gmail.com").ifPresent(user -> {
+                jdbc.update("delete from spring_session where principal_name = ?", user.getId().toString());
+                jdbc.update("delete from user_identities where user_id = ?", user.getId());
+                jdbc.update("delete from login_events where user_id = ?", user.getId());
+                jdbc.update("delete from email_tokens where user_id = ?", user.getId());
+                jdbc.update("delete from user_credentials where user_id = ?", user.getId());
+                jdbc.update("delete from users where id = ?", user.getId());
+            });
+        }
+    }
+
     @Test
     void thePasswordSignInIsUnchangedWhileGoogleIsOn() throws Exception {
         passwordAccount("password@example.com", "Password");
