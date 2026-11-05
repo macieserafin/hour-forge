@@ -1,4 +1,4 @@
-import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { queryOptions, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { usePublicConfig } from './operator'
 import { answerTwoFactor, confirmEmail, confirmEmailChange, confirmPasswordReset, getUser, login, logout, register, requestPasswordReset, resendVerification } from './api'
 
@@ -6,6 +6,17 @@ export const sessionOptions = queryOptions({
   queryKey: ['session'],
   queryFn: ({ signal }) => getUser(signal),
 })
+
+/**
+ * Called once the server has started a session. Data fetched before it, including requests that failed with 401 while
+ * the old session was dead, must not survive: the same account signing in again reuses the same query keys, and a
+ * cached 401 would sign the person straight out again, leaving the login form looking like it did nothing.
+ */
+async function startSession(client: QueryClient) {
+  await client.cancelQueries()
+  client.removeQueries({ predicate: query => query.queryKey[0] !== sessionOptions.queryKey[0] })
+  await client.invalidateQueries({ queryKey: sessionOptions.queryKey })
+}
 
 export function useSession() {
   return useQuery(sessionOptions)
@@ -48,7 +59,7 @@ export function useLogin() {
     mutationFn: login,
     onSuccess: async result => {
       // With two-step sign-in the session starts only after the code.
-      if (result === 'SIGNED_IN') await client.invalidateQueries({ queryKey: sessionOptions.queryKey })
+      if (result === 'SIGNED_IN') await startSession(client)
     },
   })
 }
@@ -59,7 +70,7 @@ export function useAnswerTwoFactor() {
     mutationFn: answerTwoFactor,
     retry: false,
     onSuccess: async () => {
-      await client.invalidateQueries({ queryKey: sessionOptions.queryKey })
+      await startSession(client)
     },
   })
 }
