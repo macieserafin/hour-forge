@@ -3,9 +3,3 @@
 .env.*
 !.env.example
 **/.DS_Store
-
-/private-docs/
-/claude/
-/.claude/
-/.agents/
-skills-lock.json
