@@ -7,10 +7,15 @@ export const tagsKey = (userId: string, teamId: string) => ['tags', userId, team
 
 export function useTags(userId: string, teamId: string, includeArchived = false, enabled = true) {
   const handleError = useAuthError()
-  const query = useQuery({ queryKey: [...tagsKey(userId, teamId), includeArchived], enabled,
+  const query = useQuery({
+    queryKey: [...tagsKey(userId, teamId), includeArchived],
+    enabled,
     queryFn: ({ signal }) => getTags(teamId, includeArchived, signal),
-    retry: (count, error) => count < 1 && error instanceof ApiError && (error.status === 0 || error.status >= 500) })
-  useEffect(() => { if (query.error) handleError(query.error) }, [query.error, handleError])
+    retry: (count, error) => count < 1 && error instanceof ApiError && (error.status === 0 || error.status >= 500),
+  })
+  useEffect(() => {
+    if (query.error) handleError(query.error)
+  }, [query.error, handleError])
   return query
 }
 
@@ -18,8 +23,12 @@ function useTagMutation<TInput>(userId: string, teamId: string, mutationFn: (inp
   const client = useQueryClient()
   const handleError = useAuthError()
   // A lost response may follow a committed change: reconcile instead of repeating the write.
-  return useMutation({ mutationFn, retry: false, onError: handleError,
-    onSettled: () => client.invalidateQueries({ queryKey: tagsKey(userId, teamId) }) })
+  return useMutation({
+    mutationFn,
+    retry: false,
+    onError: handleError,
+    onSettled: () => client.invalidateQueries({ queryKey: tagsKey(userId, teamId) }),
+  })
 }
 
 export const useCreateTag = (userId: string, teamId: string) => useTagMutation(userId, teamId, createTag)

@@ -1,8 +1,22 @@
 import { useEffect } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { saveBlob } from './download'
-import { ApiError, downloadReport, getReportActive, getReportBreakdown, getReportEntries, getReportTimesheet, getReportMembers, getReportProjects, getReportSummary,
-  type ReportDownload, type ReportFilters, type ReportGroup, type ReportResult, type ReportSort } from './api'
+import {
+  ApiError,
+  downloadReport,
+  getReportActive,
+  getReportBreakdown,
+  getReportEntries,
+  getReportTimesheet,
+  getReportMembers,
+  getReportProjects,
+  getReportSummary,
+  type ReportDownload,
+  type ReportFilters,
+  type ReportGroup,
+  type ReportResult,
+  type ReportSort,
+} from './api'
 import { dashboardKey } from './dashboard'
 import { teamsKey, useAuthError } from './teams'
 
@@ -15,7 +29,8 @@ export function reportRangeDays(from: string, to: string) {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1
 }
 
-const retry = (count: number, error: Error) => count < 1 && error instanceof ApiError && (error.status === 0 || error.status >= 500)
+const retry = (count: number, error: Error) =>
+  count < 1 && error instanceof ApiError && (error.status === 0 || error.status >= 500)
 
 function useReportError(userId: string, error: Error | null) {
   const handleError = useAuthError()
@@ -30,67 +45,125 @@ function useReportError(userId: string, error: Error | null) {
 }
 
 export function useReportSummary(userId: string, teamId: string, filters: ReportFilters) {
-  const query = useQuery({ queryKey: [...reportsKey(userId, teamId), 'summary', filters],
-    queryFn: ({ signal }) => getReportSummary(teamId, filters, signal), retry,
-    refetchInterval: 60_000, refetchOnWindowFocus: 'always' })
+  const query = useQuery({
+    queryKey: [...reportsKey(userId, teamId), 'summary', filters],
+    queryFn: ({ signal }) => getReportSummary(teamId, filters, signal),
+    retry,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: 'always',
+  })
   useReportError(userId, query.error)
   return query
 }
 
-export function useReportBreakdown(userId: string, teamId: string, filters: ReportFilters, groupBy: ReportGroup, page: number) {
-  const query = useQuery({ queryKey: [...reportsKey(userId, teamId), 'breakdown', filters, groupBy, page],
-    queryFn: ({ signal }) => getReportBreakdown(teamId, filters, groupBy, page, signal), retry,
-    refetchInterval: 60_000, refetchOnWindowFocus: 'always' })
+export function useReportBreakdown(
+  userId: string,
+  teamId: string,
+  filters: ReportFilters,
+  groupBy: ReportGroup,
+  page: number,
+) {
+  const query = useQuery({
+    queryKey: [...reportsKey(userId, teamId), 'breakdown', filters, groupBy, page],
+    queryFn: ({ signal }) => getReportBreakdown(teamId, filters, groupBy, page, signal),
+    retry,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: 'always',
+  })
   useReportError(userId, query.error)
   return query
 }
 
 /** The live view polls faster than the reports: a running timer is what the owner wants to see change. */
 export function useReportActive(userId: string, teamId: string, page: number, enabled: boolean) {
-  const query = useQuery({ queryKey: [...reportsKey(userId, teamId), 'active', page], enabled,
-    queryFn: ({ signal }) => getReportActive(teamId, page, signal), retry,
-    refetchInterval: 15_000, refetchOnWindowFocus: 'always' })
+  const query = useQuery({
+    queryKey: [...reportsKey(userId, teamId), 'active', page],
+    enabled,
+    queryFn: ({ signal }) => getReportActive(teamId, page, signal),
+    retry,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: 'always',
+  })
   useReportError(userId, query.error)
   return query
 }
 
 export function useDownloadReport(teamId: string, filters: ReportFilters, kind: ReportDownload) {
   const handleError = useAuthError()
-  return useMutation({ mutationFn: () => downloadReport(teamId, filters, kind), retry: false, gcTime: 0, onError: handleError,
-    onSuccess: ({ blob, filename }) => saveBlob(blob, filename) })
+  return useMutation({
+    mutationFn: () => downloadReport(teamId, filters, kind),
+    retry: false,
+    gcTime: 0,
+    onError: handleError,
+    onSuccess: ({ blob, filename }) => saveBlob(blob, filename),
+  })
 }
 
 export function useReportTimesheet(userId: string, teamId: string, filters: ReportFilters, enabled = true) {
-  const query = useQuery({ queryKey: [...reportsKey(userId, teamId), 'timesheet', filters], enabled,
-    queryFn: ({ signal }) => getReportTimesheet(teamId, filters, signal), retry,
-    refetchInterval: 60_000, refetchOnWindowFocus: 'always' })
+  const query = useQuery({
+    queryKey: [...reportsKey(userId, teamId), 'timesheet', filters],
+    enabled,
+    queryFn: ({ signal }) => getReportTimesheet(teamId, filters, signal),
+    retry,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: 'always',
+  })
   useReportError(userId, query.error)
   return query
 }
 
-export function useReportEntries(userId: string, teamId: string, filters: ReportFilters, sort: ReportSort, page: number) {
-  const query = useQuery({ queryKey: [...reportsKey(userId, teamId), 'entries', filters, sort, page],
-    queryFn: ({ signal }) => getReportEntries(teamId, filters, sort, page, signal), retry,
-    refetchInterval: 60_000, refetchOnWindowFocus: 'always' })
+export function useReportEntries(
+  userId: string,
+  teamId: string,
+  filters: ReportFilters,
+  sort: ReportSort,
+  page: number,
+) {
+  const query = useQuery({
+    queryKey: [...reportsKey(userId, teamId), 'entries', filters, sort, page],
+    queryFn: ({ signal }) => getReportEntries(teamId, filters, sort, page, signal),
+    retry,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: 'always',
+  })
   useReportError(userId, query.error)
   return query
 }
 
-function useReportOptions<T>(userId: string, teamId: string, kind: 'members' | 'projects',
-  fetchPage: (teamId: string, page: number, signal?: AbortSignal) => Promise<ReportResult<T>>) {
-  const query = useInfiniteQuery({ queryKey: [...reportsKey(userId, teamId), kind], initialPageParam: 0,
+function useReportOptions<T>(
+  userId: string,
+  teamId: string,
+  kind: 'members' | 'projects',
+  fetchPage: (teamId: string, page: number, signal?: AbortSignal) => Promise<ReportResult<T>>,
+) {
+  const query = useInfiniteQuery({
+    queryKey: [...reportsKey(userId, teamId), kind],
+    initialPageParam: 0,
     queryFn: ({ pageParam, signal }) => fetchPage(teamId, pageParam, signal),
-    getNextPageParam: last => last.data.hasNext ? last.data.page + 1 : undefined,
-    retry, refetchOnWindowFocus: 'always' })
+    getNextPageParam: last => (last.data.hasNext ? last.data.page + 1 : undefined),
+    retry,
+    refetchOnWindowFocus: 'always',
+  })
   useReportError(userId, query.error)
   return query
 }
 
-export const useReportMembers = (userId: string, teamId: string) => useReportOptions(userId, teamId, 'members', getReportMembers)
-export const useReportProjects = (userId: string, teamId: string) => useReportOptions(userId, teamId, 'projects', getReportProjects)
+export const useReportMembers = (userId: string, teamId: string) =>
+  useReportOptions(userId, teamId, 'members', getReportMembers)
+export const useReportProjects = (userId: string, teamId: string) =>
+  useReportOptions(userId, teamId, 'projects', getReportProjects)
 
-export function reportWeek(timezone: string, now = new Date(), weekStart: 'MONDAY' | 'SUNDAY' = 'MONDAY'): ReportFilters {
-  const parts = new Intl.DateTimeFormat('en', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
+export function reportWeek(
+  timezone: string,
+  now = new Date(),
+  weekStart: 'MONDAY' | 'SUNDAY' = 'MONDAY',
+): ReportFilters {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now)
   const part = (type: string) => Number(parts.find(p => p.type === type)!.value)
   const date = new Date(Date.UTC(part('year'), part('month') - 1, part('day')))
   date.setUTCDate(date.getUTCDate() - (weekStart === 'SUNDAY' ? date.getUTCDay() : (date.getUTCDay() + 6) % 7))
@@ -103,7 +176,12 @@ const dateText = /^\d{4}-\d{2}-\d{2}$/
 const managedParams = ['from', 'to', 'person', 'project', 'tag', 'issue', 'type', 'undated', 'q'] as const
 
 function localDate(timezone: string, now: Date) {
-  const parts = new Intl.DateTimeFormat('en', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now)
   const part = (type: string) => Number(parts.find(p => p.type === type)!.value)
   return new Date(Date.UTC(part('year'), part('month') - 1, part('day')))
 }
@@ -132,7 +210,12 @@ export function reportRanges(timezone: string, now = new Date(), weekStart: 'MON
 }
 
 /** Reads report filters from the address; anything missing or malformed falls back to the current week. */
-export function filtersFromSearch(search: URLSearchParams, timezone: string, now = new Date(), weekStart: 'MONDAY' | 'SUNDAY' = 'MONDAY'): ReportFilters {
+export function filtersFromSearch(
+  search: URLSearchParams,
+  timezone: string,
+  now = new Date(),
+  weekStart: 'MONDAY' | 'SUNDAY' = 'MONDAY',
+): ReportFilters {
   const week = reportWeek(timezone, now, weekStart)
   const undated = search.get('undated') === 'true'
   const from = search.get('from') ?? ''
@@ -155,9 +238,12 @@ export function filtersFromSearch(search: URLSearchParams, timezone: string, now
 /** Writes the filters into a copy of the address, leaving unrelated parameters such as the selected team alone. */
 export function filtersToSearch(filters: ReportFilters, base: URLSearchParams): URLSearchParams {
   const next = new URLSearchParams(base)
-  managedParams.forEach(key => next.delete(key))
+  for (const key of managedParams) next.delete(key)
   if (filters.undated) next.set('undated', 'true')
-  else { next.set('from', filters.from); next.set('to', filters.to) }
+  else {
+    next.set('from', filters.from)
+    next.set('to', filters.to)
+  }
   if (filters.userId) next.set('person', filters.userId)
   if (filters.projectId) next.set('project', filters.projectId)
   if (filters.tagId) next.set('tag', filters.tagId)
@@ -169,6 +255,6 @@ export function filtersToSearch(filters: ReportFilters, base: URLSearchParams): 
 
 export function clearedSearch(base: URLSearchParams): URLSearchParams {
   const next = new URLSearchParams(base)
-  managedParams.forEach(key => next.delete(key))
+  for (const key of managedParams) next.delete(key)
   return next
 }

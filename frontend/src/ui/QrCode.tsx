@@ -11,9 +11,18 @@ export function QrCode({ value, label, size = 184 }: { value: string; label: str
   for (let row = 0; row < count; row++) {
     for (let col = 0; col < count; col++) if (qr.isDark(row, col)) cells.push(`M${col + quiet} ${row + quiet}h1v1h-1z`)
   }
-  return <svg className="qr-code" role="img" aria-label={label} width={size} height={size} viewBox={`0 0 ${count + quiet * 2} ${count + quiet * 2}`}
-    shapeRendering="crispEdges">
-    <rect width="100%" height="100%" fill="#fff" />
-    <path d={cells.join('')} fill="#000" />
-  </svg>
+  return (
+    <svg
+      className="qr-code"
+      role="img"
+      aria-label={label}
+      width={size}
+      height={size}
+      viewBox={`0 0 ${count + quiet * 2} ${count + quiet * 2}`}
+      shapeRendering="crispEdges"
+    >
+      <rect width="100%" height="100%" fill="#fff" />
+      <path d={cells.join('')} fill="#000" />
+    </svg>
+  )
 }

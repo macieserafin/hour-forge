@@ -9,5 +9,7 @@ export function clearBrowserStateOf(userId: string) {
       const [prefix, , owner] = key.split(':')
       if (prefix === 'hourforge' && owner === userId) storage.removeItem(key)
     }
-  } catch { /* Nothing can be read or removed then. */ }
+  } catch {
+    /* Nothing can be read or removed then. */
+  }
 }

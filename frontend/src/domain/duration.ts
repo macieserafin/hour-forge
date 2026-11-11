@@ -11,7 +11,10 @@ export function parseDuration(text: string): number | null {
   if (!value) return null
   let seconds: number | null = null
   const colon = /^(\d{1,2}):([0-5]\d)$/.exec(value)
-  const units = /^(?:(\d+(?:\.\d+)?) ?(?:h|godz\.?|godzin[ya]?|hours?|hrs?))? ?(?:(\d+) ?(?:m|min\.?|minut[ya]?|minutes?|mins?)?)?$/.exec(value)
+  const units =
+    /^(?:(\d+(?:\.\d+)?) ?(?:h|godz\.?|godzin[ya]?|hours?|hrs?))? ?(?:(\d+) ?(?:m|min\.?|minut[ya]?|minutes?|mins?)?)?$/.exec(
+      value,
+    )
   const plain = /^(\d+(?:\.\d+)?)$/.exec(value)
   if (colon) seconds = Number(colon[1]) * 3600 + Number(colon[2]) * 60
   else if (plain) seconds = Math.round(Number(plain[1]) * 3600)
@@ -26,11 +29,20 @@ export function parseDuration(text: string): number | null {
 /** How saved time is written, from the account preference "Zapis czasu": hours and minutes, or decimal hours. */
 let style: 'CLOCK' | 'DECIMAL' = 'CLOCK'
 let separator = ','
-export function setDurationStyle(next: 'CLOCK' | 'DECIMAL', locale: Locale) { style = next; separator = locale === 'pl' ? ',' : '.' }
+export function setDurationStyle(next: 'CLOCK' | 'DECIMAL', locale: Locale) {
+  style = next
+  separator = locale === 'pl' ? ',' : '.'
+}
 
 /** "2 h 30 min", "45 min", "3 h", or "2,5 h" in the decimal style; Polish and English use the same short units. */
 export function formatDuration(seconds: number): string {
-  if (style === 'DECIMAL') return `${(Math.max(0, seconds) / 3600).toFixed(2).replace(/\.?0+$/, '').replace('.', separator) || '0'} h`
+  if (style === 'DECIMAL')
+    return `${
+      (Math.max(0, seconds) / 3600)
+        .toFixed(2)
+        .replace(/\.?0+$/, '')
+        .replace('.', separator) || '0'
+    } h`
   const total = Math.max(0, Math.round(seconds / 60))
   const hours = Math.floor(total / 60)
   const minutes = total % 60
@@ -47,11 +59,16 @@ export function formatClock(seconds: number): string {
   return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-const localeTag = (locale: Locale) => locale === 'pl' ? 'pl-PL' : 'en-GB'
+const localeTag = (locale: Locale) => (locale === 'pl' ? 'pl-PL' : 'en-GB')
 
 /** Calendar date of a work entry, written for people: "11 lis", "wt 10 lis". */
 export function formatWorkDate(isoDate: string, locale: Locale, withWeekday = false): string {
-  return new Date(`${isoDate}T12:00:00Z`).toLocaleDateString(localeTag(locale), { timeZone: 'UTC', day: 'numeric', month: 'short', ...(withWeekday ? { weekday: 'short' } : {}) })
+  return new Date(`${isoDate}T12:00:00Z`).toLocaleDateString(localeTag(locale), {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'short',
+    ...(withWeekday ? { weekday: 'short' } : {}),
+  })
 }
 
 export function formatLongDate(date: Date, locale: Locale): string {

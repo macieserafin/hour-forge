@@ -24,7 +24,6 @@ export type TeamRole = 'OWNER' | 'ADMIN' | 'MEMBER'
 
 /** Owners and admins run the team; the server enforces the same rule. */
 export const canManage = (role: TeamRole) => role !== 'MEMBER'
-export const roleLabel = (role: TeamRole) => ({ OWNER: 'Właściciel', ADMIN: 'Administrator', MEMBER: 'Członek' })[role]
 
 export interface Team {
   id: string
@@ -49,7 +48,14 @@ export interface TeamSummary {
   activeTimers: boolean
 }
 
-export type InvitationStatus = 'ACTIVE' | 'ALREADY_MEMBER' | 'EXPIRED' | 'REVOKED' | 'EXHAUSTED' | 'TEAM_ARCHIVED' | 'NEW_INVITATION_REQUIRED'
+export type InvitationStatus =
+  | 'ACTIVE'
+  | 'ALREADY_MEMBER'
+  | 'EXPIRED'
+  | 'REVOKED'
+  | 'EXHAUSTED'
+  | 'TEAM_ARCHIVED'
+  | 'NEW_INVITATION_REQUIRED'
 
 export interface InvitationSummary {
   id: string
@@ -145,17 +151,21 @@ export interface DashboardSummary {
   days: { date: string; seconds: number }[]
 }
 
-export async function getDashboardSummary(teamId: string, signal?: AbortSignal, weekStart: Preferences['weekStart'] = 'MONDAY'): Promise<DashboardSummary> {
-  const response = await request(`/api/dashboard/summary?${new URLSearchParams({ teamId, weekStart })}`, { signal })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
+export const getDashboardSummary = (
+  teamId: string,
+  signal?: AbortSignal,
+  weekStart: Preferences['weekStart'] = 'MONDAY',
+) =>
+  call<DashboardSummary>(`/api/dashboard/summary?${new URLSearchParams({ teamId, weekStart })}`, {
+    signal,
+    messages: {
       404: 'Nie znaleziono zespołu lub nie masz już do niego dostępu.',
-    }
-    throw new ApiError(response.status, messages[response.status] ?? localizedError("Nie udało się wczytać podsumowania czasu. Spróbuj ponownie.", "Could not load your time summary. Try again."))
-  }
-  return response.json() as Promise<DashboardSummary>
-}
+    },
+    fallback: localizedError(
+      'Nie udało się wczytać podsumowania czasu. Spróbuj ponownie.',
+      'Could not load your time summary. Try again.',
+    ),
+  })
 
 export interface TimeEntryHistoryItem {
   id: string
@@ -196,25 +206,30 @@ export interface TimeEntryHistoryFilters {
   q?: string
 }
 
-export async function getTimeEntryHistory(teamId: string, filters: TimeEntryHistoryFilters,
-  page: number, signal?: AbortSignal): Promise<TimeEntryHistory> {
+export function getTimeEntryHistory(
+  teamId: string,
+  filters: TimeEntryHistoryFilters,
+  page: number,
+  signal?: AbortSignal,
+) {
   const params = new URLSearchParams({ teamId, page: String(page), size: '20' })
   if (filters.undated) params.set('undated', 'true')
   if (filters.projectId) params.set('projectId', filters.projectId)
   if (filters.from) params.set('from', filters.from)
   if (filters.to) params.set('to', filters.to)
   if (filters.q?.trim()) params.set('q', filters.q.trim())
-  const response = await request(`/api/time-entries?${params}`, { signal })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
+  return call<TimeEntryHistory>(`/api/time-entries?${params}`, {
+    signal,
+    messages: {
       400: 'Sprawdź zakres dat i wybrany projekt.',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Nie masz uprawnień do przeglądania tej historii.',
       404: 'Nie znaleziono projektu lub zespołu albo nie masz już do niego dostępu.',
-    }
-    throw new ApiError(response.status, messages[response.status] ?? localizedError("Nie udało się wczytać historii czasu. Spróbuj ponownie.", "Could not load your time history. Try again."))
-  }
-  return response.json() as Promise<TimeEntryHistory>
+    },
+    fallback: localizedError(
+      'Nie udało się wczytać historii czasu. Spróbuj ponownie.',
+      'Could not load your time history. Try again.',
+    ),
+  })
 }
 
 export interface ManualTimeInput extends StartTimerInput {
@@ -233,17 +248,84 @@ function localizedError(pl: string, en: string) {
 }
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string, public readonly code?: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly code?: string,
+  ) {
     super(message)
     this.name = 'ApiError'
   }
 }
 
-export function tooManyRequestsMessage(response: Response) {
+function tooManyRequestsMessage(response: Response) {
   const seconds = Number(response.headers.get('Retry-After'))
-  return Number.isFinite(seconds) && seconds > 0
-    ? `Zbyt wiele prób. Spróbuj ponownie za ${Math.ceil(seconds / 60)} min.`
-    : 'Zbyt wiele prób. Spróbuj ponownie później.'
+  if (!Number.isFinite(seconds) || seconds <= 0)
+    return localizedError('Zbyt wiele prób. Spróbuj ponownie później.', 'Too many attempts. Try again later.')
+  const minutes = Math.ceil(seconds / 60)
+  return localizedError(
+    `Zbyt wiele prób. Spróbuj ponownie za ${minutes} min.`,
+    `Too many attempts. Try again in ${minutes} min.`,
+  )
+}
+
+const sessionExpired = () =>
+  localizedError('Sesja wygasła. Zaloguj się ponownie.', 'Your session expired. Sign in again.')
+const notAllowed = () =>
+  localizedError(
+    'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
+    'You do not have permission for this action or the form session expired.',
+  )
+const formExpired = 'Sesja formularza wygasła. Spróbuj ponownie.'
+
+type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+/** What to tell the person for each failed status of one kind of request; 401 and 429 have shared defaults. */
+type Messages = Partial<Record<number, string>>
+
+/** Sends a request; every change carries the CSRF token, and a body other than a file upload is sent as JSON. */
+async function send(path: string, method: Method = 'GET', body?: unknown, signal?: AbortSignal): Promise<Response> {
+  if (method === 'GET') return request(path, { signal })
+  const csrf = await getCsrf()
+  const headers: Record<string, string> = { [csrf.headerName]: csrf.token }
+  // A file upload sets its own multipart type; everything else is JSON.
+  if (body instanceof FormData) return request(path, { method, signal, headers, body })
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  return request(path, { method, signal, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+}
+
+/** The error for a failed response: when to retry after 429, the caller's message, a lost session for 401, else the fallback. */
+function failure(response: Response, messages: Messages, fallback: string, code?: string) {
+  const message =
+    response.status === 429
+      ? tooManyRequestsMessage(response)
+      : (messages[response.status] ?? (response.status === 401 ? sessionExpired() : fallback))
+  return new ApiError(response.status, message, code)
+}
+
+/** The `code` the server adds to some refusals, e.g. {"code":"PASSWORD_NOT_SET"}. */
+async function errorCode(response: Response) {
+  return ((await response.json().catch(() => null)) as { code?: string } | null)?.code
+}
+
+interface Call {
+  method?: Method
+  body?: unknown
+  signal?: AbortSignal
+  messages?: Messages
+  fallback: string
+}
+
+/** Sends a request and returns the response; a failure throws with the messages of this kind of request. */
+async function respond(path: string, { method, body, signal, messages = {}, fallback }: Call): Promise<Response> {
+  const response = await send(path, method, body, signal)
+  if (!response.ok) throw failure(response, messages, fallback)
+  return response
+}
+
+/** As {@link respond}, reading the JSON answer; an empty answer (204) is null. */
+async function call<T>(path: string, options: Call): Promise<T> {
+  const response = await respond(path, options)
+  return (response.status === 204 ? null : await response.json()) as T
 }
 
 async function request(path: string, options?: RequestInit): Promise<Response> {
@@ -251,7 +333,13 @@ async function request(path: string, options?: RequestInit): Promise<Response> {
     return await fetch(path, { ...options, credentials: 'include', cache: 'no-store' })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error
-    throw new ApiError(0, localizedError("Nie udało się połączyć. Sprawdź połączenie i spróbuj ponownie.", "Could not connect. Check your connection and try again."))
+    throw new ApiError(
+      0,
+      localizedError(
+        'Nie udało się połączyć. Sprawdź połączenie i spróbuj ponownie.',
+        'Could not connect. Check your connection and try again.',
+      ),
+    )
   }
 }
 
@@ -264,12 +352,27 @@ export async function getUser(signal?: AbortSignal): Promise<User | null> {
 
 async function getCsrf(): Promise<CsrfToken> {
   const response = await request('/api/auth/csrf')
-  if (!response.ok) throw new ApiError(response.status, localizedError("Nie udało się przygotować bezpiecznej sesji. Spróbuj ponownie.", "Could not prepare a secure session. Try again."))
+  if (!response.ok)
+    throw new ApiError(
+      response.status,
+      localizedError(
+        'Nie udało się przygotować bezpiecznej sesji. Spróbuj ponownie.',
+        'Could not prepare a secure session. Try again.',
+      ),
+    )
   return response.json() as Promise<CsrfToken>
 }
 
 /** Signs in with the password; accounts with two-step sign-in then wait for a code ({@link answerTwoFactor}). */
-export async function login({ email, password, rememberMe }: { email: string; password: string; rememberMe?: boolean }): Promise<'SIGNED_IN' | 'TWO_FACTOR_REQUIRED'> {
+export async function login({
+  email,
+  password,
+  rememberMe,
+}: {
+  email: string
+  password: string
+  rememberMe?: boolean
+}): Promise<'SIGNED_IN' | 'TWO_FACTOR_REQUIRED'> {
   const csrf = await getCsrf()
   const response = await request('/api/auth/login', {
     method: 'POST',
@@ -278,66 +381,142 @@ export async function login({ email, password, rememberMe }: { email: string; pa
   })
   if (response.status === 202) return 'TWO_FACTOR_REQUIRED'
   if (response.status === 429) throw new ApiError(429, tooManyRequestsMessage(response))
-  if (response.status === 401) throw new ApiError(401, localizedError("Nieprawidłowy adres e-mail lub hasło.", "Incorrect email address or password."))
+  if (response.status === 401)
+    throw new ApiError(
+      401,
+      localizedError('Nieprawidłowy adres e-mail lub hasło.', 'Incorrect email address or password.'),
+    )
   if (response.status === 403) {
-    const body = await response.json().catch(() => null) as { code?: string } | null
+    const body = (await response.json().catch(() => null)) as { code?: string } | null
     if (body?.code === 'EMAIL_NOT_VERIFIED') {
-      throw new ApiError(403, localizedError("Potwierdź adres e-mail, aby się zalogować. Link wysłaliśmy po rejestracji.", "Verify your email address to sign in. We sent a link when you registered."), 'EMAIL_NOT_VERIFIED')
+      throw new ApiError(
+        403,
+        localizedError(
+          'Potwierdź adres e-mail, aby się zalogować. Link wysłaliśmy po rejestracji.',
+          'Verify your email address to sign in. We sent a link when you registered.',
+        ),
+        'EMAIL_NOT_VERIFIED',
+      )
     }
     if (body?.code === 'ACCOUNT_BLOCKED') {
-      throw new ApiError(403, localizedError("To konto zostało zablokowane przez operatora serwisu. Jeśli to pomyłka, skontaktuj się z administratorem.", "The service operator has blocked this account. Contact your administrator if you think this is a mistake."), 'ACCOUNT_BLOCKED')
+      throw new ApiError(
+        403,
+        localizedError(
+          'To konto zostało zablokowane przez operatora serwisu. Jeśli to pomyłka, skontaktuj się z administratorem.',
+          'The service operator has blocked this account. Contact your administrator if you think this is a mistake.',
+        ),
+        'ACCOUNT_BLOCKED',
+      )
     }
-    throw new ApiError(403, localizedError("Sesja formularza wygasła. Spróbuj zalogować się ponownie.", "The form session expired. Try signing in again."))
+    throw new ApiError(
+      403,
+      localizedError(
+        'Sesja formularza wygasła. Spróbuj zalogować się ponownie.',
+        'The form session expired. Try signing in again.',
+      ),
+    )
   }
-  if (!response.ok) throw new ApiError(response.status, localizedError("Logowanie jest chwilowo niedostępne. Spróbuj ponownie.", "Sign-in is temporarily unavailable. Try again."))
+  if (!response.ok)
+    throw new ApiError(
+      response.status,
+      localizedError(
+        'Logowanie jest chwilowo niedostępne. Spróbuj ponownie.',
+        'Sign-in is temporarily unavailable. Try again.',
+      ),
+    )
   return 'SIGNED_IN'
 }
 
 /** The second step of signing in: a code from the authenticator app or a backup code. */
 export async function answerTwoFactor(code: string): Promise<void> {
-  const csrf = await getCsrf()
-  const response = await request('/api/auth/two-factor', { method: 'POST',
-    headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token }, body: JSON.stringify({ code: code.trim() }) })
+  const response = await send('/api/auth/two-factor', 'POST', { code: code.trim() })
   if (response.ok) return
-  if (response.status === 429) throw new ApiError(429, tooManyRequestsMessage(response))
-  if (response.status === 400) throw new ApiError(400, localizedError("Nieprawidłowy kod. Sprawdź kod w aplikacji i spróbuj ponownie.", "Incorrect code. Check the code in your authenticator and try again."))
-  if (response.status === 401) throw new ApiError(401, localizedError("Czas na podanie kodu minął albo było zbyt wiele prób. Zaloguj się ponownie.", "The code expired or there were too many attempts. Sign in again."), 'SIGN_IN_AGAIN')
-  if (response.status === 403) throw new ApiError(403, localizedError("Sesja formularza wygasła. Zaloguj się ponownie.", "The form session expired. Sign in again."), 'SIGN_IN_AGAIN')
-  throw new ApiError(response.status, localizedError("Logowanie jest chwilowo niedostępne. Spróbuj ponownie.", "Sign-in is temporarily unavailable. Try again."))
+  const signInAgain = response.status === 401 || response.status === 403 ? 'SIGN_IN_AGAIN' : undefined
+  throw failure(
+    response,
+    {
+      400: localizedError(
+        'Nieprawidłowy kod. Sprawdź kod w aplikacji i spróbuj ponownie.',
+        'Incorrect code. Check the code in your authenticator and try again.',
+      ),
+      401: localizedError(
+        'Czas na podanie kodu minął albo było zbyt wiele prób. Zaloguj się ponownie.',
+        'The code expired or there were too many attempts. Sign in again.',
+      ),
+      403: localizedError(
+        'Sesja formularza wygasła. Zaloguj się ponownie.',
+        'The form session expired. Sign in again.',
+      ),
+    },
+    localizedError(
+      'Logowanie jest chwilowo niedostępne. Spróbuj ponownie.',
+      'Sign-in is temporarily unavailable. Try again.',
+    ),
+    signInAgain,
+  )
 }
 
-async function publicPost(path: string, body: unknown, messages: Record<number, string>, fallback: string) {
-  const csrf = await getCsrf()
-  const response = await request(path, { method: 'POST', headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
-    body: JSON.stringify(body) })
-  if (!response.ok) {
-    throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
-      : { 403: 'Sesja formularza wygasła. Spróbuj ponownie.', ...messages }[response.status] ?? fallback)
-  }
+/** Requests made without a session, from e-mailed links and the sign-in pages. */
+async function publicPost(path: string, body: unknown, messages: Messages, fallback: string) {
+  await respond(path, { method: 'POST', body, messages: { 403: formExpired, ...messages }, fallback })
 }
 
-export const confirmEmail = (token: string) => publicPost('/api/auth/email-verification/confirm', { token },
-  { 400: 'Link jest nieprawidłowy albo wygasł. Poproś o nowy link.' }, 'Nie udało się potwierdzić adresu. Spróbuj ponownie.')
+export const confirmEmail = (token: string) =>
+  publicPost(
+    '/api/auth/email-verification/confirm',
+    { token },
+    { 400: 'Link jest nieprawidłowy albo wygasł. Poproś o nowy link.' },
+    'Nie udało się potwierdzić adresu. Spróbuj ponownie.',
+  )
 
-export const requestPasswordReset = (email: string) => publicPost('/api/auth/password-reset/request', { email: email.trim() },
-  {}, 'Nie udało się wysłać wiadomości. Spróbuj ponownie później.')
+export const requestPasswordReset = (email: string) =>
+  publicPost(
+    '/api/auth/password-reset/request',
+    { email: email.trim() },
+    {},
+    'Nie udało się wysłać wiadomości. Spróbuj ponownie później.',
+  )
 
-export const confirmPasswordReset = (input: { token: string; newPassword: string }) => publicPost('/api/auth/password-reset/confirm', input,
-  { 400: 'Link jest nieprawidłowy albo wygasł, lub hasło nie spełnia wymagań (co najmniej 12 znaków). Poproś o nowy link.' },
-  'Nie udało się ustawić hasła. Spróbuj ponownie.')
+export const confirmPasswordReset = (input: { token: string; newPassword: string }) =>
+  publicPost(
+    '/api/auth/password-reset/confirm',
+    input,
+    {
+      400: 'Link jest nieprawidłowy albo wygasł, lub hasło nie spełnia wymagań (co najmniej 12 znaków). Poproś o nowy link.',
+    },
+    'Nie udało się ustawić hasła. Spróbuj ponownie.',
+  )
 
-export const confirmEmailChange = (token: string) => publicPost('/api/auth/email-change/confirm', { token },
-  { 400: 'Link jest nieprawidłowy albo wygasł. Poproś o nowy link w ustawieniach konta.', 409: 'Ten adres jest już używany przez inne konto.' },
-  'Nie udało się potwierdzić zmiany adresu. Spróbuj ponownie.')
+export const confirmEmailChange = (token: string) =>
+  publicPost(
+    '/api/auth/email-change/confirm',
+    { token },
+    {
+      400: 'Link jest nieprawidłowy albo wygasł. Poproś o nowy link w ustawieniach konta.',
+      409: 'Ten adres jest już używany przez inne konto.',
+    },
+    'Nie udało się potwierdzić zmiany adresu. Spróbuj ponownie.',
+  )
 
-/** Redeems the deletion link from the e-mail (A13-D8); only after the person presses the button, never on opening the page. */
-export const confirmAccountDeletion = (token: string) => publicPost('/api/account/delete/confirm', { token },
-  { 400: 'Link jest nieprawidłowy, został już użyty albo wygasł. Konto nie zostało usunięte. Jeśli nadal chcesz je usunąć, wyślij nowy link w ustawieniach konta.',
-    409: 'Najpierw przekaż własność lub usuń zespoły, których jesteś właścicielem. Link pozostaje ważny, więc możesz potem wrócić do tej strony.' },
-  'Nie udało się usunąć konta. Spróbuj ponownie.')
+/** Redeems the deletion link from the e-mail; only after the person presses the button, never on opening the page. */
+export const confirmAccountDeletion = (token: string) =>
+  publicPost(
+    '/api/account/delete/confirm',
+    { token },
+    {
+      400: 'Link jest nieprawidłowy, został już użyty albo wygasł. Konto nie zostało usunięte. Jeśli nadal chcesz je usunąć, wyślij nowy link w ustawieniach konta.',
+      409: 'Najpierw przekaż własność lub usuń zespoły, których jesteś właścicielem. Link pozostaje ważny, więc możesz potem wrócić do tej strony.',
+    },
+    'Nie udało się usunąć konta. Spróbuj ponownie.',
+  )
 
-export const resendVerification =(email: string) => publicPost('/api/auth/email-verification/resend', { email: email.trim() },
-  {}, 'Nie udało się wysłać linku. Spróbuj ponownie później.')
+export const resendVerification = (email: string) =>
+  publicPost(
+    '/api/auth/email-verification/resend',
+    { email: email.trim() },
+    {},
+    'Nie udało się wysłać linku. Spróbuj ponownie później.',
+  )
 
 export interface RegistrationInput {
   displayName: string
@@ -369,68 +548,98 @@ export async function getPublicConfig(signal?: AbortSignal): Promise<PublicConfi
 }
 
 export async function register(input: RegistrationInput): Promise<void> {
-  const csrf = await getCsrf()
-  const response = await request('/api/auth/register', {
-    method: 'POST', headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
-    body: JSON.stringify({ displayName: input.displayName.trim(), email: input.email.trim(), password: input.password,
-      ...(input.botCheckToken ? { botCheckToken: input.botCheckToken } : {}) }),
+  const response = await send('/api/auth/register', 'POST', {
+    displayName: input.displayName.trim(),
+    email: input.email.trim(),
+    password: input.password,
+    ...(input.botCheckToken ? { botCheckToken: input.botCheckToken } : {}),
   })
-  if (!response.ok) {
-    const body = response.status === 400 ? await response.json().catch(() => null) as { code?: string } | null : null
-    if (body?.code === 'BOT_CHECK_FAILED') throw new ApiError(400, 'Nie udało się potwierdzić, że formularz wypełnia człowiek. Spróbuj ponownie.', 'BOT_CHECK_FAILED')
-    const messages: Record<number, string> = {
-      400: 'Sprawdź nazwę, adres e-mail i hasło. Hasło musi mieć co najmniej 12 znaków i mieścić się w dozwolonej długości.',
-      403: 'Sesja formularza wygasła. Spróbuj ponownie.',
-      429: tooManyRequestsMessage(response),
-    }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się utworzyć konta. Jeśli konto mogło już powstać, spróbuj się zalogować.')
+  if (response.ok) return
+  if (response.status === 400 && (await errorCode(response)) === 'BOT_CHECK_FAILED') {
+    throw new ApiError(
+      400,
+      'Nie udało się potwierdzić, że formularz wypełnia człowiek. Spróbuj ponownie.',
+      'BOT_CHECK_FAILED',
+    )
   }
+  throw failure(
+    response,
+    {
+      400: 'Sprawdź nazwę, adres e-mail i hasło. Hasło musi mieć co najmniej 12 znaków i mieścić się w dozwolonej długości.',
+      403: formExpired,
+    },
+    'Nie udało się utworzyć konta. Jeśli konto mogło już powstać, spróbuj się zalogować.',
+  )
 }
 
 export async function logout(): Promise<void> {
-  // Authentication rotates the CSRF token: always obtain a fresh token for logout.
-  const csrf = await getCsrf()
-  const response = await request('/api/auth/logout', { method: 'POST', headers: { [csrf.headerName]: csrf.token } })
-  if (!response.ok && response.status !== 401) {
+  // Signing in replaced the CSRF token, so send() asks for the current one.
+  const response = await send('/api/auth/logout', 'POST')
+  if (!response.ok && response.status !== 401)
     throw new ApiError(response.status, 'Nie udało się wylogować. Spróbuj ponownie.')
-  }
 }
 
-/** Shown when the server says the account has no password, although the page still thought it had one (A13-C8). */
-export const passwordNotSetMessage = 'Twoje konto nie ma jeszcze hasła. Użyj przycisku „Ustaw hasło”, a wyślemy link na adres konta.'
+/** Shown when the server says the account has no password, although the page still thought it had one. */
+const passwordNotSetMessage =
+  'Twoje konto nie ma jeszcze hasła. Użyj przycisku „Ustaw hasło”, a wyślemy link na adres konta.'
 
-async function accountRequest(path: string, method: 'PATCH' | 'POST', body: unknown, messages: Record<number, string>, fallback: string) {
-  const csrf = await getCsrf()
-  const response = await request(path, { method, headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
-    body: JSON.stringify(body) })
-  if (!response.ok) {
-    const code = response.status === 400 ? (await response.json().catch(() => null) as { code?: string } | null)?.code : undefined
-    if (code === 'PASSWORD_NOT_SET') throw new ApiError(400, passwordNotSetMessage, code)
-    throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
-      : { 401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."), 403: 'Sesja formularza wygasła. Spróbuj ponownie.', ...messages }[response.status] ?? fallback)
-  }
-  return response
+/** Changes to the signed-in account; a refusal because the account has no password keeps its code for the page. */
+async function accountRequest(
+  path: string,
+  method: 'PATCH' | 'POST',
+  body: unknown,
+  messages: Messages,
+  fallback: string,
+) {
+  const response = await send(path, method, body)
+  if (response.ok) return response
+  if (response.status === 400 && (await errorCode(response)) === 'PASSWORD_NOT_SET')
+    throw new ApiError(400, passwordNotSetMessage, 'PASSWORD_NOT_SET')
+  throw failure(response, { 403: formExpired, ...messages }, fallback)
 }
 
 export async function updateProfile(displayName: string): Promise<User> {
-  const response = await accountRequest('/api/account/profile', 'PATCH', { displayName: displayName.trim() },
-    { 400: 'Wpisz nazwę wyświetlaną (maksymalnie 255 znaków).' }, 'Nie udało się zapisać nazwy. Spróbuj ponownie.')
+  const response = await accountRequest(
+    '/api/account/profile',
+    'PATCH',
+    { displayName: displayName.trim() },
+    { 400: 'Wpisz nazwę wyświetlaną (maksymalnie 255 znaków).' },
+    'Nie udało się zapisać nazwy. Spróbuj ponownie.',
+  )
   return response.json() as Promise<User>
 }
 
 export async function changePassword(input: { currentPassword: string; newPassword: string }): Promise<void> {
-  await accountRequest('/api/account/password', 'POST', input,
-    { 400: 'Obecne hasło jest nieprawidłowe.' }, 'Nie udało się zmienić hasła. Spróbuj ponownie.')
+  await accountRequest(
+    '/api/account/password',
+    'POST',
+    input,
+    { 400: 'Obecne hasło jest nieprawidłowe.' },
+    'Nie udało się zmienić hasła. Spróbuj ponownie.',
+  )
 }
 
 export async function requestEmailChange(input: { newEmail: string; currentPassword: string }): Promise<void> {
-  await accountRequest('/api/account/email', 'POST', { newEmail: input.newEmail.trim(), currentPassword: input.currentPassword },
-    { 400: 'Sprawdź nowy adres i obecne hasło. Nowy adres musi różnić się od obecnego.', 503: 'Wysyłanie e-maili nie jest skonfigurowane na tym serwerze.' },
-    'Nie udało się wysłać linku. Spróbuj ponownie później.')
+  await accountRequest(
+    '/api/account/email',
+    'POST',
+    { newEmail: input.newEmail.trim(), currentPassword: input.currentPassword },
+    {
+      400: 'Sprawdź nowy adres i obecne hasło. Nowy adres musi różnić się od obecnego.',
+      503: 'Wysyłanie e-maili nie jest skonfigurowane na tym serwerze.',
+    },
+    'Nie udało się wysłać linku. Spróbuj ponownie później.',
+  )
 }
 
 export async function signOutEverywhere(): Promise<void> {
-  await accountRequest('/api/account/sign-out-everywhere', 'POST', {}, {}, 'Nie udało się wylogować ze wszystkich urządzeń. Spróbuj ponownie.')
+  await accountRequest(
+    '/api/account/sign-out-everywhere',
+    'POST',
+    {},
+    {},
+    'Nie udało się wylogować ze wszystkich urządzeń. Spróbuj ponownie.',
+  )
 }
 
 /** A signed-in device. `id` is a handle for ending it, not the session id; the address is shortened by the server. */
@@ -471,174 +680,207 @@ export interface TwoFactorStatus {
   backupCodesLeft: number
 }
 
-export async function getTwoFactorStatus(signal?: AbortSignal): Promise<TwoFactorStatus> {
-  const response = await request('/api/account/two-factor', { signal })
-  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again.") : 'Nie udało się wczytać ustawień logowania dwuetapowego.')
-  return response.json() as Promise<TwoFactorStatus>
+export const getTwoFactorStatus = (signal?: AbortSignal) =>
+  call<TwoFactorStatus>('/api/account/two-factor', {
+    signal,
+    fallback: 'Nie udało się wczytać ustawień logowania dwuetapowego.',
+  })
+
+const twoFactorMessages = {
+  400: 'Sprawdź kod z aplikacji i obecne hasło.',
+  409: 'Ustawienia logowania dwuetapowego zmieniły się. Odśwież stronę.',
+  503: 'Logowanie dwuetapowe nie jest skonfigurowane na tym serwerze.',
 }
 
-const twoFactorMessages = { 400: 'Sprawdź kod z aplikacji i obecne hasło.', 409: 'Ustawienia logowania dwuetapowego zmieniły się. Odśwież stronę.',
-  503: 'Logowanie dwuetapowe nie jest skonfigurowane na tym serwerze.' }
-
 export async function startTwoFactorSetup(): Promise<{ secret: string; uri: string }> {
-  const response = await accountRequest('/api/account/two-factor/setup', 'POST', {}, twoFactorMessages, 'Nie udało się rozpocząć konfiguracji. Spróbuj ponownie.')
+  const response = await accountRequest(
+    '/api/account/two-factor/setup',
+    'POST',
+    {},
+    twoFactorMessages,
+    'Nie udało się rozpocząć konfiguracji. Spróbuj ponownie.',
+  )
   return response.json() as Promise<{ secret: string; uri: string }>
 }
 
 export async function enableTwoFactor(input: { code: string; currentPassword: string }): Promise<string[]> {
-  const response = await accountRequest('/api/account/two-factor/enable', 'POST', { code: input.code.replace(/\s/g, ''), currentPassword: input.currentPassword },
-    twoFactorMessages, 'Nie udało się włączyć logowania dwuetapowego. Spróbuj ponownie.')
+  const response = await accountRequest(
+    '/api/account/two-factor/enable',
+    'POST',
+    { code: input.code.replace(/\s/g, ''), currentPassword: input.currentPassword },
+    twoFactorMessages,
+    'Nie udało się włączyć logowania dwuetapowego. Spróbuj ponownie.',
+  )
   return ((await response.json()) as { codes: string[] }).codes
 }
 
 export async function disableTwoFactor(currentPassword: string): Promise<void> {
-  await accountRequest('/api/account/two-factor/disable', 'POST', { currentPassword },
-    { ...twoFactorMessages, 400: 'Obecne hasło jest nieprawidłowe.' }, 'Nie udało się wyłączyć logowania dwuetapowego. Spróbuj ponownie.')
+  await accountRequest(
+    '/api/account/two-factor/disable',
+    'POST',
+    { currentPassword },
+    { ...twoFactorMessages, 400: 'Obecne hasło jest nieprawidłowe.' },
+    'Nie udało się wyłączyć logowania dwuetapowego. Spróbuj ponownie.',
+  )
 }
 
 export async function renewBackupCodes(currentPassword: string): Promise<string[]> {
-  const response = await accountRequest('/api/account/two-factor/backup-codes', 'POST', { currentPassword },
-    { ...twoFactorMessages, 400: 'Obecne hasło jest nieprawidłowe.' }, 'Nie udało się utworzyć nowych kodów. Spróbuj ponownie.')
+  const response = await accountRequest(
+    '/api/account/two-factor/backup-codes',
+    'POST',
+    { currentPassword },
+    { ...twoFactorMessages, 400: 'Obecne hasło jest nieprawidłowe.' },
+    'Nie udało się utworzyć nowych kodów. Spróbuj ponownie.',
+  )
   return ((await response.json()) as { codes: string[] }).codes
 }
 
-export async function getLoginHistory(signal?: AbortSignal): Promise<LoginHistory> {
-  const response = await request('/api/account/logins', { signal })
-  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again.") : 'Nie udało się wczytać historii logowań.')
-  return response.json() as Promise<LoginHistory>
-}
+export const getLoginHistory = (signal?: AbortSignal) =>
+  call<LoginHistory>('/api/account/logins', { signal, fallback: 'Nie udało się wczytać historii logowań.' })
 
-export async function getSessions(signal?: AbortSignal): Promise<DeviceSession[]> {
-  const response = await request('/api/account/sessions', { signal })
-  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again.") : 'Nie udało się wczytać listy urządzeń.')
-  return response.json() as Promise<DeviceSession[]>
-}
+export const getSessions = (signal?: AbortSignal) =>
+  call<DeviceSession[]>('/api/account/sessions', { signal, fallback: 'Nie udało się wczytać listy urządzeń.' })
 
 export async function endSession(id: string): Promise<void> {
-  const csrf = await getCsrf()
-  const response = await request(`/api/account/sessions/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { [csrf.headerName]: csrf.token } })
-  if (!response.ok) {
-    throw new ApiError(response.status, { 401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."), 403: 'Sesja formularza wygasła. Spróbuj ponownie.',
-      404: 'To urządzenie jest już wylogowane. Odśwież listę.' }[response.status] ?? 'Nie udało się wylogować urządzenia. Spróbuj ponownie.')
-  }
+  await respond(`/api/account/sessions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    messages: { 403: formExpired, 404: 'To urządzenie jest już wylogowane. Odśwież listę.' },
+    fallback: 'Nie udało się wylogować urządzenia. Spróbuj ponownie.',
+  })
 }
 
-async function teamRequest<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
-  const csrf = body === undefined ? null : await getCsrf()
-  const response = await request(path, {
-    method: body === undefined ? 'GET' : 'POST', signal,
-    headers: csrf ? { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token } : undefined,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
-      400: path.endsWith('/invites') ? 'Sprawdź datę wygaśnięcia (najwyżej 30 dni w przyszłości), dodatni limit użyć i adres e-mail.' : 'Sprawdź nazwę zespołu i strefę czasową.',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
-      403: localizedError("Nie masz uprawnień do tej operacji lub sesja formularza wygasła.", "You do not have permission for this action or the form session expired."),
-      404: path.startsWith('/api/invites/') ? 'Nie znaleziono zaproszenia. Sprawdź, czy link jest kompletny.' : 'Nie znaleziono zespołu lub nie masz już do niego dostępu.',
+const teamPath = (teamId: string) => `/api/teams/${encodeURIComponent(teamId)}`
+const invitePath = (token: string) => `/api/invites/${encodeURIComponent(token)}`
+
+/** Team list, new teams, invitation links and joining by one. */
+function teamRequest<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  return call<T>(path, {
+    method: body === undefined ? 'GET' : 'POST',
+    body,
+    signal,
+    messages: {
+      400: path.endsWith('/invites')
+        ? 'Sprawdź datę wygaśnięcia (najwyżej 30 dni w przyszłości), dodatni limit użyć i adres e-mail.'
+        : 'Sprawdź nazwę zespołu i strefę czasową.',
+      403: notAllowed(),
+      404: path.startsWith('/api/invites/')
+        ? 'Nie znaleziono zaproszenia. Sprawdź, czy link jest kompletny.'
+        : 'Nie znaleziono zespołu lub nie masz już do niego dostępu.',
       409: 'Limit użyć tego zaproszenia został wyczerpany.',
       410: 'Zaproszenie wygasło lub zostało anulowane. Poproś właściciela o nowy link.',
-      429: tooManyRequestsMessage(response),
-    }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wykonać operacji. Spróbuj ponownie.')
-  }
-  return response.json() as Promise<T>
+    },
+    fallback: 'Nie udało się wykonać operacji. Spróbuj ponownie.',
+  })
 }
 
 export const getTeams = (signal?: AbortSignal) => teamRequest<Team[]>('/api/teams', undefined, signal)
 export const createTeam = (body: { name: string; timezone: string }) => teamRequest<Team>('/api/teams', body)
-export const createInvitation = ({ teamId, ...body }: { teamId: string; expiresAt: string; maxUses: number | null; email?: string }) =>
-  teamRequest<Invitation>(`/api/teams/${encodeURIComponent(teamId)}/invites`, body)
+export const createInvitation = ({
+  teamId,
+  ...body
+}: {
+  teamId: string
+  expiresAt: string
+  maxUses: number | null
+  email?: string
+}) => teamRequest<Invitation>(`${teamPath(teamId)}/invites`, body)
+export const acceptInvitation = (token: string) => teamRequest<Team>(`${invitePath(token)}/accept`, {})
 
-export async function getInvitations(teamId: string, page: number, signal?: AbortSignal): Promise<InvitationsPage> {
-  return invitationManagementRequest(`/api/teams/${encodeURIComponent(teamId)}/invites?page=${page}&size=20`, 'GET', signal) as Promise<InvitationsPage>
+const invitationMessages: Messages = {
+  400: 'Nieprawidłowa strona listy zaproszeń.',
+  403: 'Zarządzanie zaproszeniami jest dostępne wyłącznie dla właściciela zespołu lub sesja formularza wygasła.',
+  404: 'Zespół lub zaproszenie są niedostępne. Odśwież listę.',
+  409: 'Zarchiwizowanego zespołu nie można zmieniać.',
 }
+const invitationFallback = 'Nie udało się wczytać lub unieważnić zaproszenia. Spróbuj ponownie.'
 
-export const revokeInvitation = (teamId: string, id: string) => invitationManagementRequest(
-  `/api/teams/${encodeURIComponent(teamId)}/invites/${encodeURIComponent(id)}`, 'DELETE')
-
-async function invitationManagementRequest(path: string, method: 'GET' | 'DELETE', signal?: AbortSignal): Promise<InvitationsPage | null> {
-  const csrf = method === 'DELETE' ? await getCsrf() : null
-  const response = await request(path, { method, signal, headers: csrf ? { [csrf.headerName]: csrf.token } : undefined })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
-      400: 'Nieprawidłowa strona listy zaproszeń.',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
-      403: 'Zarządzanie zaproszeniami jest dostępne wyłącznie dla właściciela zespołu lub sesja formularza wygasła.',
-      404: 'Zespół lub zaproszenie są niedostępne. Odśwież listę.',
-      409: 'Zarchiwizowanego zespołu nie można zmieniać.',
-    }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wczytać lub unieważnić zaproszenia. Spróbuj ponownie.')
-  }
-  return response.status === 204 ? null : response.json() as Promise<InvitationsPage>
-}
-export const acceptInvitation = (token: string) => teamRequest<Team>(`/api/invites/${encodeURIComponent(token)}/accept`, {})
-
-export async function getInvitationPreview(token: string, signal?: AbortSignal): Promise<InvitationPreview> {
-  const response = await request(`/api/invites/${encodeURIComponent(token)}`, { signal })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
-      404: 'Nie znaleziono zaproszenia. Sprawdź, czy link jest kompletny.',
-    }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się sprawdzić zaproszenia. Spróbuj ponownie.')
-  }
-  return response.json() as Promise<InvitationPreview>
-}
-
-async function teamManagementRequest<T>(path: string, method: 'GET' | 'PATCH' | 'POST' | 'PUT' | 'DELETE', body?: unknown, signal?: AbortSignal): Promise<T> {
-  const csrf = method === 'GET' ? null : await getCsrf()
-  const response = await request(path, {
-    method, signal,
-    headers: csrf ? { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token } : undefined,
-    body: body === undefined ? undefined : JSON.stringify(body),
+export const getInvitations = (teamId: string, page: number, signal?: AbortSignal) =>
+  call<InvitationsPage>(`${teamPath(teamId)}/invites?page=${page}&size=20`, {
+    signal,
+    messages: invitationMessages,
+    fallback: invitationFallback,
   })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
+export const revokeInvitation = (teamId: string, id: string) =>
+  call<null>(`${teamPath(teamId)}/invites/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    messages: invitationMessages,
+    fallback: invitationFallback,
+  })
+
+export const getInvitationPreview = (token: string, signal?: AbortSignal) =>
+  call<InvitationPreview>(invitePath(token), {
+    signal,
+    messages: { 404: 'Nie znaleziono zaproszenia. Sprawdź, czy link jest kompletny.' },
+    fallback: 'Nie udało się sprawdzić zaproszenia. Spróbuj ponownie.',
+  })
+
+/** Changes to one team: settings, roles, ownership, archive and removal. */
+function teamManagementRequest<T>(path: string, method: Method, body?: unknown, signal?: AbortSignal): Promise<T> {
+  return call<T>(path, {
+    method,
+    body,
+    signal,
+    messages: {
       400: 'Sprawdź nazwę zespołu, strefę czasową i wybraną osobę.',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Tej operacji nie możesz wykonać w tym zespole lub sesja formularza wygasła.',
       404: 'Zespół lub wybrana osoba są niedostępne. Odśwież listę.',
-      409: method === 'PATCH' ? 'Zarchiwizowanego zespołu nie można zmieniać. Reguła wymagająca tagu lub zadania Jira wymaga najpierw dodania tagu albo połączenia z Jira.'
-        : 'W zespole działają timery. Poproś członków o ich zatrzymanie i spróbuj ponownie.',
-    }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wykonać operacji na zespole. Odśwież dane i spróbuj ponownie.')
-  }
-  return (response.status === 204 ? null : await response.json()) as T
+      409:
+        method === 'PATCH'
+          ? 'Zarchiwizowanego zespołu nie można zmieniać. Reguła wymagająca tagu lub zadania Jira wymaga najpierw dodania tagu albo połączenia z Jira.'
+          : 'W zespole działają timery. Poproś członków o ich zatrzymanie i spróbuj ponownie.',
+    },
+    fallback: 'Nie udało się wykonać operacji na zespole. Odśwież dane i spróbuj ponownie.',
+  })
 }
 
-const teamPath = (teamId: string) => `/api/teams/${encodeURIComponent(teamId)}`
-export const updateTeam = ({ teamId, ...body }: { teamId: string; name: string; timezone: string; activeTimersVisible?: boolean; requireDescription?: boolean; requireTagOrIssue?: boolean; weekStart?: 'MONDAY' | 'SUNDAY'; weeklyReport?: boolean; color?: string; clearColor?: boolean }) => teamManagementRequest<Team>(teamPath(teamId), 'PATCH', body)
-export const transferOwnership = (teamId: string, userId: string) => teamManagementRequest<null>(`${teamPath(teamId)}/transfer-ownership`, 'POST', { userId })
-export const changeMemberRole = (teamId: string, userId: string, role: Exclude<TeamRole, 'OWNER'>) => teamManagementRequest<null>(`${teamPath(teamId)}/members/${encodeURIComponent(userId)}/role`, 'PUT', { role })
+export const updateTeam = ({
+  teamId,
+  ...body
+}: {
+  teamId: string
+  name: string
+  timezone: string
+  activeTimersVisible?: boolean
+  requireDescription?: boolean
+  requireTagOrIssue?: boolean
+  weekStart?: 'MONDAY' | 'SUNDAY'
+  weeklyReport?: boolean
+  color?: string
+  clearColor?: boolean
+}) => teamManagementRequest<Team>(teamPath(teamId), 'PATCH', body)
+export const transferOwnership = (teamId: string, userId: string) =>
+  teamManagementRequest<null>(`${teamPath(teamId)}/transfer-ownership`, 'POST', { userId })
+export const changeMemberRole = (teamId: string, userId: string, role: Exclude<TeamRole, 'OWNER'>) =>
+  teamManagementRequest<null>(`${teamPath(teamId)}/members/${encodeURIComponent(userId)}/role`, 'PUT', { role })
 export const updateMemberProfile = (teamId: string, body: { jobTitle: string | null; ftePercent: number | null }) =>
   teamManagementRequest<null>(`${teamPath(teamId)}/members/me/profile`, 'PUT', body)
 export const archiveTeam = (teamId: string) => teamManagementRequest<Team>(`${teamPath(teamId)}/archive`, 'POST')
-export const getTeamSummary = (teamId: string, signal?: AbortSignal) => teamManagementRequest<TeamSummary>(`${teamPath(teamId)}/summary`, 'GET', undefined, signal)
+export const getTeamSummary = (teamId: string, signal?: AbortSignal) =>
+  teamManagementRequest<TeamSummary>(`${teamPath(teamId)}/summary`, 'GET', undefined, signal)
 export const deleteTeam = (teamId: string) => teamManagementRequest<null>(teamPath(teamId), 'DELETE')
 
-async function projectRequest<T>(path: string, method = 'GET', body?: ProjectInput, signal?: AbortSignal): Promise<T> {
-  const csrf = method === 'GET' ? null : await getCsrf()
-  const response = await request(path, {
-    method, signal,
-    headers: csrf ? { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token } : undefined,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
+function projectRequest<T>(
+  path: string,
+  method: Method = 'GET',
+  body?: ProjectInput,
+  signal?: AbortSignal,
+): Promise<T> {
+  return call<T>(path, {
+    method,
+    body,
+    signal,
+    messages: {
       400: 'Wpisz nazwę projektu (maksymalnie 255 znaków). Opis może mieć najwyżej 2000 znaków. Link musi wskazywać repozytorium https://github.com/właściciel/repozytorium, bez danych logowania i parametrów (maksymalnie 2048 znaków).',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
-      403: localizedError("Nie masz uprawnień do tej operacji lub sesja formularza wygasła.", "You do not have permission for this action or the form session expired."),
+      403: notAllowed(),
       404: 'Nie znaleziono projektu lub zespołu albo nie masz już do niego dostępu.',
       409: path.endsWith('/archive')
         ? 'Projekt ma aktywny timer. Zatrzymaj go przed archiwizacją.'
-        : method === 'DELETE' ? 'Można usunąć tylko pusty projekt w aktywnym zespole. Projekt z wpisami lub timerem musi zostać zachowany.'
-        : 'Nie można zmienić archiwalnego projektu lub projektu w archiwalnym zespole. Najpierw przywróć projekt, jeśli zespół jest aktywny.',
-      429: tooManyRequestsMessage(response),
-    }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wczytać lub zapisać projektu. Spróbuj ponownie.')
-  }
-  return response.status === 204 ? null as T : response.json() as Promise<T>
+        : method === 'DELETE'
+          ? 'Można usunąć tylko pusty projekt w aktywnym zespole. Projekt z wpisami lub timerem musi zostać zachowany.'
+          : 'Nie można zmienić archiwalnego projektu lub projektu w archiwalnym zespole. Najpierw przywróć projekt, jeśli zespół jest aktywny.',
+    },
+    fallback: 'Nie udało się wczytać lub zapisać projektu. Spróbuj ponownie.',
+  })
 }
 
 export const restoreProject = (teamId: string, projectId: string) =>
@@ -651,42 +893,56 @@ export const getProjects = (teamId: string, includeArchived: boolean, signal?: A
   projectRequest<Project[]>(`${projectsPath(teamId)}?includeArchived=${includeArchived}`, 'GET', undefined, signal)
 export const getProject = (teamId: string, projectId: string, signal?: AbortSignal) =>
   projectRequest<Project>(`${projectsPath(teamId)}/${encodeURIComponent(projectId)}`, 'GET', undefined, signal)
-export const createProject = (teamId: string, body: ProjectInput) => projectRequest<Project>(projectsPath(teamId), 'POST', body)
+export const createProject = (teamId: string, body: ProjectInput) =>
+  projectRequest<Project>(projectsPath(teamId), 'POST', body)
 export const updateProject = (teamId: string, projectId: string, body: ProjectInput) =>
   projectRequest<Project>(`${projectsPath(teamId)}/${encodeURIComponent(projectId)}`, 'PUT', body)
 export const archiveProject = (teamId: string, projectId: string) =>
   projectRequest<Project>(`${projectsPath(teamId)}/${encodeURIComponent(projectId)}/archive`, 'POST')
 
-async function timeRequest(path: string, body?: unknown, signal?: AbortSignal): Promise<TimeEntry | null> {
-  const csrf = body === undefined ? null : await getCsrf()
-  const response = await request(path, {
-    method: body === undefined ? 'GET' : 'POST', signal,
-    headers: csrf ? { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token } : undefined,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
+/** The timer and new entries: reads are GET, every change is a POST. */
+function timeRequest(path: string, body?: unknown, signal?: AbortSignal): Promise<TimeEntry | null> {
+  return call<TimeEntry | null>(path, {
+    method: body === undefined ? 'GET' : 'POST',
+    body,
+    signal,
+    messages: {
       400: 'Sprawdź projekt, datę i czas trwania wpisu. Wpis może mieć najwyżej 24 godziny, podana data pracy musi mieścić się w ostatnich 2 latach i nie może być z przyszłości, a opis może mieć najwyżej 2000 znaków. Wpis ręczny może być bez daty.',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
-      403: localizedError("Nie masz uprawnień do tej operacji lub sesja formularza wygasła.", "You do not have permission for this action or the form session expired."),
-      404: localizedError("Nie znaleziono wpisu, projektu lub zespołu albo nie masz już do niego dostępu.", "The entry, project, or team could not be found or you no longer have access."),
-      422: localizedError("Zespół wymaga opisu pracy albo tagu lub zadania Jira. Uzupełnij wpis i spróbuj ponownie.", "The team requires a description, a tag, or a Jira issue. Complete the entry and try again."),
-      409: path.endsWith('/pause') || path.endsWith('/resume') ? 'Stan timera uległ zmianie. Sprawdź aktualny stan i spróbuj ponownie.'
-        : path.endsWith('/start') ? 'Nie można uruchomić timera. Sprawdź aktywny timer, status projektu i połączenie z Jira.'
-        : path.endsWith('/stop') ? 'Nie można zatrzymać tego timera. Mógł już zostać zatrzymany lub nie upłynęła jeszcze pełna sekunda.'
-        : path.endsWith('/update') ? 'Nie można zmienić tego timera. Mógł już zostać zatrzymany, a projekt musi być aktywny i należeć do tego samego zespołu.'
-        : path.endsWith('/switch') ? 'Nie można przełączyć timera. Bieżący timer musi działać co najmniej sekundę, a nowy projekt musi być aktywny.'
-        : path.endsWith('/discard') ? 'Nie można odrzucić tego timera. Mógł już zostać zatrzymany lub odrzucony.'
-        : 'Zespół jest zarchiwizowany i nie można dodać do niego czasu.',
-    }
-    throw new ApiError(response.status, messages[response.status] ?? localizedError("Nie udało się odczytać lub zapisać czasu. Odśwież stan przed ponowieniem operacji.", "Could not load or save time. Refresh to check the current state before retrying."))
-  }
-  return response.status === 204 ? null : response.json() as Promise<TimeEntry>
+      403: notAllowed(),
+      404: localizedError(
+        'Nie znaleziono wpisu, projektu lub zespołu albo nie masz już do niego dostępu.',
+        'The entry, project, or team could not be found or you no longer have access.',
+      ),
+      422: localizedError(
+        'Zespół wymaga opisu pracy albo tagu lub zadania Jira. Uzupełnij wpis i spróbuj ponownie.',
+        'The team requires a description, a tag, or a Jira issue. Complete the entry and try again.',
+      ),
+      409:
+        path.endsWith('/pause') || path.endsWith('/resume')
+          ? 'Stan timera uległ zmianie. Sprawdź aktualny stan i spróbuj ponownie.'
+          : path.endsWith('/start')
+            ? 'Nie można uruchomić timera. Sprawdź aktywny timer, status projektu i połączenie z Jira.'
+            : path.endsWith('/stop')
+              ? 'Nie można zatrzymać tego timera. Mógł już zostać zatrzymany lub nie upłynęła jeszcze pełna sekunda.'
+              : path.endsWith('/update')
+                ? 'Nie można zmienić tego timera. Mógł już zostać zatrzymany, a projekt musi być aktywny i należeć do tego samego zespołu.'
+                : path.endsWith('/switch')
+                  ? 'Nie można przełączyć timera. Bieżący timer musi działać co najmniej sekundę, a nowy projekt musi być aktywny.'
+                  : path.endsWith('/discard')
+                    ? 'Nie można odrzucić tego timera. Mógł już zostać zatrzymany lub odrzucony.'
+                    : 'Zespół jest zarchiwizowany i nie można dodać do niego czasu.',
+    },
+    fallback: localizedError(
+      'Nie udało się odczytać lub zapisać czasu. Odśwież stan przed ponowieniem operacji.',
+      'Could not load or save time. Refresh to check the current state before retrying.',
+    ),
+  })
 }
 
 export const getActiveTimer = (signal?: AbortSignal) => timeRequest('/api/timer/active', undefined, signal)
 export const startTimer = (body: StartTimerInput) => timeRequest('/api/timer/start', body) as Promise<TimeEntry>
-export const stopTimer = (body: { entryId: string; description: string | null }) => timeRequest('/api/timer/stop', body) as Promise<TimeEntry>
+export const stopTimer = (body: { entryId: string; description: string | null }) =>
+  timeRequest('/api/timer/stop', body) as Promise<TimeEntry>
 export interface UpdateTimerInput {
   entryId: string
   projectId: string
@@ -701,34 +957,44 @@ export interface SwitchTimerInput {
 }
 
 export const updateTimer = (body: UpdateTimerInput) => timeRequest('/api/timer/update', body) as Promise<TimeEntry>
-export const switchTimer = (body: SwitchTimerInput) => timeRequest('/api/timer/switch', body) as unknown as Promise<{ stopped: TimeEntry; started: TimeEntry }>
-export const discardTimer = async (body: { entryId: string }) => { await timeRequest('/api/timer/discard', body) }
-export const changeTimerState =({ action, ...body }: { action: 'pause' | 'resume'; entryId: string; description: string | null }) =>
-  timeRequest(`/api/timer/${action}`, body) as Promise<TimeEntry>
-export const createManualTimeEntry = (body: ManualTimeInput) => timeRequest('/api/time-entries', body) as Promise<TimeEntry>
+export const switchTimer = (body: SwitchTimerInput) =>
+  timeRequest('/api/timer/switch', body) as unknown as Promise<{ stopped: TimeEntry; started: TimeEntry }>
+export const discardTimer = async (body: { entryId: string }) => {
+  await timeRequest('/api/timer/discard', body)
+}
+export const changeTimerState = ({
+  action,
+  ...body
+}: {
+  action: 'pause' | 'resume'
+  entryId: string
+  description: string | null
+}) => timeRequest(`/api/timer/${action}`, body) as Promise<TimeEntry>
+export const createManualTimeEntry = (body: ManualTimeInput) =>
+  timeRequest('/api/time-entries', body) as Promise<TimeEntry>
 
 export type UpdateTimeEntryInput = Omit<ManualTimeInput, 'teamId'> & { expectedVersion?: number }
 
 async function changeTimeEntry(id: string, method: 'PATCH' | 'DELETE', body?: UpdateTimeEntryInput): Promise<void> {
-  const csrf = await getCsrf()
-  const response = await request(`/api/time-entries/${encodeURIComponent(id)}`, {
-    method, headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
+  await respond(`/api/time-entries/${encodeURIComponent(id)}`, {
+    method,
+    body,
+    messages: {
       400: 'Sprawdź projekt, datę i czas trwania. Wpis może mieć najwyżej 24 godziny, podana data pracy musi mieścić się w ostatnich 2 latach i nie może być z przyszłości, a opis może mieć najwyżej 2000 znaków. Wpis z timera wymaga daty.',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
-      403: localizedError("Nie masz uprawnień do tej operacji lub sesja formularza wygasła.", "You do not have permission for this action or the form session expired."),
+      403: notAllowed(),
       404: 'Wpis został usunięty lub nie masz już dostępu do wpisu, projektu lub zespołu.',
       409: 'Wpis został w międzyczasie zmieniony (przez Ciebie lub kogoś innego), jest aktywnym timerem albo wybrany projekt lub tag jest archiwalny. Zamknij formularz, odśwież historię i spróbuj ponownie.',
-      422: localizedError("Zespół wymaga opisu pracy albo tagu lub zadania Jira. Uzupełnij wpis i spróbuj ponownie.", "The team requires a description, a tag, or a Jira issue. Complete the entry and try again."),
-    }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się zmienić wpisu. Odśwież historię przed ponowieniem operacji.')
-  }
+      422: localizedError(
+        'Zespół wymaga opisu pracy albo tagu lub zadania Jira. Uzupełnij wpis i spróbuj ponownie.',
+        'The team requires a description, a tag, or a Jira issue. Complete the entry and try again.',
+      ),
+    },
+    fallback: 'Nie udało się zmienić wpisu. Odśwież historię przed ponowieniem operacji.',
+  })
 }
 
-export const updateTimeEntry = ({ id, ...body }: UpdateTimeEntryInput & { id: string }) => changeTimeEntry(id, 'PATCH', body)
+export const updateTimeEntry = ({ id, ...body }: UpdateTimeEntryInput & { id: string }) =>
+  changeTimeEntry(id, 'PATCH', body)
 export const deleteTimeEntry = (id: string) => changeTimeEntry(id, 'DELETE')
 
 export interface ReportFilters {
@@ -747,7 +1013,15 @@ export interface ReportContext {
   teamId: string
   teamName: string
   timezone: string
-  filter: { from: string | null; to: string | null; undated?: boolean; userIds: string[]; projectIds: string[]; entryType: 'TIMER' | 'MANUAL' | null; q?: string | null } | null
+  filter: {
+    from: string | null
+    to: string | null
+    undated?: boolean
+    userIds: string[]
+    projectIds: string[]
+    entryType: 'TIMER' | 'MANUAL' | null
+    q?: string | null
+  } | null
 }
 
 export interface ReportPage<T> {
@@ -803,23 +1077,26 @@ export interface TeamMembersPage {
   totalPages: number
 }
 
-async function membershipRequest(path: string, method: 'GET' | 'DELETE' | 'POST', signal?: AbortSignal) {
-  const csrf = method === 'GET' ? null : await getCsrf()
-  const response = await request(path, { method, signal, headers: csrf ? { [csrf.headerName]: csrf.token } : undefined })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
+function membershipRequest(path: string, method: 'GET' | 'DELETE' | 'POST', signal?: AbortSignal) {
+  return respond(path, {
+    method,
+    signal,
+    messages: {
       400: 'Sprawdź wybraną stronę listy członków.',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
-      403: localizedError("Nie masz uprawnień do tej operacji lub sesja formularza wygasła.", "You do not have permission for this action or the form session expired."),
+      403: notAllowed(),
       404: 'Zespół lub członek jest niedostępny. Możliwe, że członkostwo już się zakończyło.',
       409: 'Właściciel nie może opuścić zespołu ani zostać z niego usunięty.',
-    }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wczytać lub zmienić członkostwa. Odśwież listę przed ponowieniem operacji.')
-  }
-  return response
+    },
+    fallback: 'Nie udało się wczytać lub zmienić członkostwa. Odśwież listę przed ponowieniem operacji.',
+  })
 }
 
-export async function getTeamMembers(teamId: string, includeFormer: boolean, page: number, signal?: AbortSignal): Promise<TeamMembersPage> {
+export async function getTeamMembers(
+  teamId: string,
+  includeFormer: boolean,
+  page: number,
+  signal?: AbortSignal,
+): Promise<TeamMembersPage> {
   const params = new URLSearchParams({ includeFormer: String(includeFormer), page: String(page), size: '20' })
   const response = await membershipRequest(`/api/teams/${encodeURIComponent(teamId)}/members?${params}`, 'GET', signal)
   return response.json() as Promise<TeamMembersPage>
@@ -866,7 +1143,13 @@ export interface ReportEntry {
   updatedAt: string
 }
 
-export type ReportSort = 'WORK_DATE:DESC' | 'WORK_DATE:ASC' | 'DURATION:DESC' | 'DURATION:ASC' | 'CREATED_AT:DESC' | 'CREATED_AT:ASC'
+export type ReportSort =
+  | 'WORK_DATE:DESC'
+  | 'WORK_DATE:ASC'
+  | 'DURATION:DESC'
+  | 'DURATION:ASC'
+  | 'CREATED_AT:DESC'
+  | 'CREATED_AT:ASC'
 
 function reportParams(filters: ReportFilters, page?: number) {
   const params = new URLSearchParams()
@@ -879,22 +1162,23 @@ function reportParams(filters: ReportFilters, page?: number) {
   if (filters.issueKey?.trim()) params.set('issueKey', filters.issueKey.trim())
   if (filters.entryType) params.set('entryType', filters.entryType)
   if (filters.q?.trim()) params.set('q', filters.q.trim())
-  if (page !== undefined) { params.set('page', String(page)); params.set('size', '20') }
+  if (page !== undefined) {
+    params.set('page', String(page))
+    params.set('size', '20')
+  }
   return params
 }
 
-async function reportRequest<T>(teamId: string, endpoint: string, params: URLSearchParams, signal?: AbortSignal): Promise<T> {
-  const response = await request(`/api/teams/${encodeURIComponent(teamId)}/reports/${endpoint}?${params}`, { signal })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
+function reportRequest<T>(teamId: string, endpoint: string, params: URLSearchParams, signal?: AbortSignal): Promise<T> {
+  return call<T>(`${teamPath(teamId)}/reports/${endpoint}?${params}`, {
+    signal,
+    messages: {
       400: 'Sprawdź zakres dat (najwyżej 366 dni) i filtry raportu.',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Widok zespołu jest dostępny wyłącznie dla jego właściciela, a podgląd aktywnych timerów można wyłączyć w ustawieniach zespołu.',
       404: 'Zespół lub wybrane dane są niedostępne. Sprawdź swoje uprawnienia i filtry.',
-    }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wczytać raportu zespołu. Spróbuj ponownie.')
-  }
-  return response.json() as Promise<T>
+    },
+    fallback: 'Nie udało się wczytać raportu zespołu. Spróbuj ponownie.',
+  })
 }
 
 export const getReportSummary = (teamId: string, filters: ReportFilters, signal?: AbortSignal) =>
@@ -916,7 +1200,13 @@ export interface ReportActive {
 export const getReportActive = (teamId: string, page: number, signal?: AbortSignal) =>
   reportRequest<ReportActive>(teamId, 'active-timers', new URLSearchParams({ page: String(page), size: '20' }), signal)
 
-export function getReportBreakdown(teamId: string, filters: ReportFilters, groupBy: ReportGroup, page: number, signal?: AbortSignal) {
+export function getReportBreakdown(
+  teamId: string,
+  filters: ReportFilters,
+  groupBy: ReportGroup,
+  page: number,
+  signal?: AbortSignal,
+) {
   const params = reportParams(filters, page)
   // A day-by-day table and chart should cover a month in one page.
   if (groupBy === 'DAY') params.set('size', '100')
@@ -924,7 +1214,13 @@ export function getReportBreakdown(teamId: string, filters: ReportFilters, group
   return reportRequest<ReportResult<ReportBucket> & { groupBy: ReportGroup }>(teamId, 'breakdown', params, signal)
 }
 
-export function getReportEntries(teamId: string, filters: ReportFilters, sort: ReportSort, page: number, signal?: AbortSignal) {
+export function getReportEntries(
+  teamId: string,
+  filters: ReportFilters,
+  sort: ReportSort,
+  page: number,
+  signal?: AbortSignal,
+) {
   const params = reportParams(filters, page)
   const [field, direction] = sort.split(':')
   params.set('sort', field!)
@@ -934,97 +1230,178 @@ export function getReportEntries(teamId: string, filters: ReportFilters, sort: R
 
 export type ReportDownload = 'csv' | 'xlsx' | 'pdf' | 'mine-pdf'
 
-const downloadPaths: Record<ReportDownload, string> = { csv: 'export.csv', xlsx: 'export.xlsx', pdf: 'export.pdf', 'mine-pdf': 'mine/export.pdf' }
+const downloadPaths: Record<ReportDownload, string> = {
+  csv: 'export.csv',
+  xlsx: 'export.xlsx',
+  pdf: 'export.pdf',
+  'mine-pdf': 'mine/export.pdf',
+}
 
 /** A file version of the report the owner is looking at; the server applies the same filters as on screen. */
-export async function downloadReport(teamId: string, filters: ReportFilters, kind: ReportDownload): Promise<{ blob: Blob; filename: string }> {
-  const response = await request(`/api/teams/${encodeURIComponent(teamId)}/reports/${downloadPaths[kind]}?${reportParams(filters)}`)
-  if (!response.ok) {
-    throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
-      : response.status === 400 ? 'Sprawdź zakres dat (najwyżej 366 dni), klucz zadania Jira i filtry. Plik CSV lub Excel może mieć najwyżej 50 000 wpisów, więc zawęź raport.'
-      : response.status === 401 ? localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again.")
-      : response.status === 403 || response.status === 404 ? 'Raport jest niedostępny. Sprawdź swoje uprawnienia i filtry.'
-      : 'Nie udało się pobrać pliku. Spróbuj ponownie.')
+export async function downloadReport(
+  teamId: string,
+  filters: ReportFilters,
+  kind: ReportDownload,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await respond(`${teamPath(teamId)}/reports/${downloadPaths[kind]}?${reportParams(filters)}`, {
+    messages: {
+      400: 'Sprawdź zakres dat (najwyżej 366 dni), klucz zadania Jira i filtry. Plik CSV lub Excel może mieć najwyżej 50 000 wpisów, więc zawęź raport.',
+      403: 'Raport jest niedostępny. Sprawdź swoje uprawnienia i filtry.',
+      404: 'Raport jest niedostępny. Sprawdź swoje uprawnienia i filtry.',
+    },
+    fallback: 'Nie udało się pobrać pliku. Spróbuj ponownie.',
+  })
+  return {
+    blob: await response.blob(),
+    filename: filenameFrom(
+      response,
+      kind === 'csv' ? 'hourforge-raport.csv' : kind === 'xlsx' ? 'hourforge-raport.xlsx' : 'hourforge-raport.pdf',
+    ),
   }
-  return { blob: await response.blob(), filename: filenameFrom(response, kind === 'csv' ? 'hourforge-raport.csv' : kind === 'xlsx' ? 'hourforge-raport.xlsx' : 'hourforge-raport.pdf') }
 }
 
 export const getReportMembers = (teamId: string, page: number, signal?: AbortSignal) =>
-  reportRequest<ReportResult<ReportMember>>(teamId, 'members', new URLSearchParams({ page: String(page), size: '100' }), signal)
+  reportRequest<ReportResult<ReportMember>>(
+    teamId,
+    'members',
+    new URLSearchParams({ page: String(page), size: '100' }),
+    signal,
+  )
 export const getReportProjects = (teamId: string, page: number, signal?: AbortSignal) =>
-  reportRequest<ReportResult<ReportProject>>(teamId, 'projects', new URLSearchParams({ page: String(page), size: '100' }), signal)
+  reportRequest<ReportResult<ReportProject>>(
+    teamId,
+    'projects',
+    new URLSearchParams({ page: String(page), size: '100' }),
+    signal,
+  )
 
 export async function downloadAccountData(): Promise<{ blob: Blob; filename: string }> {
-  const response = await request('/api/account/export')
-  if (!response.ok) {
-    throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
-      : response.status === 401 ? localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again.") : 'Nie udało się pobrać danych. Spróbuj ponownie.')
-  }
+  const response = await respond('/api/account/export', { fallback: 'Nie udało się pobrać danych. Spróbuj ponownie.' })
   return { blob: await response.blob(), filename: filenameFrom(response, 'hourforge-export.json') }
 }
 
-const deleteAccountMessages = { 400: 'Obecne hasło jest nieprawidłowe.', 409: 'Najpierw przekaż własność lub usuń zespoły, których jesteś właścicielem.' }
-
-export async function deleteAccount(currentPassword: string): Promise<void> {
-  await accountRequest('/api/account/delete', 'POST', { currentPassword }, deleteAccountMessages, 'Nie udało się usunąć konta. Spróbuj ponownie.')
+const deleteAccountMessages = {
+  400: 'Obecne hasło jest nieprawidłowe.',
+  409: 'Najpierw przekaż własność lub usuń zespoły, których jesteś właścicielem.',
 }
 
-/** An account without a password confirms the deletion with a link sent to its address (A13-D8); nothing is removed yet. */
+export async function deleteAccount(currentPassword: string): Promise<void> {
+  await accountRequest(
+    '/api/account/delete',
+    'POST',
+    { currentPassword },
+    deleteAccountMessages,
+    'Nie udało się usunąć konta. Spróbuj ponownie.',
+  )
+}
+
+/** An account without a password confirms the deletion with a link sent to its address; nothing is removed yet. */
 export async function requestAccountDeletionByEmail(): Promise<void> {
-  await accountRequest('/api/account/delete', 'POST', { confirmByEmail: true },
-    { ...deleteAccountMessages, 400: 'Nie udało się wysłać linku potwierdzającego. Spróbuj ponownie.', 503: 'Wysyłanie e-maili nie jest skonfigurowane na tym serwerze.' },
-    'Nie udało się wysłać linku potwierdzającego. Spróbuj ponownie.')
+  await accountRequest(
+    '/api/account/delete',
+    'POST',
+    { confirmByEmail: true },
+    {
+      ...deleteAccountMessages,
+      400: 'Nie udało się wysłać linku potwierdzającego. Spróbuj ponownie.',
+      503: 'Wysyłanie e-maili nie jest skonfigurowane na tym serwerze.',
+    },
+    'Nie udało się wysłać linku potwierdzającego. Spróbuj ponownie.',
+  )
 }
 
 /** Codes the server adds as `?google=` when it sends the browser back from Google, with what to tell the person. */
 const googleOutcomes: Record<string, { tone: 'success' | 'error'; login: string; link?: string }> = {
   LINKED: { tone: 'success', login: 'Konto Google zostało połączone.' },
-  GOOGLE_CANCELLED: { tone: 'error', login: 'Logowanie przez Google zostało anulowane.', link: 'Łączenie z Google zostało anulowane.' },
-  GOOGLE_FAILED: { tone: 'error', login: 'Nie udało się zalogować przez Google. Spróbuj ponownie.', link: 'Nie udało się połączyć konta Google. Spróbuj ponownie.' },
+  GOOGLE_CANCELLED: {
+    tone: 'error',
+    login: 'Logowanie przez Google zostało anulowane.',
+    link: 'Łączenie z Google zostało anulowane.',
+  },
+  GOOGLE_FAILED: {
+    tone: 'error',
+    login: 'Nie udało się zalogować przez Google. Spróbuj ponownie.',
+    link: 'Nie udało się połączyć konta Google. Spróbuj ponownie.',
+  },
   GOOGLE_DISABLED: { tone: 'error', login: 'Logowanie przez Google jest niedostępne na tym serwerze.' },
-  GOOGLE_EMAIL_UNVERIFIED: { tone: 'error', login: 'Google nie potwierdził adresu e-mail tego konta. Użyj innego konta Google albo zarejestruj się adresem e-mail i hasłem.' },
-  GOOGLE_ACCOUNT_EXISTS: { tone: 'error', login: 'Konto z tym adresem już istnieje. Zaloguj się hasłem, a potem połącz Google w ustawieniach konta.' },
+  GOOGLE_EMAIL_UNVERIFIED: {
+    tone: 'error',
+    login:
+      'Google nie potwierdził adresu e-mail tego konta. Użyj innego konta Google albo zarejestruj się adresem e-mail i hasłem.',
+  },
+  GOOGLE_ACCOUNT_EXISTS: {
+    tone: 'error',
+    login: 'Konto z tym adresem już istnieje. Zaloguj się hasłem, a potem połącz Google w ustawieniach konta.',
+  },
   GOOGLE_ALREADY_LINKED: { tone: 'error', login: 'To konto Google jest już połączone z innym kontem HourForge.' },
-  GOOGLE_ALREADY_LINKED_TO_YOU: { tone: 'error', login: 'Twoje konto jest już połączone z innym kontem Google. Najpierw je odłącz.' },
+  GOOGLE_ALREADY_LINKED_TO_YOU: {
+    tone: 'error',
+    login: 'Twoje konto jest już połączone z innym kontem Google. Najpierw je odłącz.',
+  },
   LINK_EXPIRED: { tone: 'error', login: 'Czas na połączenie z Google minął. Spróbuj ponownie.' },
-  ACCOUNT_BLOCKED: { tone: 'error', login: localizedError("To konto zostało zablokowane przez operatora serwisu. Jeśli to pomyłka, skontaktuj się z administratorem.", "The service operator has blocked this account. Contact your administrator if you think this is a mistake.") },
-  EMAIL_NOT_VERIFIED: { tone: 'error', login: 'Potwierdź adres e-mail, aby się zalogować. Link wysłaliśmy na adres konta.' },
+  ACCOUNT_BLOCKED: {
+    tone: 'error',
+    login: localizedError(
+      'To konto zostało zablokowane przez operatora serwisu. Jeśli to pomyłka, skontaktuj się z administratorem.',
+      'The service operator has blocked this account. Contact your administrator if you think this is a mistake.',
+    ),
+  },
+  EMAIL_NOT_VERIFIED: {
+    tone: 'error',
+    login: 'Potwierdź adres e-mail, aby się zalogować. Link wysłaliśmy na adres konta.',
+  },
 }
 
 /** The message for a `?google=` code; unknown codes are ignored rather than guessed. */
-export function googleOutcome(code: string | null, context: 'login' | 'link'): { tone: 'success' | 'error'; text: string } | null {
+export function googleOutcome(
+  code: string | null,
+  context: 'login' | 'link',
+): { tone: 'success' | 'error'; text: string } | null {
   const outcome = code && Object.hasOwn(googleOutcomes, code) ? googleOutcomes[code] : undefined
   if (!outcome) return null
   return { tone: outcome.tone, text: (context === 'link' ? outcome.link : undefined) ?? outcome.login }
 }
 
-async function googleAccountRequest(path: string, body: unknown, messages: Record<number, string>, codes: Record<string, string>, fallback: string) {
-  const csrf = await getCsrf()
-  const response = await request(path, { method: 'POST', headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token },
-    body: JSON.stringify(body) })
-  if (!response.ok) {
-    const code = response.status === 409 ? (await response.json().catch(() => null) as { code?: string } | null)?.code : undefined
-    throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
-      : (code && codes[code]) || ({ 401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."), 403: 'Sesja formularza wygasła. Spróbuj ponownie.',
-        404: 'Logowanie przez Google jest niedostępne na tym serwerze.', ...messages }[response.status] ?? fallback), code)
-  }
-  return response
+/** Linking and unlinking Google; a refusal with a known code (409) gets the message for that code. */
+async function googleAccountRequest(
+  path: string,
+  body: unknown,
+  messages: Messages,
+  codes: Record<string, string>,
+  fallback: string,
+) {
+  const response = await send(path, 'POST', body)
+  if (response.ok) return response
+  const code = response.status === 409 ? await errorCode(response) : undefined
+  if (code && codes[code]) throw new ApiError(response.status, codes[code], code)
+  throw failure(
+    response,
+    { 403: formExpired, 404: 'Logowanie przez Google jest niedostępne na tym serwerze.', ...messages },
+    fallback,
+    code,
+  )
 }
 
 /** Starts connecting Google to the signed-in account; the browser then goes to the returned address. */
 export async function startGoogleLink(currentPassword?: string): Promise<{ authorizationUrl: string }> {
-  const response = await googleAccountRequest('/api/account/google/link', currentPassword === undefined ? {} : { currentPassword },
+  const response = await googleAccountRequest(
+    '/api/account/google/link',
+    currentPassword === undefined ? {} : { currentPassword },
     { 400: 'Obecne hasło jest nieprawidłowe.' },
     { GOOGLE_ALREADY_LINKED_TO_YOU: 'Twoje konto jest już połączone z kontem Google. Odśwież stronę.' },
-    'Nie udało się rozpocząć łączenia z Google. Spróbuj ponownie.')
+    'Nie udało się rozpocząć łączenia z Google. Spróbuj ponownie.',
+  )
   return response.json() as Promise<{ authorizationUrl: string }>
 }
 
 export async function unlinkGoogle(currentPassword: string): Promise<void> {
-  await googleAccountRequest('/api/account/google/unlink', { currentPassword },
+  await googleAccountRequest(
+    '/api/account/google/unlink',
+    { currentPassword },
     { 400: 'Obecne hasło jest nieprawidłowe.', 404: 'Konto nie jest już połączone z Google. Odśwież stronę.' },
     { LAST_SIGN_IN_METHOD: 'Nie możesz odłączyć Google, dopóki nie ustawisz hasła.' },
-    'Nie udało się odłączyć Google. Spróbuj ponownie.')
+    'Nie udało się odłączyć Google. Spróbuj ponownie.',
+  )
 }
 
 export interface JiraStatus {
@@ -1044,33 +1421,31 @@ export interface JiraSiteChoice {
 
 export type JiraIntent = 'SITE' | 'MEMBER'
 
-async function jiraRequest<T>(path: string, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
-  const csrf = method === 'GET' ? null : await getCsrf()
-  const response = await request(path, {
-    method, signal,
-    headers: csrf ? { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token } : undefined,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
+function jiraRequest<T>(path: string, method: Method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
+  return call<T>(path, {
+    method,
+    body,
+    signal,
+    messages: {
       403: 'Tej operacji nie możesz wykonać w tym zespole lub sesja formularza wygasła.',
       404: 'Nie znaleziono zespołu lub witryny Jira albo nie masz już do nich dostępu.',
       409: 'Najpierw połącz konto Jira. Właściciel zespołu musi też wybrać witrynę Jira.',
       502: 'Jira jest teraz niedostępna. Spróbuj ponownie za chwilę.',
-    }
-    throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
-      : messages[response.status] ?? 'Nie udało się wykonać operacji na integracji z Jira. Spróbuj ponownie.')
-  }
-  return (response.status === 204 ? null : await response.json()) as T
+    },
+    fallback: 'Nie udało się wykonać operacji na integracji z Jira. Spróbuj ponownie.',
+  })
 }
 
-const jiraPath = (suffix: string, teamId?: string) => `/api/integrations/jira/${suffix}${teamId ? `?${new URLSearchParams({ teamId })}` : ''}`
-export const getJiraStatus = (teamId: string, signal?: AbortSignal) => jiraRequest<JiraStatus>(jiraPath('status', teamId), 'GET', undefined, signal)
-export const getJiraSites = (teamId: string, signal?: AbortSignal) => jiraRequest<JiraSiteChoice[]>(jiraPath('sites', teamId), 'GET', undefined, signal)
+const jiraPath = (suffix: string, teamId?: string) =>
+  `/api/integrations/jira/${suffix}${teamId ? `?${new URLSearchParams({ teamId })}` : ''}`
+export const getJiraStatus = (teamId: string, signal?: AbortSignal) =>
+  jiraRequest<JiraStatus>(jiraPath('status', teamId), 'GET', undefined, signal)
+export const getJiraSites = (teamId: string, signal?: AbortSignal) =>
+  jiraRequest<JiraSiteChoice[]>(jiraPath('sites', teamId), 'GET', undefined, signal)
 export const startJiraAuthorization = (input: { teamId: string; intent: JiraIntent }) =>
   jiraRequest<{ url: string }>(jiraPath('authorize'), 'POST', input)
-export const selectJiraSite = (input: { teamId: string; cloudId: string }) => jiraRequest<null>(jiraPath('site'), 'POST', input)
+export const selectJiraSite = (input: { teamId: string; cloudId: string }) =>
+  jiraRequest<null>(jiraPath('site'), 'POST', input)
 export const disconnectJiraAccount = (teamId: string) => jiraRequest<null>(jiraPath('connection', teamId), 'DELETE')
 export const disconnectJiraSite = (teamId: string) => jiraRequest<null>(jiraPath('site', teamId), 'DELETE')
 
@@ -1095,8 +1470,18 @@ export interface JiraIssueFilters {
   includeDone: boolean
 }
 
-export function getJiraIssues(teamId: string, filters: JiraIssueFilters, pageToken: string | null, signal?: AbortSignal) {
-  const params = new URLSearchParams({ teamId, assignee: filters.assignee, sprint: filters.sprint, includeDone: String(filters.includeDone) })
+export function getJiraIssues(
+  teamId: string,
+  filters: JiraIssueFilters,
+  pageToken: string | null,
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({
+    teamId,
+    assignee: filters.assignee,
+    sprint: filters.sprint,
+    includeDone: String(filters.includeDone),
+  })
   if (filters.q.trim()) params.set('q', filters.q.trim())
   if (pageToken) params.set('pageToken', pageToken)
   return jiraRequest<JiraIssuePage>(`/api/integrations/jira/issues?${params}`, 'GET', undefined, signal)
@@ -1115,26 +1500,19 @@ export interface Preferences {
   weeklyReportEmail?: boolean
 }
 
-export async function getPreferences(signal?: AbortSignal): Promise<Preferences> {
-  const response = await request('/api/account/preferences', { signal })
-  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again.") : 'Nie udało się wczytać ustawień.')
-  return response.json() as Promise<Preferences>
-}
+export const getPreferences = (signal?: AbortSignal) =>
+  call<Preferences>('/api/account/preferences', { signal, fallback: 'Nie udało się wczytać ustawień.' })
 
-export async function savePreferences(input: Preferences): Promise<Preferences> {
-  const csrf = await getCsrf()
-  const response = await request('/api/account/preferences', { method: 'PUT',
-    headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token }, body: JSON.stringify(input) })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
+export const savePreferences = (input: Preferences) =>
+  call<Preferences>('/api/account/preferences', {
+    method: 'PUT',
+    body: input,
+    messages: {
       400: 'Sprawdź wybrane ustawienia. Zespół domyślny musi być jednym z Twoich zespołów.',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
-      403: 'Sesja formularza wygasła. Spróbuj ponownie.',
-    }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się zapisać ustawień. Spróbuj ponownie.')
-  }
-  return response.json() as Promise<Preferences>
-}
+      403: formExpired,
+    },
+    fallback: 'Nie udało się zapisać ustawień. Spróbuj ponownie.',
+  })
 
 export interface CopyDayResult {
   copied: number
@@ -1142,23 +1520,19 @@ export interface CopyDayResult {
 }
 
 /** The request id makes a repeated request (after a lost response) return the first result instead of copying again. */
-export async function copyDay(input: { teamId: string; fromDate: string; toDate: string; requestId?: string }): Promise<CopyDayResult> {
-  const csrf = await getCsrf()
-  const response = await request('/api/time-entries/copy-day', { method: 'POST',
-    headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token }, body: JSON.stringify(input) })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
+export const copyDay = (input: { teamId: string; fromDate: string; toDate: string; requestId?: string }) =>
+  call<CopyDayResult>('/api/time-entries/copy-day', {
+    method: 'POST',
+    body: input,
+    messages: {
       400: 'Nie można skopiować tego dnia: wybierz inny dzień docelowy z ostatnich 2 lat (nie z przyszłości); wpisów może być najwyżej 100, a żaden nie może trwać dłużej niż 24 godziny.',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
-      403: 'Sesja formularza wygasła. Spróbuj ponownie.',
+      403: formExpired,
       404: 'Nie ma wpisów do skopiowania albo nie masz już dostępu do zespołu.',
       409: 'Nie można dodać czasu: zespół, projekt albo tag któregoś z wpisów jest zarchiwizowany.',
       422: 'Reguły zespołu nie pozwalają skopiować wszystkich wpisów (np. brakuje wymaganego opisu lub tagu). Popraw wpisy i spróbuj ponownie.',
-    }
-    throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response) : messages[response.status] ?? 'Nie udało się skopiować wpisów. Spróbuj ponownie.')
-  }
-  return response.json() as Promise<CopyDayResult>
-}
+    },
+    fallback: 'Nie udało się skopiować wpisów. Spróbuj ponownie.',
+  })
 
 export interface EntryTemplate {
   id: string
@@ -1181,26 +1555,33 @@ export interface TemplateInput {
   tagId?: string | null
 }
 
-async function templateRequest<T>(teamId: string, method: string, suffix = '', body?: unknown, signal?: AbortSignal): Promise<T> {
-  const csrf = method === 'GET' ? null : await getCsrf()
-  const response = await request(`/api/teams/${encodeURIComponent(teamId)}/templates${suffix}`, { method, signal,
-    headers: csrf ? { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token } : undefined, body: body === undefined ? undefined : JSON.stringify(body) })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
+function templateRequest<T>(
+  teamId: string,
+  method: Method,
+  suffix = '',
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  return call<T>(`${teamPath(teamId)}/templates${suffix}`, {
+    method,
+    body,
+    signal,
+    messages: {
       400: 'Sprawdź nazwę szablonu (najwyżej 80 znaków) i opis (najwyżej 2000 znaków).',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
-      403: 'Sesja formularza wygasła. Spróbuj ponownie.',
+      403: formExpired,
       404: 'Nie znaleziono szablonu, projektu lub zadania Jira albo nie masz już dostępu.',
       409: 'Szablon o takiej nazwie już istnieje, masz ich za dużo (najwyżej 30 w zespole), projekt lub tag jest archiwalny albo zespół jest zarchiwizowany.',
-    }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wykonać operacji na szablonie. Spróbuj ponownie.')
-  }
-  return (response.status === 204 ? null : await response.json()) as T
+    },
+    fallback: 'Nie udało się wykonać operacji na szablonie. Spróbuj ponownie.',
+  })
 }
 
-export const getTemplates = (teamId: string, signal?: AbortSignal) => templateRequest<EntryTemplate[]>(teamId, 'GET', '', undefined, signal)
-export const createTemplate = (teamId: string, input: TemplateInput) => templateRequest<EntryTemplate>(teamId, 'POST', '', input)
-export const deleteTemplate = (teamId: string, templateId: string) => templateRequest<null>(teamId, 'DELETE', `/${encodeURIComponent(templateId)}`)
+export const getTemplates = (teamId: string, signal?: AbortSignal) =>
+  templateRequest<EntryTemplate[]>(teamId, 'GET', '', undefined, signal)
+export const createTemplate = (teamId: string, input: TemplateInput) =>
+  templateRequest<EntryTemplate>(teamId, 'POST', '', input)
+export const deleteTemplate = (teamId: string, templateId: string) =>
+  templateRequest<null>(teamId, 'DELETE', `/${encodeURIComponent(templateId)}`)
 
 export interface DashboardOverview {
   todaySeconds: number
@@ -1216,46 +1597,61 @@ export interface DashboardActivity {
   days: { workDate: string; seconds: number }[]
 }
 
-async function dashboardRequest<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await request(path, { signal })
-  if (!response.ok) {
-    throw new ApiError(response.status, response.status === 401 ? localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again.") : localizedError("Nie udało się wczytać podsumowania czasu. Spróbuj ponownie.", "Could not load your time summary. Try again."))
-  }
-  return response.json() as Promise<T>
+function dashboardRequest<T>(path: string, signal?: AbortSignal): Promise<T> {
+  return call<T>(path, {
+    signal,
+    fallback: localizedError(
+      'Nie udało się wczytać podsumowania czasu. Spróbuj ponownie.',
+      'Could not load your time summary. Try again.',
+    ),
+  })
 }
 
 export const getDashboardOverview = (weekStart: Preferences['weekStart'], signal?: AbortSignal) =>
   dashboardRequest<DashboardOverview>(`/api/dashboard/overview?${new URLSearchParams({ weekStart })}`, signal)
 export const getDashboardActivity = (weekStart: Preferences['weekStart'], weeks = 12, signal?: AbortSignal) =>
-  dashboardRequest<DashboardActivity>(`/api/dashboard/activity?${new URLSearchParams({ weekStart, weeks: String(weeks) })}`, signal)
+  dashboardRequest<DashboardActivity>(
+    `/api/dashboard/activity?${new URLSearchParams({ weekStart, weeks: String(weeks) })}`,
+    signal,
+  )
 
 export const getJiraIssue = (teamId: string, issueId: string, signal?: AbortSignal) =>
-  jiraRequest<JiraIssue>(`/api/integrations/jira/issues/${encodeURIComponent(issueId)}?${new URLSearchParams({ teamId })}`, 'GET', undefined, signal)
+  jiraRequest<JiraIssue>(
+    `/api/integrations/jira/issues/${encodeURIComponent(issueId)}?${new URLSearchParams({ teamId })}`,
+    'GET',
+    undefined,
+    signal,
+  )
 
 export type CorrectionInput = Omit<UpdateTimeEntryInput, 'jiraIssueId'>
 
-async function correctionRequest<T>(path: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', body?: CorrectionInput, signal?: AbortSignal): Promise<T> {
-  const csrf = method === 'GET' ? null : await getCsrf()
-  const response = await request(path, {
-    method, signal, headers: csrf ? { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token } : undefined,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
+function correctionRequest<T>(path: string, method: Method, body?: CorrectionInput, signal?: AbortSignal): Promise<T> {
+  return call<T>(path, {
+    method,
+    body,
+    signal,
+    messages: {
       400: 'Sprawdź projekt, datę i czas trwania. Wpis może mieć najwyżej 24 godziny, a data pracy musi mieścić się w ostatnich 2 latach i nie może być z przyszłości.',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Korekty czasu może wykonywać tylko właściciel lub administrator zespołu albo sesja formularza wygasła.',
       404: 'Wpis, osoba lub projekt są niedostępne. Odśwież listę.',
       409: 'Zespół jest zarchiwizowany, wpis jest uruchomionym timerem, projekt jest archiwalny albo wpis został w międzyczasie zmieniony. Odśwież listę i spróbuj ponownie.',
-    }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się zapisać korekty. Odśwież listę przed ponowieniem operacji.')
-  }
-  return (response.status === 204 ? null : await response.json()) as T
+    },
+    fallback: 'Nie udało się zapisać korekty. Odśwież listę przed ponowieniem operacji.',
+  })
 }
 
 export const getMemberTimeEntries = (teamId: string, memberId: string, page: number, signal?: AbortSignal) =>
-  correctionRequest<TimeEntryHistory>(`${teamPath(teamId)}/members/${encodeURIComponent(memberId)}/time-entries?page=${page}&size=10`, 'GET', undefined, signal)
-export const addMemberTimeEntry = ({ teamId, memberId, ...body }: CorrectionInput & { teamId: string; memberId: string }) =>
+  correctionRequest<TimeEntryHistory>(
+    `${teamPath(teamId)}/members/${encodeURIComponent(memberId)}/time-entries?page=${page}&size=10`,
+    'GET',
+    undefined,
+    signal,
+  )
+export const addMemberTimeEntry = ({
+  teamId,
+  memberId,
+  ...body
+}: CorrectionInput & { teamId: string; memberId: string }) =>
   correctionRequest<null>(`${teamPath(teamId)}/members/${encodeURIComponent(memberId)}/time-entries`, 'POST', body)
 export const correctMemberTimeEntry = ({ teamId, id, ...body }: CorrectionInput & { teamId: string; id: string }) =>
   correctionRequest<null>(`${teamPath(teamId)}/time-entries/${encodeURIComponent(id)}`, 'PATCH', body)
@@ -1275,31 +1671,40 @@ export interface TagInput {
   color: string | null
 }
 
-async function tagRequest<T>(teamId: string, method: 'GET' | 'POST' | 'PUT', suffix = '', body?: unknown, signal?: AbortSignal): Promise<T> {
-  const csrf = method === 'GET' ? null : await getCsrf()
-  const response = await request(`${teamPath(teamId)}/tags${suffix}`, {
-    method, signal, headers: csrf ? { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token } : undefined,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  if (!response.ok) {
-    const messages: Record<number, string> = {
+function tagRequest<T>(
+  teamId: string,
+  method: 'GET' | 'POST' | 'PUT',
+  suffix = '',
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  return call<T>(`${teamPath(teamId)}/tags${suffix}`, {
+    method,
+    body,
+    signal,
+    messages: {
       400: 'Podaj nazwę tagu (do 40 znaków) i wybierz kolor z listy.',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Tagami zarządza właściciel lub administrator zespołu albo sesja formularza wygasła.',
       404: 'Zespół lub tag są niedostępne. Odśwież listę.',
-      409: method === 'GET' ? 'Nie udało się wczytać tagów.' : 'Tag o tej nazwie już istnieje, jest zarchiwizowany albo zespół jest zarchiwizowany.',
-    }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wykonać operacji na tagach. Odśwież listę i spróbuj ponownie.')
-  }
-  return await response.json() as T
+      409:
+        method === 'GET'
+          ? 'Nie udało się wczytać tagów.'
+          : 'Tag o tej nazwie już istnieje, jest zarchiwizowany albo zespół jest zarchiwizowany.',
+    },
+    fallback: 'Nie udało się wykonać operacji na tagach. Odśwież listę i spróbuj ponownie.',
+  })
 }
 
 export const getTags = (teamId: string, includeArchived: boolean, signal?: AbortSignal) =>
   tagRequest<Tag[]>(teamId, 'GET', includeArchived ? '?includeArchived=true' : '', undefined, signal)
-export const createTag = ({ teamId, ...body }: TagInput & { teamId: string }) => tagRequest<Tag>(teamId, 'POST', '', body)
-export const updateTag = ({ teamId, id, ...body }: TagInput & { teamId: string; id: string }) => tagRequest<Tag>(teamId, 'PUT', `/${encodeURIComponent(id)}`, body)
-export const archiveTag = ({ teamId, id }: { teamId: string; id: string }) => tagRequest<Tag>(teamId, 'POST', `/${encodeURIComponent(id)}/archive`)
-export const restoreTag = ({ teamId, id }: { teamId: string; id: string }) => tagRequest<Tag>(teamId, 'POST', `/${encodeURIComponent(id)}/restore`)
+export const createTag = ({ teamId, ...body }: TagInput & { teamId: string }) =>
+  tagRequest<Tag>(teamId, 'POST', '', body)
+export const updateTag = ({ teamId, id, ...body }: TagInput & { teamId: string; id: string }) =>
+  tagRequest<Tag>(teamId, 'PUT', `/${encodeURIComponent(id)}`, body)
+export const archiveTag = ({ teamId, id }: { teamId: string; id: string }) =>
+  tagRequest<Tag>(teamId, 'POST', `/${encodeURIComponent(id)}/archive`)
+export const restoreTag = ({ teamId, id }: { teamId: string; id: string }) =>
+  tagRequest<Tag>(teamId, 'POST', `/${encodeURIComponent(id)}/restore`)
 
 export interface ReportTimesheet {
   context: ReportContext
@@ -1315,9 +1720,16 @@ export const getReportTimesheet = (teamId: string, filters: ReportFilters, signa
 
 export type UnsubscribeKind = 'TEAM_EVENTS' | 'WEEKLY_REPORT' | 'LONG_TIMER'
 
-export const unsubscribe = (input: { token: string; kind: UnsubscribeKind }) => publicPost('/api/notifications/unsubscribe', input,
-  { 400: 'Link jest nieprawidłowy.', 404: 'Link jest nieprawidłowy albo nie jest już aktualny. Ustawienia powiadomień znajdziesz w koncie.' },
-  'Nie udało się wypisać z wiadomości. Spróbuj ponownie.')
+export const unsubscribe = (input: { token: string; kind: UnsubscribeKind }) =>
+  publicPost(
+    '/api/notifications/unsubscribe',
+    input,
+    {
+      400: 'Link jest nieprawidłowy.',
+      404: 'Link jest nieprawidłowy albo nie jest już aktualny. Ustawienia powiadomień znajdziesz w koncie.',
+    },
+    'Nie udało się wypisać z wiadomości. Spróbuj ponownie.',
+  )
 
 export interface OperatorStats {
   accounts: number
@@ -1361,62 +1773,80 @@ export interface OperatorPage<T> {
   hasMore: boolean
 }
 
-async function operatorRequest<T>(path: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
-  const csrf = method === 'GET' ? null : await getCsrf()
-  const response = await request(path, { method, signal,
-    headers: csrf ? { [csrf.headerName]: csrf.token, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) } : undefined,
-    body: body === undefined ? undefined : JSON.stringify(body) })
-  if (!response.ok) {
-    throw new ApiError(response.status, {
+function operatorRequest<T>(path: string, method: Method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
+  return call<T>(path, {
+    method,
+    body,
+    signal,
+    messages: {
       400: 'Sprawdź wpisane dane.',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Panel operatora jest dostępny tylko dla operatorów tej instancji.',
       404: 'Nie znaleziono konta lub zespołu. Odśwież listę.',
       409: 'Tego nie da się teraz zrobić: konto jest właścicielem zespołów albo zmieniło się w międzyczasie. Odśwież listę.',
-    }[response.status] ?? 'Nie udało się wykonać operacji. Spróbuj ponownie.')
-  }
-  return (response.status === 204 ? null : await response.json()) as T
+    },
+    fallback: 'Nie udało się wykonać operacji. Spróbuj ponownie.',
+  })
 }
 
-const pageQuery = (query: string, page: number) => `?${new URLSearchParams({ ...(query.trim() ? { query: query.trim() } : {}), page: String(page) })}`
+const pageQuery = (query: string, page: number) =>
+  `?${new URLSearchParams({ ...(query.trim() ? { query: query.trim() } : {}), page: String(page) })}`
 
-export const getOperatorStats = (signal?: AbortSignal) => operatorRequest<OperatorStats>('/api/operator/stats', 'GET', undefined, signal)
+export const getOperatorStats = (signal?: AbortSignal) =>
+  operatorRequest<OperatorStats>('/api/operator/stats', 'GET', undefined, signal)
 export const getOperatorAccounts = (query: string, page: number, signal?: AbortSignal) =>
-  operatorRequest<OperatorPage<OperatorAccount>>(`/api/operator/accounts${pageQuery(query, page)}`, 'GET', undefined, signal)
+  operatorRequest<OperatorPage<OperatorAccount>>(
+    `/api/operator/accounts${pageQuery(query, page)}`,
+    'GET',
+    undefined,
+    signal,
+  )
 export const getOperatorTeams = (query: string, page: number, signal?: AbortSignal) =>
   operatorRequest<OperatorPage<OperatorTeam>>(`/api/operator/teams${pageQuery(query, page)}`, 'GET', undefined, signal)
 export const blockAccount = ({ id, reason }: { id: string; reason: string }) =>
   operatorRequest<null>(`/api/operator/accounts/${encodeURIComponent(id)}/block`, 'POST', { reason: reason.trim() })
-export const unblockAccount = (id: string) => operatorRequest<null>(`/api/operator/accounts/${encodeURIComponent(id)}/unblock`, 'POST')
-export const turnOffTwoFactorFor = (id: string) => operatorRequest<null>(`/api/operator/accounts/${encodeURIComponent(id)}/two-factor/disable`, 'POST')
-export const deleteAccountAsOperator = (id: string) => operatorRequest<null>(`/api/operator/accounts/${encodeURIComponent(id)}`, 'DELETE')
-export const deleteTeamAsOperator = (id: string) => operatorRequest<null>(`/api/operator/teams/${encodeURIComponent(id)}`, 'DELETE')
+export const unblockAccount = (id: string) =>
+  operatorRequest<null>(`/api/operator/accounts/${encodeURIComponent(id)}/unblock`, 'POST')
+export const turnOffTwoFactorFor = (id: string) =>
+  operatorRequest<null>(`/api/operator/accounts/${encodeURIComponent(id)}/two-factor/disable`, 'POST')
+export const deleteAccountAsOperator = (id: string) =>
+  operatorRequest<null>(`/api/operator/accounts/${encodeURIComponent(id)}`, 'DELETE')
+export const deleteTeamAsOperator = (id: string) =>
+  operatorRequest<null>(`/api/operator/teams/${encodeURIComponent(id)}`, 'DELETE')
 export const saveAnnouncement = (input: { message: string; level: 'INFO' | 'WARNING' }) =>
-  operatorRequest<Announcement>('/api/operator/announcement', 'PUT', { message: input.message.trim(), level: input.level })
+  operatorRequest<Announcement>('/api/operator/announcement', 'PUT', {
+    message: input.message.trim(),
+    level: input.level,
+  })
 export const clearAnnouncement = () => operatorRequest<null>('/api/operator/announcement', 'DELETE')
 
 /** The stored picture; the version makes the browser fetch a changed picture at once. */
-export const avatarUrl = (userId: string, version: string) => `/api/users/${encodeURIComponent(userId)}/avatar?v=${encodeURIComponent(version)}`
-export const teamLogoUrl = (teamId: string, version: string) => `/api/teams/${encodeURIComponent(teamId)}/logo?v=${encodeURIComponent(version)}`
+export const avatarUrl = (userId: string, version: string) =>
+  `/api/users/${encodeURIComponent(userId)}/avatar?v=${encodeURIComponent(version)}`
+export const teamLogoUrl = (teamId: string, version: string) =>
+  `/api/teams/${encodeURIComponent(teamId)}/logo?v=${encodeURIComponent(version)}`
 
 async function pictureRequest(path: string, picture: Blob | null): Promise<void> {
-  const csrf = await getCsrf()
   let body: FormData | undefined
-  if (picture) { body = new FormData(); body.append('image', picture, 'picture.jpg') }
-  const response = await request(path, { method: picture ? 'PUT' : 'DELETE', headers: { [csrf.headerName]: csrf.token }, body })
-  if (!response.ok) {
-    throw new ApiError(response.status, {
+  if (picture) {
+    body = new FormData()
+    body.append('image', picture, 'picture.jpg')
+  }
+  await respond(path, {
+    method: picture ? 'PUT' : 'DELETE',
+    body,
+    messages: {
       400: 'Wybierz zdjęcie JPEG lub PNG do 2 MB i najwyżej 4096 × 4096 pikseli.',
-      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Logo mogą zmieniać właściciel i administratorzy zespołu albo sesja formularza wygasła.',
       404: 'Nie znaleziono zespołu.',
       409: 'Zarchiwizowanego zespołu nie można zmieniać.',
       413: 'Plik jest za duży. Wybierz zdjęcie do 2 MB.',
-    }[response.status] ?? 'Nie udało się zapisać zdjęcia. Spróbuj ponownie.')
-  }
+    },
+    fallback: 'Nie udało się zapisać zdjęcia. Spróbuj ponownie.',
+  })
 }
 
 export const uploadAvatar = (picture: Blob) => pictureRequest('/api/account/avatar', picture)
 export const removeAvatar = () => pictureRequest('/api/account/avatar', null)
-export const uploadTeamLogo = ({ teamId, picture }: { teamId: string; picture: Blob }) => pictureRequest(`/api/teams/${encodeURIComponent(teamId)}/logo`, picture)
+export const uploadTeamLogo = ({ teamId, picture }: { teamId: string; picture: Blob }) =>
+  pictureRequest(`/api/teams/${encodeURIComponent(teamId)}/logo`, picture)
 export const removeTeamLogo = (teamId: string) => pictureRequest(`/api/teams/${encodeURIComponent(teamId)}/logo`, null)

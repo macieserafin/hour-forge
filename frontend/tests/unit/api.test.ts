@@ -1,7 +1,29 @@
 import { it, expect, vi } from 'vitest'
-import { ApiError, getUser, getTeams, getTimeEntryHistory, login, logout, startTimer, stopTimer, changeTimerState,
-  createManualTimeEntry, updateTimeEntry, deleteTimeEntry, createTeam, createProject, updateProject, archiveProject, createInvitation, acceptInvitation,
-  register } from '../../src/lib/api'
+import {
+  ApiError,
+  getUser,
+  getTeams,
+  getTimeEntryHistory,
+  login,
+  logout,
+  startTimer,
+  stopTimer,
+  changeTimerState,
+  createManualTimeEntry,
+  updateTimeEntry,
+  deleteTimeEntry,
+  createTeam,
+  createProject,
+  updateProject,
+  archiveProject,
+  createInvitation,
+  acceptInvitation,
+  register,
+  getTags,
+  uploadAvatar,
+  changePassword,
+  unlinkGoogle,
+} from '../../src/lib/api'
 import { mockApi, json, team, project, timer, entry, history } from '../support/api'
 
 it('treats an unauthenticated session as signed out', async () => {
@@ -21,19 +43,39 @@ it('sends history filters, pagination and cancellation to the server', async () 
   await getTimeEntryHistory('team /', { projectId: 'p /', from: '2026-01-01', to: '' }, 2, controller.signal)
   const [path, options] = fetcher.mock.calls[0]!
   const url = new URL(String(path), window.location.origin)
-  expect(Object.fromEntries(url.searchParams)).toEqual({ teamId: 'team /', projectId: 'p /', from: '2026-01-01', page: '2', size: '20' })
+  expect(Object.fromEntries(url.searchParams)).toEqual({
+    teamId: 'team /',
+    projectId: 'p /',
+    from: '2026-01-01',
+    page: '2',
+    size: '20',
+  })
   expect(options).toMatchObject({ signal: controller.signal, credentials: 'include', cache: 'no-store' })
 })
 it('reports rate-limited login, registration and creation with the retry time', async () => {
-  const limited = (seconds: string | null) => () => new Response(null, { status: 429, headers: seconds ? { 'Retry-After': seconds } : {} })
-  mockApi({ 'POST /api/auth/login': limited('900'), 'POST /api/auth/register': limited('3600'),
-    'POST /api/teams': limited('61'), [`POST /api/teams/${team.id}/projects`]: limited(null) })
-  await expect(login({ email: 'actor@example.test', password: 'secret' })).rejects.toMatchObject({ status: 429, message: 'Zbyt wiele prób. Spróbuj ponownie za 15 min.' })
-  await expect(register({ displayName: 'Actor', email: 'actor@example.test', password: 'Long-password-1' }))
-    .rejects.toMatchObject({ status: 429, message: 'Zbyt wiele prób. Spróbuj ponownie za 60 min.' })
-  await expect(createTeam({ name: 'Team', timezone: 'UTC' })).rejects.toMatchObject({ status: 429, message: 'Zbyt wiele prób. Spróbuj ponownie za 2 min.' })
-  await expect(createProject(team.id, { name: 'Project', description: null }))
-    .rejects.toMatchObject({ status: 429, message: 'Zbyt wiele prób. Spróbuj ponownie później.' })
+  const limited = (seconds: string | null) => () =>
+    new Response(null, { status: 429, headers: seconds ? { 'Retry-After': seconds } : {} })
+  mockApi({
+    'POST /api/auth/login': limited('900'),
+    'POST /api/auth/register': limited('3600'),
+    'POST /api/teams': limited('61'),
+    [`POST /api/teams/${team.id}/projects`]: limited(null),
+  })
+  await expect(login({ email: 'actor@example.test', password: 'secret' })).rejects.toMatchObject({
+    status: 429,
+    message: 'Zbyt wiele prób. Spróbuj ponownie za 15 min.',
+  })
+  await expect(
+    register({ displayName: 'Actor', email: 'actor@example.test', password: 'Long-password-1' }),
+  ).rejects.toMatchObject({ status: 429, message: 'Zbyt wiele prób. Spróbuj ponownie za 60 min.' })
+  await expect(createTeam({ name: 'Team', timezone: 'UTC' })).rejects.toMatchObject({
+    status: 429,
+    message: 'Zbyt wiele prób. Spróbuj ponownie za 2 min.',
+  })
+  await expect(createProject(team.id, { name: 'Project', description: null })).rejects.toMatchObject({
+    status: 429,
+    message: 'Zbyt wiele prób. Spróbuj ponownie później.',
+  })
 })
 it('logs in using a fresh CSRF token and trimmed email', async () => {
   const fetcher = mockApi({ 'POST /api/auth/login': () => json(null, 204) })
@@ -49,15 +91,45 @@ it.each([400, 401, 403, 404, 500])('maps history HTTP %s into a typed error', as
 const writes = [
   ['POST /api/teams', () => createTeam({ name: 'Team', timezone: 'UTC' }), team],
   ['POST /api/teams/team/projects', () => createProject(team.id, { name: 'Work', description: null }), project],
-  ['PUT /api/teams/team/projects/project', () => updateProject(team.id, project.id, { name: 'Work', description: null }), project],
+  [
+    'PUT /api/teams/team/projects/project',
+    () => updateProject(team.id, project.id, { name: 'Work', description: null }),
+    project,
+  ],
   ['POST /api/teams/team/projects/project/archive', () => archiveProject(team.id, project.id), project],
-  ['POST /api/teams/team/invites', () => createInvitation({ teamId: team.id, expiresAt: '2026-12-01T00:00:00Z', maxUses: 1 }), {}],
+  [
+    'POST /api/teams/team/invites',
+    () => createInvitation({ teamId: team.id, expiresAt: '2026-12-01T00:00:00Z', maxUses: 1 }),
+    {},
+  ],
   ['POST /api/invites/token/accept', () => acceptInvitation('token'), team],
   ['POST /api/timer/start', () => startTimer({ teamId: team.id, projectId: project.id, description: null }), timer],
   ['POST /api/timer/stop', () => stopTimer({ entryId: entry.id, description: null }), timer],
   ['POST /api/timer/pause', () => changeTimerState({ action: 'pause', entryId: entry.id, description: null }), timer],
-  ['POST /api/time-entries', () => createManualTimeEntry({ teamId: team.id, projectId: project.id, workDate: entry.workDate, durationSeconds: 60, description: null }), timer],
-  ['PATCH /api/time-entries/entry', () => updateTimeEntry({ id: entry.id, projectId: project.id, workDate: entry.workDate, durationSeconds: 60, description: null }), timer],
+  [
+    'POST /api/time-entries',
+    () =>
+      createManualTimeEntry({
+        teamId: team.id,
+        projectId: project.id,
+        workDate: entry.workDate,
+        durationSeconds: 60,
+        description: null,
+      }),
+    timer,
+  ],
+  [
+    'PATCH /api/time-entries/entry',
+    () =>
+      updateTimeEntry({
+        id: entry.id,
+        projectId: project.id,
+        workDate: entry.workDate,
+        durationSeconds: 60,
+        description: null,
+      }),
+    timer,
+  ],
   ['DELETE /api/time-entries/entry', () => deleteTimeEntry(entry.id), null],
   ['POST /api/auth/logout', () => logout(), null],
 ] as const
@@ -70,4 +142,51 @@ it.each(writes)('protects %s with CSRF and session cookies', async (key, operati
 it('returns history response metadata without discarding pagination', async () => {
   mockApi()
   expect(await getTimeEntryHistory(team.id, { projectId: '', from: '', to: '' }, 0)).toEqual(history())
+})
+it('reads without asking for a CSRF token', async () => {
+  const fetcher = mockApi()
+  await getTags(team.id, false)
+  expect(fetcher).toHaveBeenCalledTimes(1)
+  expect(fetcher.mock.calls[0]![1]).not.toHaveProperty('headers')
+})
+it('uploads a picture as multipart form data, not as JSON', async () => {
+  const fetcher = mockApi({ 'PUT /api/account/avatar': () => json(null, 204) })
+  await uploadAvatar(new Blob(['jpeg'], { type: 'image/jpeg' }))
+  const [, options] = fetcher.mock.calls[1]!
+  expect(options?.body).toBeInstanceOf(FormData)
+  expect(options?.headers).toEqual({ 'X-CSRF-TOKEN': 'csrf' })
+})
+it('keeps the server refusal codes the pages act on', async () => {
+  mockApi({
+    'POST /api/account/password': () => json({ code: 'PASSWORD_NOT_SET' }, 400),
+    'POST /api/account/google/unlink': () => json({ code: 'LAST_SIGN_IN_METHOD' }, 409),
+  })
+  await expect(changePassword({ currentPassword: 'old', newPassword: 'Long-password-1' })).rejects.toMatchObject({
+    status: 400,
+    code: 'PASSWORD_NOT_SET',
+  })
+  await expect(unlinkGoogle('secret')).rejects.toMatchObject({
+    status: 409,
+    code: 'LAST_SIGN_IN_METHOD',
+    message: 'Nie możesz odłączyć Google, dopóki nie ustawisz hasła.',
+  })
+})
+it('tells every request about an ended session, and the rate limit in the interface language', async () => {
+  mockApi({
+    [`GET /api/teams/${team.id}/tags`]: () => json(null, 401),
+    'POST /api/teams': () => new Response(null, { status: 429, headers: { 'Retry-After': '120' } }),
+  })
+  await expect(getTags(team.id, false)).rejects.toMatchObject({
+    status: 401,
+    message: 'Sesja wygasła. Zaloguj się ponownie.',
+  })
+  document.documentElement.lang = 'en'
+  try {
+    await expect(createTeam({ name: 'Team', timezone: 'UTC' })).rejects.toMatchObject({
+      status: 429,
+      message: 'Too many attempts. Try again in 2 min.',
+    })
+  } finally {
+    document.documentElement.lang = 'pl'
+  }
 })

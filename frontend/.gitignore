@@ -3,3 +3,12 @@ dist/
 test-results/
 playwright-report/
 *.tsbuildinfo
+
+### IntelliJ IDEA / WebStorm ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### VS Code ###
+.vscode/

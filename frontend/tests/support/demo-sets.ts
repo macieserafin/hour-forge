@@ -3,7 +3,7 @@ import { create, expect, login, member, memberPassword, owner, password, teamDat
 import type { Project, Team, User } from '../../src/lib/api'
 
 /**
- * Demo data sets A–E for the frontend rebuild (document 06, section 2). Each set starts from the empty database the
+ * Demo data sets A–E for the frontend rebuild. Each set starts from the empty database the
  * managed E2E fixture gives every test, with two accounts: Maja Nowak (`owner`, also the instance operator) and
  * Tomasz Kowalczyk (`member`). Light data goes through the public API; history and the large team are written to the
  * disposable test database directly, with checksums computed here so a test can prove where every total comes from.
@@ -24,11 +24,14 @@ const DAY = 86_400
 export function sql(query: string): string {
   const container = process.env.HOUR_FORGE_E2E_CONTAINER
   if (!container?.startsWith('hour-forge-e2e-')) throw new Error('Demo data needs the managed E2E database.')
-  return execFileSync('docker', ['exec', '-i', container, 'psql', '-U', 'hourforge_e2e', '-d', 'hourforge_e2e', '-v', 'ON_ERROR_STOP=1', '-tA'],
-    { input: query, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim()
+  return execFileSync(
+    'docker',
+    ['exec', '-i', container, 'psql', '-U', 'hourforge_e2e', '-d', 'hourforge_e2e', '-v', 'ON_ERROR_STOP=1', '-tA'],
+    { input: query, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+  ).trim()
 }
 
-const quote = (value: string | null) => value === null ? 'NULL' : `'${value.replace(/'/g, "''")}'`
+const quote = (value: string | null) => (value === null ? 'NULL' : `'${value.replace(/'/g, "''")}'`)
 
 async function send(request: Request, method: 'PATCH' | 'PUT' | 'DELETE', path: string, data?: unknown) {
   const csrf = await (await request.get('/api/auth/csrf')).json()
@@ -41,40 +44,86 @@ async function send(request: Request, method: 'PATCH' | 'PUT' | 'DELETE', path: 
 export async function signIn(browser: Browser, email: string, secret: string): Promise<Session> {
   const context = await browser.newContext({ baseURL })
   const csrf = await (await context.request.get('/api/auth/csrf')).json()
-  const response = await context.request.post('/api/auth/login', { form: { email, password: secret }, headers: { [csrf.headerName]: csrf.token } })
+  const response = await context.request.post('/api/auth/login', {
+    form: { email, password: secret },
+    headers: { [csrf.headerName]: csrf.token },
+  })
   expect(response.ok(), `login ${email}: ${response.status()}`).toBe(true)
   return context
 }
 
-const rename = (request: Request, displayName: string) => send(request, 'PATCH', '/api/account/profile', { displayName })
+const rename = (request: Request, displayName: string) =>
+  send(request, 'PATCH', '/api/account/profile', { displayName })
 const me = async (request: Request): Promise<User> => (await request.get('/api/me')).json()
-const newTeam = (request: Request, name: string, timezone = WARSAW): Promise<Team> => create(request, '/api/teams', { name, timezone })
-const newProject = (request: Request, team: Team, name: string, color: string, description: string | null = null): Promise<Project> =>
-  create(request, `/api/teams/${team.id}/projects`, { name, color, description })
+const newTeam = (request: Request, name: string, timezone = WARSAW): Promise<Team> =>
+  create(request, '/api/teams', { name, timezone })
+const newProject = (
+  request: Request,
+  team: Team,
+  name: string,
+  color: string,
+  description: string | null = null,
+): Promise<Project> => create(request, `/api/teams/${team.id}/projects`, { name, color, description })
 const updateTeam = (request: Request, team: Team, changes: Record<string, unknown>) =>
   send(request, 'PATCH', `/api/teams/${team.id}`, { name: team.name, timezone: team.timezone, ...changes })
-const invite = (request: Request, team: Team, maxUses: number | null = 1, days = 7): Promise<{ id: string; token: string; invitationUrl: string }> =>
-  create(request, `/api/teams/${team.id}/invites`, { expiresAt: new Date(Date.now() + days * DAY * 1000).toISOString(), maxUses })
+const invite = (
+  request: Request,
+  team: Team,
+  maxUses: number | null = 1,
+  days = 7,
+): Promise<{ id: string; token: string; invitationUrl: string }> =>
+  create(request, `/api/teams/${team.id}/invites`, {
+    expiresAt: new Date(Date.now() + days * DAY * 1000).toISOString(),
+    maxUses,
+  })
 const accept = (request: Request, token: string): Promise<Team> => create(request, `/api/invites/${token}/accept`, {})
 const setRole = (request: Request, team: Team, userId: string, role: 'ADMIN' | 'MEMBER') =>
   send(request, 'PUT', `/api/teams/${team.id}/members/${userId}/role`, { role })
-const manual = (request: Request, team: Team, project: Project, workDate: string | null, durationSeconds: number, description: string, tagId?: string) =>
-  create(request, '/api/time-entries', { teamId: team.id, projectId: project.id, workDate, durationSeconds, description, ...(tagId ? { tagId } : {}) })
+const manual = (
+  request: Request,
+  team: Team,
+  project: Project,
+  workDate: string | null,
+  durationSeconds: number,
+  description: string,
+  tagId?: string,
+) =>
+  create(request, '/api/time-entries', {
+    teamId: team.id,
+    projectId: project.id,
+    workDate,
+    durationSeconds,
+    description,
+    ...(tagId ? { tagId } : {}),
+  })
 
 /** One historical entry written straight to the database. Timer entries start at the given local hour of their work date. */
-export interface Row { userId: string; team: Team; project: Project; workDate: string | null; seconds: number; type: 'TIMER' | 'MANUAL'; description: string; startHour?: number; tagId?: string }
+export interface Row {
+  userId: string
+  team: Team
+  project: Project
+  workDate: string | null
+  seconds: number
+  type: 'TIMER' | 'MANUAL'
+  description: string
+  startHour?: number
+  tagId?: string
+}
 
 function insertRows(rows: Row[]) {
   for (let offset = 0; offset < rows.length; offset += 500) {
     const values = rows.slice(offset, offset + 500).map(row => {
       if (row.type === 'TIMER' && !row.workDate) throw new Error('A timer entry needs a work date.')
-      const start = row.type === 'TIMER'
-        ? `((${quote(row.workDate)}::date + time '00:00' + interval '${row.startHour ?? 9} hours') AT TIME ZONE ${quote(row.team.timezone)})`
-        : 'NULL'
+      const start =
+        row.type === 'TIMER'
+          ? `((${quote(row.workDate)}::date + time '00:00' + interval '${row.startHour ?? 9} hours') AT TIME ZONE ${quote(row.team.timezone)})`
+          : 'NULL'
       const end = row.type === 'TIMER' ? `(${start} + interval '${row.seconds} seconds')` : 'NULL'
       return `(gen_random_uuid(), ${quote(row.userId)}, ${quote(row.team.id)}, ${quote(row.project.id)}, '${row.type}', ${row.workDate ? `${quote(row.workDate)}::date` : 'NULL'}, ${start}, ${end}, ${row.seconds}, ${quote(row.description)}, ${row.tagId ? quote(row.tagId) : 'NULL'})`
     })
-    sql(`INSERT INTO time_entries (id, user_id, team_id, project_id, entry_type, work_date, started_at, ended_at, duration_seconds, description, tag_id) VALUES\n${values.join(',\n')};`)
+    sql(
+      `INSERT INTO time_entries (id, user_id, team_id, project_id, entry_type, work_date, started_at, ended_at, duration_seconds, description, tag_id) VALUES\n${values.join(',\n')};`,
+    )
   }
 }
 
@@ -83,7 +132,11 @@ const isWorkday = (date: string) => weekday(date) !== 0 && weekday(date) !== 6
 const sum = (rows: { seconds: number }[]) => rows.reduce((total, row) => total + row.seconds, 0)
 
 /** Total and count the team report gives for a period (or for undated work), as one person sees it. */
-export async function reportTotals(request: Request, team: Team, filter: { from?: string; to?: string; undated?: boolean; userId?: string }) {
+export async function reportTotals(
+  request: Request,
+  team: Team,
+  filter: { from?: string; to?: string; undated?: boolean; userId?: string },
+) {
   const params = new URLSearchParams()
   if (filter.undated) params.set('undated', 'true')
   if (filter.from) params.set('from', filter.from)
@@ -94,8 +147,18 @@ export async function reportTotals(request: Request, team: Team, filter: { from?
   return (await response.json()).totals as { durationSeconds: number; entryCount: number }
 }
 
-const descriptions = ['Przegląd wymagań', 'Spotkanie z klientem', 'Implementacja formularza', 'Poprawki po testach', 'Dokumentacja zmian',
-  'Analiza zgłoszenia', 'Przygotowanie prezentacji', 'Konsultacje w zespole', 'Testy na telefonie', 'Porządkowanie zadań']
+const descriptions = [
+  'Przegląd wymagań',
+  'Spotkanie z klientem',
+  'Implementacja formularza',
+  'Poprawki po testach',
+  'Dokumentacja zmian',
+  'Analiza zgłoszenia',
+  'Przygotowanie prezentacji',
+  'Konsultacje w zespole',
+  'Testy na telefonie',
+  'Porządkowanie zadań',
+]
 
 // ---------- A. Nowy użytkownik ----------
 
@@ -119,13 +182,21 @@ export async function prepareNewcomer(page: Page) {
   await page.context().clearCookies()
   await login(page, member, memberPassword)
   await rename(page.request, 'Tomasz Kowalczyk')
-  return { team, invitations: { valid: `/invite/${valid.token}`, expired: `/invite/${expired.token}`, used: `/invite/${used.token}`, revoked: `/invite/${revoked.token}` } }
+  return {
+    team,
+    invitations: {
+      valid: `/invite/${valid.token}`,
+      expired: `/invite/${expired.token}`,
+      used: `/invite/${used.token}`,
+      revoked: `/invite/${revoked.token}`,
+    },
+  }
 }
 
 // ---------- B. Praca indywidualna ----------
 
 /**
- * Maja works alone: a one-person team named like the proposed personal space (O01), three active projects and one
+ * Maja works alone: a one-person team named like the proposed personal space, three active projects and one
  * archived, eight weeks of timer and manual work on weekdays, undated entries, a tag and templates. Today stays empty.
  */
 export async function prepareSolo(page: Page) {
@@ -140,8 +211,17 @@ export async function prepareSolo(page: Page) {
   ]
   const old = await newProject(page.request, team, 'Logo dla kawiarni', 'BROWN')
   const tag = await create(page.request, `/api/teams/${team.id}/tags`, { name: 'Spotkania', color: 'BLUE' })
-  await create(page.request, `/api/teams/${team.id}/templates`, { name: 'Spotkanie z klientem', projectId: projects[0]!.id, description: 'Spotkanie z klientem', tagId: tag.id })
-  await create(page.request, `/api/teams/${team.id}/templates`, { name: 'Pisanie pracy', projectId: projects[2]!.id, description: 'Pisanie rozdziału' })
+  await create(page.request, `/api/teams/${team.id}/templates`, {
+    name: 'Spotkanie z klientem',
+    projectId: projects[0]!.id,
+    description: 'Spotkanie z klientem',
+    tagId: tag.id,
+  })
+  await create(page.request, `/api/teams/${team.id}/templates`, {
+    name: 'Pisanie pracy',
+    projectId: projects[2]!.id,
+    description: 'Pisanie rozdziału',
+  })
 
   const rows: Row[] = []
   for (let daysAgo = 1; daysAgo <= 56; daysAgo++) {
@@ -151,8 +231,17 @@ export async function prepareSolo(page: Page) {
     for (let k = 0; k <= daysAgo % 3; k++) {
       const seconds = 1800 * (1 + ((daysAgo * 3 + k * 5) % 6))
       const project = daysAgo > 42 && k === 0 ? old : projects[(daysAgo + k) % 3]!
-      rows.push({ userId: user.id, team, project, workDate, seconds, type: (daysAgo + k) % 2 === 0 ? 'TIMER' : 'MANUAL',
-        description: descriptions[(daysAgo + k) % descriptions.length]!, startHour: hour, tagId: k === 1 ? tag.id : undefined })
+      rows.push({
+        userId: user.id,
+        team,
+        project,
+        workDate,
+        seconds,
+        type: (daysAgo + k) % 2 === 0 ? 'TIMER' : 'MANUAL',
+        description: descriptions[(daysAgo + k) % descriptions.length]!,
+        startHour: hour,
+        tagId: k === 1 ? tag.id : undefined,
+      })
       hour += Math.ceil(seconds / 3600) + 1
     }
   }
@@ -165,12 +254,19 @@ export async function prepareSolo(page: Page) {
   ]
 
   return {
-    team, projects, archivedProject: old, tag, undated,
+    team,
+    projects,
+    archivedProject: old,
+    tag,
+    undated,
     expected: {
-      from: teamDate(56, WARSAW), to: teamDate(1, WARSAW),
-      datedSeconds: sum(rows), datedEntries: rows.length,
+      from: teamDate(56, WARSAW),
+      to: teamDate(1, WARSAW),
+      datedSeconds: sum(rows),
+      datedEntries: rows.length,
       timerEntries: rows.filter(row => row.type === 'TIMER').length,
-      undatedSeconds: 7200 + 3600 + 5400, undatedEntries: 3,
+      undatedSeconds: 7200 + 3600 + 5400,
+      undatedEntries: 3,
     },
   }
 }
@@ -212,33 +308,59 @@ export async function prepareTeams(page: Page, browser: Browser) {
     // Through the consent flow of the Atlassian stand-in, independent of any screen of the app.
     const { url } = await create(page.request, '/api/integrations/jira/authorize', { teamId: atlas.id, intent: 'SITE' })
     await page.goto(url)
-    await expect.poll(async () => (await (await page.request.get(`/api/integrations/jira/status?teamId=${atlas.id}`)).json()).siteConnected).toBe(true)
+    await expect
+      .poll(
+        async () =>
+          (await (await page.request.get(`/api/integrations/jira/status?teamId=${atlas.id}`)).json()).siteConnected,
+      )
+      .toBe(true)
 
     const rows: Row[] = []
     for (let daysAgo = 1; daysAgo <= 14; daysAgo++) {
-      for (const [index, [userId, team, project, tagId]] of ([
-        [maja.id, atlas, daysAgo % 2 ? atlasWeb : atlasApp, undefined],
-        [maja.id, nord, daysAgo % 3 ? nordWeb : nordCampaign, undefined],
-        [maja.id, club, clubResearch, clubTag.id],
-        [tomasz.id, nord, nordWeb, undefined],
-        [tomasz.id, atlas, atlasApp, undefined],
-      ] as const).entries()) {
+      for (const [index, [userId, team, project, tagId]] of (
+        [
+          [maja.id, atlas, daysAgo % 2 ? atlasWeb : atlasApp, undefined],
+          [maja.id, nord, daysAgo % 3 ? nordWeb : nordCampaign, undefined],
+          [maja.id, club, clubResearch, clubTag.id],
+          [tomasz.id, nord, nordWeb, undefined],
+          [tomasz.id, atlas, atlasApp, undefined],
+        ] as const
+      ).entries()) {
         const workDate = teamDate(daysAgo, team.timezone)
         if (!isWorkday(workDate) || (index === 2 && daysAgo % 4 !== 0)) continue
-        rows.push({ userId, team, project, workDate, seconds: 900 * (2 + ((daysAgo + index) % 7)), type: (daysAgo + index) % 2 ? 'TIMER' : 'MANUAL',
-          description: descriptions[(daysAgo * 2 + index) % descriptions.length]!, startHour: 9 + index, tagId })
+        rows.push({
+          userId,
+          team,
+          project,
+          workDate,
+          seconds: 900 * (2 + ((daysAgo + index) % 7)),
+          type: (daysAgo + index) % 2 ? 'TIMER' : 'MANUAL',
+          description: descriptions[(daysAgo * 2 + index) % descriptions.length]!,
+          startHour: 9 + index,
+          tagId,
+        })
       }
     }
     insertRows(rows)
     const own = (team: Team) => rows.filter(row => row.userId === maja.id && row.team.id === team.id)
     return {
-      maja, tomasz, teams: { atlas, nord, club }, projects: { atlasWeb, atlasApp, nordWeb, nordCampaign, clubResearch }, clubTag,
+      maja,
+      tomasz,
+      teams: { atlas, nord, club },
+      projects: { atlasWeb, atlasApp, nordWeb, nordCampaign, clubResearch },
+      clubTag,
       expected: {
         // Each team counts its own work dates; the range is the widest one the rows can use.
-        from: teamDate(14, 'America/New_York') < teamDate(14, WARSAW) ? teamDate(14, 'America/New_York') : teamDate(14, WARSAW),
+        from:
+          teamDate(14, 'America/New_York') < teamDate(14, WARSAW)
+            ? teamDate(14, 'America/New_York')
+            : teamDate(14, WARSAW),
         to: teamDate(1, WARSAW),
         majaSeconds: { atlas: sum(own(atlas)), nord: sum(own(nord)), club: sum(own(club)) },
-        teamSeconds: { atlas: sum(rows.filter(row => row.team.id === atlas.id)), nord: sum(rows.filter(row => row.team.id === nord.id)) },
+        teamSeconds: {
+          atlas: sum(rows.filter(row => row.team.id === atlas.id)),
+          nord: sum(rows.filter(row => row.team.id === nord.id)),
+        },
       },
     }
   } finally {
@@ -248,14 +370,89 @@ export async function prepareTeams(page: Page, browser: Browser) {
 
 // ---------- D. Większy zespół ----------
 
-const firstNames = ['Anna', 'Piotr', 'Katarzyna', 'Michał', 'Agnieszka', 'Krzysztof', 'Magdalena', 'Tomasz', 'Joanna', 'Paweł',
-  'Aleksandra', 'Łukasz', 'Ewa', 'Grzegorz', 'Zofia', 'Jakub', 'Natalia', 'Wojciech', 'Julia', 'Bartosz']
-const lastNames = ['Nowak', 'Wiśniewska', 'Wójcik', 'Kowalczyk', 'Kamińska', 'Lewandowski', 'Zielińska', 'Szymański', 'Woźniak', 'Dąbrowski',
-  'Kozłowska', 'Jankowski', 'Mazur', 'Kwiatkowska', 'Krawczyk', 'Piotrowski', 'Grabowska', 'Nowakowski', 'Pawłowska', 'Michalski',
-  'Król', 'Wieczorek', 'Jabłońska', 'Wróbel', 'Majewski']
-const areas = ['Portal', 'Aplikacja', 'Integracja', 'Kampania', 'Audyt', 'Migracja', 'Raport', 'Szkolenie', 'Wsparcie', 'Badanie']
-const clients = ['Atlas', 'Borealis', 'Cyfrowa Wieś', 'Delta', 'Echo Media', 'Fala', 'Granit', 'Horyzont', 'Iskra', 'Jantar',
-  'Kompas', 'Lumen', 'Mosty', 'Nadir', 'Orbita', 'Puls', 'Kwarc', 'Rubin', 'Sowa', 'Tęcza']
+const firstNames = [
+  'Anna',
+  'Piotr',
+  'Katarzyna',
+  'Michał',
+  'Agnieszka',
+  'Krzysztof',
+  'Magdalena',
+  'Tomasz',
+  'Joanna',
+  'Paweł',
+  'Aleksandra',
+  'Łukasz',
+  'Ewa',
+  'Grzegorz',
+  'Zofia',
+  'Jakub',
+  'Natalia',
+  'Wojciech',
+  'Julia',
+  'Bartosz',
+]
+const lastNames = [
+  'Nowak',
+  'Wiśniewska',
+  'Wójcik',
+  'Kowalczyk',
+  'Kamińska',
+  'Lewandowski',
+  'Zielińska',
+  'Szymański',
+  'Woźniak',
+  'Dąbrowski',
+  'Kozłowska',
+  'Jankowski',
+  'Mazur',
+  'Kwiatkowska',
+  'Krawczyk',
+  'Piotrowski',
+  'Grabowska',
+  'Nowakowski',
+  'Pawłowska',
+  'Michalski',
+  'Król',
+  'Wieczorek',
+  'Jabłońska',
+  'Wróbel',
+  'Majewski',
+]
+const areas = [
+  'Portal',
+  'Aplikacja',
+  'Integracja',
+  'Kampania',
+  'Audyt',
+  'Migracja',
+  'Raport',
+  'Szkolenie',
+  'Wsparcie',
+  'Badanie',
+]
+const clients = [
+  'Atlas',
+  'Borealis',
+  'Cyfrowa Wieś',
+  'Delta',
+  'Echo Media',
+  'Fala',
+  'Granit',
+  'Horyzont',
+  'Iskra',
+  'Jantar',
+  'Kompas',
+  'Lumen',
+  'Mosty',
+  'Nadir',
+  'Orbita',
+  'Puls',
+  'Kwarc',
+  'Rubin',
+  'Sowa',
+  'Tęcza',
+]
 const colors = ['VIOLET', 'BLUE', 'TEAL', 'GREEN', 'AMBER', 'ORANGE', 'RED', 'PINK', 'SLATE', 'BROWN']
 
 /** Duration of large-team entry `i` (1-based), shared by the SQL below and the checksum. */
@@ -300,19 +497,46 @@ SELECT gen_random_uuid(), m.ids[1 + s.i % 100], ${t}, p.ids[1 + (s.i * 7) % 200]
 FROM s, m, p;
 ANALYZE time_entries;`)
 
-  let datedSeconds = 0, datedEntries = 0, undatedSeconds = 0, undatedEntries = 0
+  let datedSeconds = 0,
+    datedEntries = 0,
+    undatedSeconds = 0,
+    undatedEntries = 0
   for (let i = 1; i <= entries; i++) {
-    if (largeUndated(i)) { undatedSeconds += largeSeconds(i); undatedEntries++ } else { datedSeconds += largeSeconds(i); datedEntries++ }
+    if (largeUndated(i)) {
+      undatedSeconds += largeSeconds(i)
+      undatedEntries++
+    } else {
+      datedSeconds += largeSeconds(i)
+      datedEntries++
+    }
   }
-  return { team, expected: { from: teamDate(90, WARSAW), to: teamDate(1, WARSAW), datedSeconds, datedEntries, undatedSeconds, undatedEntries, members: 100, projects: 200 } }
+  return {
+    team,
+    expected: {
+      from: teamDate(90, WARSAW),
+      to: teamDate(1, WARSAW),
+      datedSeconds,
+      datedEntries,
+      undatedSeconds,
+      undatedEntries,
+      members: 100,
+      projects: 200,
+    },
+  }
 }
 
 // ---------- E. Przypadki trudne ----------
 
-const longTeamName = 'Zażółć gęślą jaźń — zespół projektowy o wyjątkowo długiej nazwie, która sprawdza łamanie tekstu w nawigacji, nagłówkach i raportach PDF'
-const longProjectName = 'Wdrożenie systemu rezerwacji dla Stowarzyszenia Przyjaciół Ziemi Świętokrzyskiej i Okolicznych Gmin — etap drugi'
-const longDescription = ('Szczegółowy opis pracy z polskimi znakami: ąćęłńóśźż ĄĆĘŁŃÓŚŹŻ. ' +
-  'Zawiera wiele zdań, aby sprawdzić łamanie wierszy, skracanie w listach i pełny podgląd w szczegółach wpisu. ').repeat(14).slice(0, 2000)
+const longTeamName =
+  'Zażółć gęślą jaźń — zespół projektowy o wyjątkowo długiej nazwie, która sprawdza łamanie tekstu w nawigacji, nagłówkach i raportach PDF'
+const longProjectName =
+  'Wdrożenie systemu rezerwacji dla Stowarzyszenia Przyjaciół Ziemi Świętokrzyskiej i Okolicznych Gmin — etap drugi'
+const longDescription = (
+  'Szczegółowy opis pracy z polskimi znakami: ąćęłńóśźż ĄĆĘŁŃÓŚŹŻ. ' +
+  'Zawiera wiele zdań, aby sprawdzić łamanie wierszy, skracanie w listach i pełny podgląd w szczegółach wpisu. '
+)
+  .repeat(14)
+  .slice(0, 2000)
 
 /**
  * Edge cases: long names and descriptions with Polish characters, a project name repeated in an archived team, undated
@@ -348,7 +572,14 @@ export async function prepareEdgeCases(page: Page, browser: Browser) {
 
     const archivedTeam = await newTeam(page.request, 'Zespół zarchiwizowany')
     const archivedProject = await newProject(page.request, archivedTeam, longProjectName, 'SLATE')
-    await manual(page.request, archivedTeam, archivedProject, teamDate(10, WARSAW), 1800, 'Praca w zespole, który później zarchiwizowano')
+    await manual(
+      page.request,
+      archivedTeam,
+      archivedProject,
+      teamDate(10, WARSAW),
+      1800,
+      'Praca w zespole, który później zarchiwizowano',
+    )
     await create(page.request, `/api/teams/${archivedTeam.id}/archive`, {})
 
     return { maja, tomasz, team, archivedTeam, projects: { long, plain, retired, archivedProject }, entries, nearLimit }
@@ -362,7 +593,9 @@ export const demote = (owner: Request, team: Team, userId: string) => setRole(ow
 
 /** Changes an entry behind an open editor so its next save meets a newer version. */
 export function changeElsewhere(entryId: string) {
-  sql(`UPDATE time_entries SET description = left(coalesce(description, '') || ' (zmienione w innej sesji)', 2000), version = version + 1, updated_at = now() WHERE id = ${quote(entryId)};`)
+  sql(
+    `UPDATE time_entries SET description = left(coalesce(description, '') || ' (zmienione w innej sesji)', 2000), version = version + 1, updated_at = now() WHERE id = ${quote(entryId)};`,
+  )
 }
 
 export { owner, password }

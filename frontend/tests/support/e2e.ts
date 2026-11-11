@@ -9,38 +9,81 @@ export const password = 'E2E-owner-password-2026!'
 export const memberPassword = 'E2E-member-password-2026!'
 
 export const test = base.extend<{ isolatedDatabase: void }>({
-  isolatedDatabase: [async ({ request }, use) => {
-    const container = process.env.HOUR_FORGE_E2E_CONTAINER
-    if (!container?.startsWith('hour-forge-e2e-')) throw new Error('Managed E2E database was not started. Run tests through playwright.config.ts.')
-    const reset = () => execFileSync('docker', ['exec', container, 'psql', '-U', 'hourforge_e2e', '-d', 'hourforge_e2e',
-      '-v', 'ON_ERROR_STOP=1', '-c', 'TRUNCATE TABLE teams CASCADE; DELETE FROM email_tokens; DELETE FROM jira_user_authorizations; DELETE FROM oauth_states; DELETE FROM user_preferences; DELETE FROM login_events; DELETE FROM spring_session; DELETE FROM two_factor_backup_codes; DELETE FROM user_two_factor; DELETE FROM instance_announcement; DELETE FROM user_avatars; DELETE FROM user_identities; DELETE FROM user_credentials; DELETE FROM users;'], { stdio: 'pipe' })
-    reset()
-    await request.delete(`${mailApi()}/api/v1/messages`)
-    try {
-      for (const account of [
-        { displayName: 'User One', email: owner, password },
-        { displayName: 'User Two', email: member, password: memberPassword },
-      ]) {
-        const response = await post(request, '/api/auth/register', account)
-        expect(response.status()).toBe(201)
+  isolatedDatabase: [
+    async ({ request }, use) => {
+      const container = process.env.HOUR_FORGE_E2E_CONTAINER
+      if (!container?.startsWith('hour-forge-e2e-'))
+        throw new Error('Managed E2E database was not started. Run tests through playwright.config.ts.')
+      const reset = () =>
+        execFileSync(
+          'docker',
+          [
+            'exec',
+            container,
+            'psql',
+            '-U',
+            'hourforge_e2e',
+            '-d',
+            'hourforge_e2e',
+            '-v',
+            'ON_ERROR_STOP=1',
+            '-c',
+            'TRUNCATE TABLE teams CASCADE; DELETE FROM email_tokens; DELETE FROM jira_user_authorizations; DELETE FROM oauth_states; DELETE FROM user_preferences; DELETE FROM login_events; DELETE FROM spring_session; DELETE FROM two_factor_backup_codes; DELETE FROM user_two_factor; DELETE FROM instance_announcement; DELETE FROM user_avatars; DELETE FROM user_identities; DELETE FROM user_credentials; DELETE FROM users;',
+          ],
+          { stdio: 'pipe' },
+        )
+      reset()
+      await request.delete(`${mailApi()}/api/v1/messages`)
+      try {
+        for (const account of [
+          { displayName: 'User One', email: owner, password },
+          { displayName: 'User Two', email: member, password: memberPassword },
+        ]) {
+          const response = await post(request, '/api/auth/register', account)
+          expect(response.status()).toBe(201)
+        }
+        // Sign-in needs a confirmed address; the seeded accounts skip the mailbox round trip.
+        execFileSync(
+          'docker',
+          [
+            'exec',
+            container,
+            'psql',
+            '-U',
+            'hourforge_e2e',
+            '-d',
+            'hourforge_e2e',
+            '-v',
+            'ON_ERROR_STOP=1',
+            '-c',
+            'UPDATE users SET email_verified_at = now();',
+          ],
+          { stdio: 'pipe' },
+        )
+        await use()
+      } finally {
+        reset()
       }
-      // Sign-in needs a confirmed address; the seeded accounts skip the mailbox round trip.
-      execFileSync('docker', ['exec', container, 'psql', '-U', 'hourforge_e2e', '-d', 'hourforge_e2e', '-v', 'ON_ERROR_STOP=1',
-        '-c', 'UPDATE users SET email_verified_at = now();'], { stdio: 'pipe' })
-      await use()
-    } finally { reset() }
-  }, { auto: true }],
+    },
+    { auto: true },
+  ],
 })
 
-const mailApi = () => process.env.HOUR_FORGE_E2E_MAIL_API ?? (() => { throw new Error('Managed E2E mail server was not started.') })()
+const mailApi = () =>
+  process.env.HOUR_FORGE_E2E_MAIL_API ??
+  (() => {
+    throw new Error('Managed E2E mail server was not started.')
+  })()
 
 /** Path of the newest link `/<kind>/<token>` that the mail server received for the address. */
 export async function mailLink(request: APIRequestContext, to: string, kind: string): Promise<string> {
   const deadline = Date.now() + 15000
   while (Date.now() < deadline) {
-    const found = await (await request.get(`${mailApi()}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`)).json() as { messages?: { ID: string }[] }
+    const found = (await (
+      await request.get(`${mailApi()}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`)
+    ).json()) as { messages?: { ID: string }[] }
     for (const { ID } of found.messages ?? []) {
-      const message = await (await request.get(`${mailApi()}/api/v1/message/${ID}`)).json() as { Text: string }
+      const message = (await (await request.get(`${mailApi()}/api/v1/message/${ID}`)).json()) as { Text: string }
       const match = new RegExp(`/${kind}/([A-Za-z0-9_-]+)`).exec(message.Text)
       if (match) return `/${kind}/${match[1]}`
     }
@@ -65,7 +108,7 @@ export async function fillRegistration(page: Page, email: string, secret: string
 export async function login(page: Page, email = owner, secret = email === member ? memberPassword : password) {
   await page.goto('/login')
   await submitLogin(page, email, secret)
-  // A person without a team lands on the first start (F01); everyone else on My work.
+  // A person without a team lands on the first start; everyone else on My work.
   await expect(page).toHaveURL(/\/app\/(?:work|start)(?:\?|$)/)
 }
 
@@ -92,8 +135,12 @@ export const write = create
 
 /** Work date (YYYY-MM-DD) a number of days before today in the team time zone; stays inside the 2-year work date window. */
 export function teamDate(daysAgo = 0, timezone = 'Europe/Warsaw') {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
-    .format(new Date(Date.now() - daysAgo * 86_400_000))
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(Date.now() - daysAgo * 86_400_000))
 }
 
 export async function setupTeam(page: Page, suffix: string) {
@@ -103,7 +150,10 @@ export async function setupTeam(page: Page, suffix: string) {
 
 export async function createTeamProject(page: Page, suffix: string) {
   const team = await create(page.request, '/api/teams', { name: `Team ${suffix}`, timezone: 'Europe/Warsaw' })
-  const project = await create(page.request, `/api/teams/${team.id}/projects`, { name: `Project ${suffix}`, description: null })
+  const project = await create(page.request, `/api/teams/${team.id}/projects`, {
+    name: `Project ${suffix}`,
+    description: null,
+  })
   return { team, project }
 }
 
@@ -111,7 +161,8 @@ export async function createTeamProject(page: Page, suffix: string) {
 export function totp(secret: string, steps = 0) {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
   let bits = ''
-  for (const character of secret.replace(/[\s=]/g, '').toUpperCase()) bits += alphabet.indexOf(character).toString(2).padStart(5, '0')
+  for (const character of secret.replace(/[\s=]/g, '').toUpperCase())
+    bits += alphabet.indexOf(character).toString(2).padStart(5, '0')
   const key = Buffer.from(bits.match(/.{8}/g)!.map(byte => parseInt(byte, 2)))
   const counter = Buffer.alloc(8)
   counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000) + steps))
@@ -120,10 +171,20 @@ export function totp(secret: string, steps = 0) {
   return ((hash.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).toString().padStart(6, '0')
 }
 
-const fakeGoogle = () => process.env.HOUR_FORGE_E2E_GOOGLE ?? (() => { throw new Error('Managed Google stand-in was not started.') })()
+const fakeGoogle = () =>
+  process.env.HOUR_FORGE_E2E_GOOGLE ??
+  (() => {
+    throw new Error('Managed Google stand-in was not started.')
+  })()
 
 /** Chooses the Google account that consents next at the stand-in, or makes the person cancel there. */
-export async function setGoogleAccount(request: APIRequestContext, next: { account?: { sub: string; email: string; emailVerified?: boolean; hd?: string | null; name?: string }; cancel?: boolean }) {
+export async function setGoogleAccount(
+  request: APIRequestContext,
+  next: {
+    account?: { sub: string; email: string; emailVerified?: boolean; hd?: string | null; name?: string }
+    cancel?: boolean
+  },
+) {
   const response = await request.post(`${fakeGoogle()}/e2e/next`, { data: next })
   expect(response.status()).toBe(204)
 }
@@ -132,7 +193,9 @@ export async function setGoogleAccount(request: APIRequestContext, next: { accou
 export async function expectMail(request: APIRequestContext, to: string, subject: string) {
   const deadline = Date.now() + 15000
   while (Date.now() < deadline) {
-    const found = await (await request.get(`${mailApi()}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`)).json() as { messages?: { Subject: string }[] }
+    const found = (await (
+      await request.get(`${mailApi()}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`)
+    ).json()) as { messages?: { Subject: string }[] }
     if ((found.messages ?? []).some(message => message.Subject === subject)) return
     await new Promise(resolve => setTimeout(resolve, 250))
   }

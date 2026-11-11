@@ -2,11 +2,13 @@ import { expect, owner, password, test } from '../support/e2e'
 import { prepareNewcomer, prepareSolo, prepareTeams } from '../support/demo-sets'
 
 /**
- * Key flows of the rebuilt frontend on the real backend (06: F01–F06, R03–R05, R11). Each test starts from an empty
+ * Key flows of the rebuilt frontend on the real backend. Each test starts from an empty
  * database; demo sets give known checksums.
  */
 
-test('F01: a person without a team creates a team, adds a project separately, tracks time and adds undated work', { tag: '@responsive' }, async ({ page }) => {
+test('a person without a team creates a team, adds a project separately, tracks time and adds undated work', {
+  tag: '@responsive',
+}, async ({ page }) => {
   await prepareNewcomer(page)
   await page.goto('/app/work')
   await expect(page).toHaveURL(/\/app\/start$/)
@@ -18,7 +20,7 @@ test('F01: a person without a team creates a team, adds a project separately, tr
   await expect(page.getByRole('heading', { name: 'Moja praca', level: 1 })).toBeVisible()
   const workUrl = new URL(page.url())
   const teamId = workUrl.searchParams.get('team')
-  await page.goto('/app/teams/' + teamId + '/settings')
+  await page.goto(`/app/teams/${teamId}/settings`)
   await page.getByRole('radio', { name: 'Morski' }).check()
   await page.getByRole('button', { name: 'Zapisz zmiany' }).click()
   await expect(page.getByRole('status').filter({ hasText: 'Zapisano ustawienia zespołu' })).toBeVisible()
@@ -55,7 +57,7 @@ test('F01: a person without a team creates a team, adds a project separately, tr
   await expect(page.locator('.saved-entry')).toContainText('1 h 30 min')
 })
 
-test('F02: an invitation survives sign-in and the new member records work in the team', async ({ page }) => {
+test('an invitation survives sign-in and the new member records work in the team', async ({ page }) => {
   const { team, invitations } = await prepareNewcomer(page)
   // Links that can no longer be used explain why, before the person joins with the valid one.
   for (const link of [invitations.expired, invitations.used, invitations.revoked]) {
@@ -68,12 +70,14 @@ test('F02: an invitation survives sign-in and the new member records work in the
   await page.getByRole('link', { name: 'Przejdź do swojej pracy' }).click()
   await expect(page.getByRole('heading', { name: 'Moja praca', level: 1 })).toBeVisible()
   await page.getByRole('button', { name: 'Uruchom timer', exact: true }).click()
-  await expect(page.getByRole('article', { name: 'Mierz czas' }).getByRole('button', { name: /Portal klienta/ })).toBeVisible()
+  await expect(
+    page.getByRole('article', { name: 'Mierz czas' }).getByRole('button', { name: /Portal klienta/ }),
+  ).toBeVisible()
 })
 
-test('F03/F04: work across teams keeps the target unambiguous and the totals match the server', async ({ page, browser }) => {
+test('work across teams keeps the target unambiguous and the totals match the server', async ({ page, browser }) => {
   const { teams } = await prepareTeams(page, browser)
-  await page.goto('/app/work?team=' + teams.atlas.id)
+  await page.goto(`/app/work?team=${teams.atlas.id}`)
   await page.getByRole('button', { name: 'Dodaj czas', exact: true }).click()
   const manual = page.getByRole('article', { name: 'Dodaj czas' })
   await manual.getByLabel('Czas trwania').fill('45m')
@@ -83,18 +87,31 @@ test('F03/F04: work across teams keeps the target unambiguous and the totals mat
   await expect(manual.getByLabel(/^Opis/)).toHaveValue('Szkic dla Atlasu')
   await manual.getByRole('button', { name: 'Nie pamiętam daty' }).click()
   await manual.getByRole('button', { name: 'Zapisz 45 min' }).click()
-  await expect(page.getByRole('link', { name: 'Zobacz wpis' })).toHaveAttribute('href', new RegExp('team=' + teams.atlas.id))
+  await expect(page.getByRole('link', { name: 'Zobacz wpis' })).toHaveAttribute(
+    'href',
+    new RegExp(`team=${teams.atlas.id}`),
+  )
   await page.getByLabel('Pokaż wpisy').selectOption('')
   await page.getByRole('button', { name: 'Uruchom timer', exact: true }).click()
   const measure = page.getByRole('article', { name: 'Mierz czas' })
-  await measure.getByRole('button', { name: /Projekt/ }).first().click()
+  await measure
+    .getByRole('button', { name: /Projekt/ })
+    .first()
+    .click()
   await page.getByRole('combobox', { name: /Szukaj projekt/ }).press('Tab')
   await expect(page.getByRole('listbox')).toBeHidden()
-  await measure.getByRole('button', { name: /Projekt/ }).first().click()
+  await measure
+    .getByRole('button', { name: /Projekt/ })
+    .first()
+    .click()
   const list = page.getByRole('listbox')
   // The same project name in two teams stays distinguishable by its team group.
-  await expect(list.getByRole('group', { name: 'Studio Atlas' }).getByRole('option', { name: 'Strona WWW' })).toBeVisible()
-  await expect(list.getByRole('group', { name: 'Agencja Nord' }).getByRole('option', { name: 'Strona WWW' })).toBeVisible()
+  await expect(
+    list.getByRole('group', { name: 'Studio Atlas' }).getByRole('option', { name: 'Strona WWW' }),
+  ).toBeVisible()
+  await expect(
+    list.getByRole('group', { name: 'Agencja Nord' }).getByRole('option', { name: 'Strona WWW' }),
+  ).toBeVisible()
   await list.getByRole('group', { name: 'Agencja Nord' }).getByRole('option', { name: 'Strona WWW' }).click()
   await measure.getByLabel(/Nad czym pracujesz/).fill('Poprawki menu')
   await measure.getByRole('button', { name: 'Rozpocznij', exact: true }).click()
@@ -111,7 +128,9 @@ test('F03/F04: work across teams keeps the target unambiguous and the totals mat
   await expect(grid).toBeVisible()
 })
 
-test('F06: the team report drills down from a person to entries and keeps filters in the address', { tag: '@responsive' }, async ({ page, browser }) => {
+test('the team report drills down from a person to entries and keeps filters in the address', {
+  tag: '@responsive',
+}, async ({ page, browser }) => {
   const { teams, maja } = await prepareTeams(page, browser)
   await page.goto(`/dashboard?view=team&team=${teams.atlas.id}`)
   await expect(page).toHaveURL(new RegExp(`/app/teams/${teams.atlas.id}/reports`))
@@ -119,14 +138,16 @@ test('F06: the team report drills down from a person to entries and keeps filter
   await page.getByRole('button', { name: new RegExp(`Pokaż wpisy: ${maja.displayName}`) }).click()
   await expect(page).toHaveURL(new RegExp(`person=${maja.id}`))
   await expect(page.getByRole('button', { name: new RegExp(`Usuń filtr: Osoba: ${maja.displayName}`) })).toBeVisible()
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    page.viewportSize()!.width,
+  )
   await page.getByText('Eksportuj', { exact: true }).click()
   const download = page.waitForEvent('download')
   await page.getByRole('button', { name: 'CSV' }).click()
   expect((await download).suggestedFilename()).toMatch(/\.csv$/)
 })
 
-test('R05: a member has no team report and sees their own report instead', async ({ page, browser }) => {
+test('a member has no team report and sees their own report instead', async ({ page, browser }) => {
   const { teams } = await prepareTeams(page, browser)
   await page.goto(`/app/teams/${teams.club.id}/reports`)
   await expect(page.getByText('Raport zespołu widzą właściciel i administratorzy.')).toBeVisible()
@@ -134,7 +155,7 @@ test('R05: a member has no team report and sees their own report instead', async
   await expect(page.getByRole('heading', { name: 'Mój raport', level: 1 })).toBeVisible()
 })
 
-test('R11: an unknown address shows 404 and a deep link returns after sign-in', async ({ page }) => {
+test('an unknown address shows 404 and a deep link returns after sign-in', async ({ page }) => {
   await prepareSolo(page)
   await page.goto('/app/nie-ma-takiej-strony')
   await expect(page.getByRole('heading', { name: 'Nie ma takiej strony' })).toBeVisible()

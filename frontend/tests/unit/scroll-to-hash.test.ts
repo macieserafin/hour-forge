@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import { useScrollToHash } from '../../src/features/account/Account'
+import { useScrollToHash } from '../../src/lib/scrollToHash'
 
 /** E-mail links such as /account#sessions open the right section, even when it appears only after its data loads. */
 describe('scrolling to a section from the address', () => {
-  afterEach(() => { document.body.replaceChildren(); vi.useRealTimers() })
+  afterEach(() => {
+    document.body.replaceChildren()
+    vi.useRealTimers()
+  })
 
   const section = (id: string) => {
     const element = document.createElement('section')

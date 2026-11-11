@@ -50,7 +50,13 @@ const messages = {
 }
 
 type Mode = 'team' | 'invite'
-const browserZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Warsaw' } catch { return 'Europe/Warsaw' } }
+const browserZone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Warsaw'
+  } catch {
+    return 'Europe/Warsaw'
+  }
+}
 
 export function StartPage() {
   const m = useMessages(messages)
@@ -58,21 +64,63 @@ export function StartPage() {
   const teams = useTeams(user.id)
   const [mode, setMode] = useState<Mode | null>(null)
   const hasTeams = !!teams.data?.length
-  return <div className="page start">
-    <header className="page-head"><div><h1>{m('title')}</h1><p className="muted">{m('intro')}</p></div></header>
-    <div className="start-choices" role="group" aria-label={m('title')}>
-      <Choice icon={<Users size={22} />} title={m('team')} body={m('team.body')} active={mode === 'team'} onSelect={() => setMode('team')} />
-      <Choice icon={<Link2 size={22} />} title={m('invite')} body={m('invite.body')} active={mode === 'invite'} onSelect={() => setMode('invite')} />
+  return (
+    <div className="page start">
+      <header className="page-head">
+        <div>
+          <h1>{m('title')}</h1>
+          <p className="muted">{m('intro')}</p>
+        </div>
+      </header>
+      <div className="start-choices" role="group" aria-label={m('title')}>
+        <Choice
+          icon={<Users size={22} />}
+          title={m('team')}
+          body={m('team.body')}
+          active={mode === 'team'}
+          onSelect={() => setMode('team')}
+        />
+        <Choice
+          icon={<Link2 size={22} />}
+          title={m('invite')}
+          body={m('invite.body')}
+          active={mode === 'invite'}
+          onSelect={() => setMode('invite')}
+        />
+      </div>
+      {mode === 'invite' ? <InviteForm /> : mode && <CreateForm />}
+      {hasTeams && (
+        <Link className="back-link" to="/app/work">
+          <ArrowLeft size={16} aria-hidden="true" />
+          {m('back')}
+        </Link>
+      )}
     </div>
-    {mode === 'invite' ? <InviteForm /> : mode && <CreateForm />}
-    {hasTeams && <Link className="back-link" to="/app/work"><ArrowLeft size={16} aria-hidden="true" />{m('back')}</Link>}
-  </div>
+  )
 }
 
-function Choice({ icon, title, body, active, onSelect }: { icon: React.ReactNode; title: string; body: string; active: boolean; onSelect: () => void }) {
-  return <button type="button" className="start-choice" aria-pressed={active} onClick={onSelect}>
-    <span className="start-icon" aria-hidden="true">{icon}</span><b>{title}</b><span className="muted">{body}</span>
-  </button>
+function Choice({
+  icon,
+  title,
+  body,
+  active,
+  onSelect,
+}: {
+  icon: React.ReactNode
+  title: string
+  body: string
+  active: boolean
+  onSelect: () => void
+}) {
+  return (
+    <button type="button" className="start-choice" aria-pressed={active} onClick={onSelect}>
+      <span className="start-icon" aria-hidden="true">
+        {icon}
+      </span>
+      <b>{title}</b>
+      <span className="muted">{body}</span>
+    </button>
+  )
 }
 
 function CreateForm() {
@@ -88,22 +136,69 @@ function CreateForm() {
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (!name.trim()) { setError(m('need.name')); return }
+    if (!name.trim()) {
+      setError(m('need.name'))
+      return
+    }
     setError('')
-    createTeam.mutate({ name: name.trim(), timezone: zone }, { onSuccess: team => {
-      toast(m('done'))
-      navigate('/app/work?team=' + encodeURIComponent(team.id), { replace: true })
-    } })
+    createTeam.mutate(
+      { name: name.trim(), timezone: zone },
+      {
+        onSuccess: team => {
+          toast(m('done'))
+          navigate(`/app/work?team=${encodeURIComponent(team.id)}`, { replace: true })
+        },
+      },
+    )
   }
 
-  return <form className="card stack start-form" onSubmit={submit} noValidate>
-    <Field label={m('team.name')} error={error || undefined}>{props =>
-      <input {...props} className="input" value={name} disabled={createTeam.isPending} maxLength={255} required autoFocus onChange={event => { setName(event.target.value); setError('') }} />}</Field>
-    <Field label={m('zone')} hint={m('zone.hint')}>{props =>
-      <select {...props} className="select input" value={zone} disabled={createTeam.isPending} onChange={event => setZone(event.target.value)}>{zones.map(item => <option key={item}>{item}</option>)}</select>}</Field>
-    {createTeam.isError && <Notice tone="error">{createTeam.error.message}</Notice>}
-    <Button type="submit" variant="primary" pending={createTeam.isPending}>{createTeam.isPending ? m('creating') : <>{m('create')}<ArrowRight size={16} aria-hidden="true" /></>}</Button>
-  </form>
+  return (
+    <form className="card stack start-form" onSubmit={submit} noValidate>
+      <Field label={m('team.name')} error={error || undefined}>
+        {props => (
+          <input
+            {...props}
+            className="input"
+            value={name}
+            disabled={createTeam.isPending}
+            maxLength={255}
+            required
+            autoFocus
+            onChange={event => {
+              setName(event.target.value)
+              setError('')
+            }}
+          />
+        )}
+      </Field>
+      <Field label={m('zone')} hint={m('zone.hint')}>
+        {props => (
+          <select
+            {...props}
+            className="select input"
+            value={zone}
+            disabled={createTeam.isPending}
+            onChange={event => setZone(event.target.value)}
+          >
+            {zones.map(item => (
+              <option key={item}>{item}</option>
+            ))}
+          </select>
+        )}
+      </Field>
+      {createTeam.isError && <Notice tone="error">{createTeam.error.message}</Notice>}
+      <Button type="submit" variant="primary" pending={createTeam.isPending}>
+        {createTeam.isPending ? (
+          m('creating')
+        ) : (
+          <>
+            {m('create')}
+            <ArrowRight size={16} aria-hidden="true" />
+          </>
+        )}
+      </Button>
+    </form>
+  )
 }
 
 function InviteForm() {
@@ -114,12 +209,34 @@ function InviteForm() {
   const submit = (event: FormEvent) => {
     event.preventDefault()
     const token = /\/invite\/([A-Za-z0-9_-]{1,255})/.exec(link.trim())?.[1]
-    if (!token) { setError(m('invite.invalid')); return }
+    if (!token) {
+      setError(m('invite.invalid'))
+      return
+    }
     navigate(`/invite/${token}`)
   }
-  return <form className="card stack start-form" onSubmit={submit} noValidate>
-    <Field label={m('invite.link')} error={error || undefined}>{props =>
-      <input {...props} className="input" value={link} inputMode="url" placeholder="https://…/invite/…" autoFocus onChange={event => { setLink(event.target.value); setError('') }} />}</Field>
-    <Button type="submit" variant="primary">{m('invite.go')}<ArrowRight size={16} aria-hidden="true" /></Button>
-  </form>
+  return (
+    <form className="card stack start-form" onSubmit={submit} noValidate>
+      <Field label={m('invite.link')} error={error || undefined}>
+        {props => (
+          <input
+            {...props}
+            className="input"
+            value={link}
+            inputMode="url"
+            placeholder="https://…/invite/…"
+            autoFocus
+            onChange={event => {
+              setLink(event.target.value)
+              setError('')
+            }}
+          />
+        )}
+      </Field>
+      <Button type="submit" variant="primary">
+        {m('invite.go')}
+        <ArrowRight size={16} aria-hidden="true" />
+      </Button>
+    </form>
+  )
 }

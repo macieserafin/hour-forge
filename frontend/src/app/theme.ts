@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 /**
- * Light, dark or following the system (R10). Until the account stores it (B05) the choice lives in this browser;
+ * Light, dark or following the system. Until the account stores it the choice lives in this browser;
  * index.html applies it before the first paint so the page does not flash.
  */
 export type ThemeChoice = 'system' | 'light' | 'dark'
@@ -12,7 +12,9 @@ export function readTheme(): ThemeChoice {
   try {
     const stored = window.localStorage.getItem(storageKey)
     if (stored === 'light' || stored === 'dark' || stored === 'system') return stored
-  } catch { /* Storage may be blocked. */ }
+  } catch {
+    /* Storage may be blocked. */
+  }
   return 'system'
 }
 
@@ -33,7 +35,11 @@ export function useTheme() {
   }, [choice])
   const change = (next: ThemeChoice) => {
     setChoice(next)
-    try { window.localStorage.setItem(storageKey, next) } catch { /* Kept for this visit only. */ }
+    try {
+      window.localStorage.setItem(storageKey, next)
+    } catch {
+      /* Kept for this visit only. */
+    }
   }
   return [choice, change] as const
 }

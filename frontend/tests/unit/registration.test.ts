@@ -30,6 +30,13 @@ it('registers using fresh CSRF and cookies while trimming identity but preservin
   await register({ displayName: ' New User ', email: ' New@Example.test ', password: ' password 2026! ' })
   expect(fetcher).toHaveBeenCalledTimes(2)
   const [, options] = fetcher.mock.calls[1]!
-  expect(options).toMatchObject({ credentials: 'include', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': 'csrf' } })
-  expect(JSON.parse(String(options?.body))).toEqual({ displayName: input.displayName, email: 'New@Example.test', password: ' password 2026! ' })
+  expect(options).toMatchObject({
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': 'csrf' },
+  })
+  expect(JSON.parse(String(options?.body))).toEqual({
+    displayName: input.displayName,
+    email: 'New@Example.test',
+    password: ' password 2026! ',
+  })
 })

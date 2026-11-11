@@ -5,8 +5,18 @@ import { I18nProvider } from '../../src/content/i18n'
 import { renderApp } from '../support/render'
 
 function renderLayout() {
-  vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
-  return renderApp(<I18nProvider locale="pl"><AuthLayout><h1>Zaloguj się</h1></AuthLayout></I18nProvider>, '/login')
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => new Promise(() => {})),
+  )
+  return renderApp(
+    <I18nProvider locale="pl">
+      <AuthLayout>
+        <h1>Zaloguj się</h1>
+      </AuthLayout>
+    </I18nProvider>,
+    '/login',
+  )
 }
 
 describe('auth layout author credit', () => {

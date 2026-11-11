@@ -1,17 +1,28 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, addMemberTimeEntry, correctMemberTimeEntry, deleteMemberTimeEntry, getMemberTimeEntries } from './api'
+import {
+  ApiError,
+  addMemberTimeEntry,
+  correctMemberTimeEntry,
+  deleteMemberTimeEntry,
+  getMemberTimeEntries,
+} from './api'
 import { dashboardKey } from './dashboard'
 import { useAuthError } from './teams'
 
-const correctionsKey = (userId: string, teamId: string, memberId: string) => ['member-time-entries', userId, teamId, memberId] as const
+const correctionsKey = (userId: string, teamId: string, memberId: string) =>
+  ['member-time-entries', userId, teamId, memberId] as const
 
 export function useMemberTimeEntries(userId: string, teamId: string, memberId: string, page: number) {
   const handleError = useAuthError()
-  const query = useQuery({ queryKey: [...correctionsKey(userId, teamId, memberId), page],
+  const query = useQuery({
+    queryKey: [...correctionsKey(userId, teamId, memberId), page],
     queryFn: ({ signal }) => getMemberTimeEntries(teamId, memberId, page, signal),
-    retry: (count, error) => count < 1 && error instanceof ApiError && (error.status === 0 || error.status >= 500) })
-  useEffect(() => { if (query.error) handleError(query.error) }, [query.error, handleError])
+    retry: (count, error) => count < 1 && error instanceof ApiError && (error.status === 0 || error.status >= 500),
+  })
+  useEffect(() => {
+    if (query.error) handleError(query.error)
+  }, [query.error, handleError])
   return query
 }
 
@@ -22,10 +33,11 @@ function useCorrectionCallbacks(userId: string, teamId: string, memberId: string
     retry: false as const,
     onError: handleError,
     // A lost response may follow a committed change: reconcile instead of repeating the write.
-    onSettled: () => Promise.all([
-      client.invalidateQueries({ queryKey: correctionsKey(userId, teamId, memberId) }),
-      client.invalidateQueries({ queryKey: dashboardKey(userId) }),
-    ]),
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: correctionsKey(userId, teamId, memberId) }),
+        client.invalidateQueries({ queryKey: dashboardKey(userId) }),
+      ]),
   }
 }
 

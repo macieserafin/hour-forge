@@ -9,10 +9,13 @@ export const membersKey = (userId: string, teamId: string) => ['team-members', u
 export function useTeamMembers(userId: string, teamId: string, includeFormer: boolean, page: number) {
   const handleError = useAuthError()
   const client = useQueryClient()
-  const query = useQuery({ queryKey: [...membersKey(userId, teamId), includeFormer, page],
+  const query = useQuery({
+    queryKey: [...membersKey(userId, teamId), includeFormer, page],
     queryFn: ({ signal }) => getTeamMembers(teamId, includeFormer, page, signal),
-    refetchInterval: 30_000, refetchOnWindowFocus: 'always',
-    retry: (count, error) => count < 1 && error instanceof ApiError && (error.status === 0 || error.status >= 500) })
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: 'always',
+    retry: (count, error) => count < 1 && error instanceof ApiError && (error.status === 0 || error.status >= 500),
+  })
   useEffect(() => {
     if (!query.error) return
     handleError(query.error)
@@ -27,7 +30,8 @@ export function useEndMembership(userId: string, teamId: string) {
   const client = useQueryClient()
   const handleError = useAuthError()
   return useMutation({
-    mutationFn: (targetUserId: string | null) => targetUserId === null ? leaveTeam(teamId) : removeTeamMember(teamId, targetUserId),
+    mutationFn: (targetUserId: string | null) =>
+      targetUserId === null ? leaveTeam(teamId) : removeTeamMember(teamId, targetUserId),
     retry: false,
     onMutate: async () => {
       await Promise.all([

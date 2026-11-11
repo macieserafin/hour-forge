@@ -1,13 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 
 interface Turnstile {
-  render(element: HTMLElement, options: { sitekey: string; language?: string; callback: (token: string) => void;
-    'expired-callback'?: () => void; 'error-callback'?: () => void }): string
+  render(
+    element: HTMLElement,
+    options: {
+      sitekey: string
+      language?: string
+      callback: (token: string) => void
+      'expired-callback'?: () => void
+      'error-callback'?: () => void
+    },
+  ): string
   remove(widgetId: string): void
 }
 
 declare global {
-  interface Window { turnstile?: Turnstile }
+  interface Window {
+    turnstile?: Turnstile
+  }
 }
 
 const SCRIPT_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
@@ -21,7 +31,10 @@ function loadTurnstile(): Promise<void> {
     script.src = SCRIPT_URL
     script.async = true
     script.onload = () => resolve()
-    script.onerror = () => { loading = null; reject(new Error('Turnstile could not be loaded')) }
+    script.onerror = () => {
+      loading = null
+      reject(new Error('Turnstile could not be loaded'))
+    }
     document.head.appendChild(script)
   })
   return loading
@@ -31,7 +44,19 @@ function loadTurnstile(): Promise<void> {
  * The Cloudflare Turnstile check shown on registration when the server has keys. Each token works once, so a new
  * {@code attempt} renders a fresh widget after a failed registration.
  */
-export function BotCheckWidget({ siteKey, attempt, onToken, language = 'pl', failedText }: { siteKey: string; attempt: number; onToken: (token: string | null) => void; language?: string; failedText: string }) {
+export function BotCheckWidget({
+  siteKey,
+  attempt,
+  onToken,
+  language = 'pl',
+  failedText,
+}: {
+  siteKey: string
+  attempt: number
+  onToken: (token: string | null) => void
+  language?: string
+  failedText: string
+}) {
   const container = useRef<HTMLDivElement>(null)
   const report = useRef(onToken)
   const [failed, setFailed] = useState(false)
@@ -41,16 +66,34 @@ export function BotCheckWidget({ siteKey, attempt, onToken, language = 'pl', fai
     let widgetId: string | undefined
     let cancelled = false
     report.current(null)
-    loadTurnstile().then(() => {
-      if (cancelled || !container.current || !window.turnstile) return
-      widgetId = window.turnstile.render(container.current, { sitekey: siteKey, language,
-        callback: token => report.current(token), 'expired-callback': () => report.current(null), 'error-callback': () => report.current(null) })
-    }).catch(() => { if (!cancelled) setFailed(true) })
-    return () => { cancelled = true; if (widgetId && window.turnstile) window.turnstile.remove(widgetId) }
+    loadTurnstile()
+      .then(() => {
+        if (cancelled || !container.current || !window.turnstile) return
+        widgetId = window.turnstile.render(container.current, {
+          sitekey: siteKey,
+          language,
+          callback: token => report.current(token),
+          'expired-callback': () => report.current(null),
+          'error-callback': () => report.current(null),
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true)
+      })
+    return () => {
+      cancelled = true
+      if (widgetId && window.turnstile) window.turnstile.remove(widgetId)
+    }
   }, [siteKey, attempt, language])
 
-  return <div className="bot-check">
-    <div ref={container} />
-    {failed && <p className="field-error" role="alert">{failedText}</p>}
-  </div>
+  return (
+    <div className="bot-check">
+      <div ref={container} />
+      {failed && (
+        <p className="field-error" role="alert">
+          {failedText}
+        </p>
+      )}
+    </div>
+  )
 }

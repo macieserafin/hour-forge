@@ -132,7 +132,8 @@ export const pl = {
   'work.history': 'Historia pracy',
   'work.undatedLink': 'Wpisy bez daty ({count})',
   'work.noTeam.title': 'Zacznij od miejsca na swoją pracę',
-  'work.noTeam.body': 'Pracujesz sam albo z zespołem? Utwórz przestrzeń i pierwszy projekt, albo poproś o zaproszenie do istniejącego zespołu.',
+  'work.noTeam.body':
+    'Pracujesz sam albo z zespołem? Utwórz przestrzeń i pierwszy projekt, albo poproś o zaproszenie do istniejącego zespołu.',
   'work.noTeam.action': 'Zacznij',
   'work.noProject.title': 'Brak aktywnych projektów',
   'work.noProject.body': 'Utwórz projekt albo poproś osobę zarządzającą zespołem o jego utworzenie.',
@@ -146,5 +147,4 @@ export const pl = {
   'notFound.action': 'Wróć do swojej pracy',
   'noAccess.title': 'Brak dostępu',
   'noAccess.body': 'Ta część jest dostępna tylko dla operatorów tej instancji.',
-
 } as const

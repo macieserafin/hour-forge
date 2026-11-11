@@ -1,27 +1,33 @@
-import { beforeEach, expect, it } from 'vitest'
-import { latestReleaseId, markReleasesSeen, readSeenRelease, releases, unseenReleases } from '../../src/lib/whatsNew'
+import { beforeEach, expect, it, vi } from 'vitest'
+import { EVENT, markSeen, releases, unseenCount } from '../../src/content/releases'
 
 beforeEach(() => window.localStorage.clear())
 
 it('counts everything as new for a person who never opened the page', () => {
-  expect(unseenReleases('u1')).toHaveLength(releases.length)
-  expect(readSeenRelease('u1')).toBeNull()
+  expect(unseenCount('u1')).toBe(releases.length)
 })
 
 it('counts only the entries newer than the last seen one', () => {
   window.localStorage.setItem('hourforge:whats-new-seen:u1', releases[1]!.id)
-  expect(unseenReleases('u1').map(release => release.id)).toEqual([releases[0]!.id])
-  markReleasesSeen('u1')
-  expect(readSeenRelease('u1')).toBe(latestReleaseId)
-  expect(unseenReleases('u1')).toEqual([])
+  expect(unseenCount('u1')).toBe(1)
+  markSeen('u1')
+  expect(unseenCount('u1')).toBe(0)
 })
 
 it('treats an unknown remembered id as unseen and keeps people apart', () => {
   window.localStorage.setItem('hourforge:whats-new-seen:u1', 'something-else')
-  expect(unseenReleases('u1')).toHaveLength(releases.length)
-  markReleasesSeen('u2')
-  expect(unseenReleases('u1')).toHaveLength(releases.length)
-  expect(unseenReleases('u2')).toEqual([])
+  expect(unseenCount('u1')).toBe(releases.length)
+  markSeen('u2')
+  expect(unseenCount('u1')).toBe(releases.length)
+  expect(unseenCount('u2')).toBe(0)
+})
+
+it('tells the open app that the news were seen', () => {
+  const listener = vi.fn()
+  window.addEventListener(EVENT, listener)
+  markSeen('u1')
+  window.removeEventListener(EVENT, listener)
+  expect(listener).toHaveBeenCalledOnce()
 })
 
 it('keeps the news newest first with unique ids', () => {

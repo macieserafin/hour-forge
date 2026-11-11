@@ -10,6 +10,11 @@ export default defineConfig({
     restoreMocks: true,
     // Many files run in parallel workers; typing-heavy tests need headroom on a busy machine.
     testTimeout: 15_000,
-    coverage: { provider: 'v8', include: ['src/**/*.{ts,tsx}'], exclude: ['src/main.tsx', 'src/lab/**'], reporter: ['text', 'html', 'lcov'] },
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/main.tsx', 'src/lab/**'],
+      reporter: ['text', 'html', 'lcov'],
+    },
   },
 })

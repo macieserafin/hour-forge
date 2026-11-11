@@ -3,7 +3,10 @@ import { getTeamMembers, leaveTeam, removeTeamMember } from '../../src/lib/api'
 import { json, mockApi } from '../support/api'
 
 it('encodes membership filters and pagination and forwards cancellation and session cookies', async () => {
-  const fetcher = mockApi({ 'GET /api/teams/team%20%2F/members': () => json({ content: [], totalElements: 0, totalPages: 0, page: 2, size: 20 }) })
+  const fetcher = mockApi({
+    'GET /api/teams/team%20%2F/members': () =>
+      json({ content: [], totalElements: 0, totalPages: 0, page: 2, size: 20 }),
+  })
   const controller = new AbortController()
   const result = await getTeamMembers('team /', true, 2, controller.signal)
   const [path, options] = fetcher.mock.calls[0]!

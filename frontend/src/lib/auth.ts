@@ -1,6 +1,17 @@
 import { queryOptions, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { usePublicConfig } from './operator'
-import { answerTwoFactor, confirmEmail, confirmEmailChange, confirmPasswordReset, getUser, login, logout, register, requestPasswordReset, resendVerification } from './api'
+import {
+  answerTwoFactor,
+  confirmEmail,
+  confirmEmailChange,
+  confirmPasswordReset,
+  getUser,
+  login,
+  logout,
+  register,
+  requestPasswordReset,
+  resendVerification,
+} from './api'
 
 export const sessionOptions = queryOptions({
   queryKey: ['session'],
@@ -45,8 +56,12 @@ export function useConfirmEmailChange() {
 
 export function useConfirmEmail() {
   const client = useQueryClient()
-  return useMutation({ mutationFn: confirmEmail, retry: false, gcTime: 0,
-    onSuccess: () => client.invalidateQueries({ queryKey: sessionOptions.queryKey }) })
+  return useMutation({
+    mutationFn: confirmEmail,
+    retry: false,
+    gcTime: 0,
+    onSuccess: () => client.invalidateQueries({ queryKey: sessionOptions.queryKey }),
+  })
 }
 
 export function useResendVerification() {

@@ -23,23 +23,54 @@ it('handles month ends, leap years and a week that spans two months', () => {
 })
 
 it('reads filters from the address and falls back to the current week for anything malformed', () => {
-  const fromAddress = filtersFromSearch(new URLSearchParams('team=t&from=2026-10-01&to=2026-10-10&person=p&project=r&type=TIMER&q=login'), 'UTC', now)
-  expect(fromAddress).toEqual({ undated: false, from: '2026-10-01', to: '2026-10-10', userId: 'p', projectId: 'r', entryType: 'TIMER', q: 'login' })
+  const fromAddress = filtersFromSearch(
+    new URLSearchParams('team=t&from=2026-10-01&to=2026-10-10&person=p&project=r&type=TIMER&q=login'),
+    'UTC',
+    now,
+  )
+  expect(fromAddress).toEqual({
+    undated: false,
+    from: '2026-10-01',
+    to: '2026-10-10',
+    userId: 'p',
+    projectId: 'r',
+    entryType: 'TIMER',
+    q: 'login',
+  })
 
   const week = reportWeek('UTC', now)
-  const malformed = filtersFromSearch(new URLSearchParams(`from=yesterday&to=2026-10-10&type=OTHER&q=${'x'.repeat(300)}`), 'UTC', now)
+  const malformed = filtersFromSearch(
+    new URLSearchParams(`from=yesterday&to=2026-10-10&type=OTHER&q=${'x'.repeat(300)}`),
+    'UTC',
+    now,
+  )
   expect(malformed).toMatchObject({ from: week.from, to: week.to, entryType: '' })
   expect(malformed.q).toHaveLength(200)
 
-  expect(filtersFromSearch(new URLSearchParams('undated=true&from=2026-10-01&to=2026-10-10'), 'UTC', now))
-    .toMatchObject({ undated: true, from: '', to: '' })
-  expect(filtersFromSearch(new URLSearchParams(''), 'UTC', now)).toMatchObject({ from: week.from, to: week.to, undated: false })
+  expect(
+    filtersFromSearch(new URLSearchParams('undated=true&from=2026-10-01&to=2026-10-10'), 'UTC', now),
+  ).toMatchObject({ undated: true, from: '', to: '' })
+  expect(filtersFromSearch(new URLSearchParams(''), 'UTC', now)).toMatchObject({
+    from: week.from,
+    to: week.to,
+    undated: false,
+  })
 })
 
 it('writes only the filter parameters and leaves the rest of the address alone', () => {
   const base = new URLSearchParams('team=t&view=team&from=2000-01-01&q=old')
-  const written = filtersToSearch({ from: '2026-10-01', to: '2026-10-10', userId: '', projectId: 'r', entryType: '', q: ' new ' }, base)
-  expect(Object.fromEntries(written)).toEqual({ team: 't', view: 'team', from: '2026-10-01', to: '2026-10-10', project: 'r', q: 'new' })
+  const written = filtersToSearch(
+    { from: '2026-10-01', to: '2026-10-10', userId: '', projectId: 'r', entryType: '', q: ' new ' },
+    base,
+  )
+  expect(Object.fromEntries(written)).toEqual({
+    team: 't',
+    view: 'team',
+    from: '2026-10-01',
+    to: '2026-10-10',
+    project: 'r',
+    q: 'new',
+  })
   const undated = filtersToSearch({ undated: true, from: '', to: '', userId: '', projectId: '', entryType: '' }, base)
   expect(Object.fromEntries(undated)).toEqual({ team: 't', view: 'team', undated: 'true' })
   expect(Object.fromEntries(clearedSearch(base))).toEqual({ team: 't', view: 'team' })

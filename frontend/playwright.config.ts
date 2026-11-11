@@ -18,8 +18,16 @@ export default defineConfig({
   },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } } },
-    { name: 'tablet', grep: /@responsive/, use: { ...devices['Desktop Chrome'], viewport: { width: 900, height: 1100 } } },
-    { name: 'mobile', grep: /@responsive/, use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
+    {
+      name: 'tablet',
+      grep: /@responsive/,
+      use: { ...devices['Desktop Chrome'], viewport: { width: 900, height: 1100 } },
+    },
+    {
+      name: 'mobile',
+      grep: /@responsive/,
+      use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
+    },
   ],
   webServer: {
     command: `npm run dev -- --port ${new URL(baseURL).port || '5173'}`,

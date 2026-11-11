@@ -43,7 +43,8 @@ export const en: Record<keyof typeof pl, string> = {
 
   'auth.kicker': 'Work time tracking',
   'auth.tagline': 'Every hour of work in its place.',
-  'auth.story': 'Start the timer when you begin, or add the entry later. At the end of the month the total simply adds up.',
+  'auth.story':
+    'Start the timer when you begin, or add the entry later. At the end of the month the total simply adds up.',
   'auth.point.track': 'Timer or manual entry, whichever suits you',
   'auth.point.teams': 'Work solo, in a team or in several at once',
   'auth.point.reports': 'Reports ready for billing',
@@ -134,7 +135,8 @@ export const en: Record<keyof typeof pl, string> = {
   'work.history': 'Work history',
   'work.undatedLink': 'Entries without a date ({count})',
   'work.noTeam.title': 'Start with a place for your work',
-  'work.noTeam.body': 'Working alone or with a team? Create a space and a first project, or ask for an invitation to an existing team.',
+  'work.noTeam.body':
+    'Working alone or with a team? Create a space and a first project, or ask for an invitation to an existing team.',
   'work.noTeam.action': 'Get started',
   'work.noProject.title': 'No active projects',
   'work.noProject.body': 'Create a project or ask the person who manages the team to create one.',
@@ -148,5 +150,4 @@ export const en: Record<keyof typeof pl, string> = {
   'notFound.action': 'Back to your work',
   'noAccess.title': 'No access',
   'noAccess.body': 'This part is available only to operators of this instance.',
-
 }
