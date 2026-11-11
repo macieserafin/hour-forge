@@ -55,9 +55,10 @@ class GoogleDisabledIT extends ApiIntegrationTestSupport {
 
     @Test
     void noClientRegistrationNorOAuth2FilterExists() {
-        assertThat(context.getBeansOfType(ClientRegistrationRepository.class)).isEmpty();
-        assertThat(context.getBeansOfType(OAuth2AuthorizedClientService.class)).isEmpty();
-        assertThat(context.getBeansOfType(GoogleSignIn.class)).isEmpty();
+        // Bean names only: a failure message must not print a registration, whose text includes the client secret.
+        assertThat(context.getBeanNamesForType(ClientRegistrationRepository.class)).isEmpty();
+        assertThat(context.getBeanNamesForType(OAuth2AuthorizedClientService.class)).isEmpty();
+        assertThat(context.getBeanNamesForType(GoogleSignIn.class)).isEmpty();
         assertThat(filters.getFilterChains()).hasSize(1);
         assertThat(filters.getFilterChains().getFirst().getFilters())
                 .noneMatch(filter -> filter instanceof OAuth2AuthorizationRequestRedirectFilter || filter instanceof OAuth2LoginAuthenticationFilter);
