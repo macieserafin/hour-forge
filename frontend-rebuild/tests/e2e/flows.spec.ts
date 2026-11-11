@@ -150,4 +150,9 @@ test('R11: an unknown address shows 404 and a deep link returns after sign-in', 
   await page.getByLabel('Hasło', { exact: true }).fill(password)
   await page.getByRole('button', { name: 'Zaloguj się', exact: true }).click()
   await expect(page).toHaveURL(/\/app\/account\/security$/)
+  // The new-device e-mail links to the old /account#sessions: it opens Security at the device list.
+  await page.setViewportSize({ width: 390, height: 640 })
+  await page.goto('/account#sessions')
+  await expect(page).toHaveURL(/\/app\/account\/security#sessions$/)
+  await expect(page.getByRole('heading', { name: 'Zalogowane urządzenia' })).toBeInViewport()
 })

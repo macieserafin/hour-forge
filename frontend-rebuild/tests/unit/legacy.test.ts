@@ -20,6 +20,16 @@ describe('old addresses', () => {
     ['/operator', '', '/app/operator'],
   ])('%s?%s leads to %s', (path, query, target) => { expect(legacyTarget(path, new URLSearchParams(query))).toBe(target) })
 
+  it.each([
+    ['/account', '', '#sessions', '/app/account/security#sessions'],
+    ['/account', '', '#google', '/app/account/security#google'],
+    ['/account', '', '#notifications', '/app/account/preferences#notifications'],
+    ['/account', 'google=LINKED', '#google', '/app/account/security?google=LINKED#google'],
+    ['/account', '', '#unknown', '/app/account#unknown'],
+  ])('%s?%s%s from an e-mail keeps its section: %s', (path, query, hash, target) => {
+    expect(legacyTarget(path, new URLSearchParams(query), hash)).toBe(target)
+  })
+
   it('encodes a team id taken from the address', () => {
     expect(legacyTarget('/teams', new URLSearchParams('team=a/b'))).toBe('/app/teams/a%2Fb')
   })

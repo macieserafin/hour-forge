@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Database, KeyRound, Palette, ShieldCheck, UserRound } from 'lucide-react'
-import { Link, NavLink, Outlet, useSearchParams } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useSearchParams } from 'react-router-dom'
 import { useI18n, useMessages, type Locale } from '../../content/i18n'
 import { useUser } from '../../app/session'
 import { Avatar } from '../../app/Shell'
@@ -81,8 +81,29 @@ const messages = {
 const dateTime = (iso: string, locale: Locale) => new Date(iso).toLocaleString(locale === 'pl' ? 'pl-PL' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' })
 
 /** U20–U22 account frame with its own addresses for each area. */
+/** E-mails link to account sections (#sessions, #google); those render after their page and data load, so wait for them briefly. */
+export function useScrollToHash(hash: string, timeout = 5000) {
+  useEffect(() => {
+    const id = decodeURIComponent(hash.slice(1))
+    if (!id) return
+    const reveal = () => {
+      const target = document.getElementById(id)
+      if (!target) return false
+      target.scrollIntoView?.({ block: 'start' })
+      return true
+    }
+    if (reveal()) return
+    const observer = new MutationObserver(() => { if (reveal()) stop() })
+    const timer = window.setTimeout(() => stop(), timeout)
+    const stop = () => { observer.disconnect(); window.clearTimeout(timer) }
+    observer.observe(document.body, { childList: true, subtree: true })
+    return stop
+  }, [hash, timeout])
+}
+
 export function AccountLayout() {
   const m = useMessages(messages)
+  useScrollToHash(useLocation().hash)
   return <div className="page account">
     <header className="page-head"><h1>{m('title')}</h1></header>
     <nav className="tabs" aria-label={m('title')}>

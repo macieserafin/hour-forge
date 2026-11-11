@@ -135,7 +135,14 @@ function StartRedirect() {
 }
 
 /** Maps an address of the previous frontend, with its filters, to the new structure (04, section 3). */
-export function legacyTarget(pathname: string, search: URLSearchParams): string {
+export function legacyTarget(pathname: string, search: URLSearchParams, hash = ''): string {
+  return legacyPath(pathname, search, hash) + hash
+}
+
+/** The old account was one page; its sections linked from e-mails (#google, #sessions) now live under Security. */
+const accountPageOf: Record<string, string> = { '#google': '/security', '#sessions': '/security', '#notifications': '/preferences' }
+
+function legacyPath(pathname: string, search: URLSearchParams, hash: string): string {
   const team = search.get('team')
   const rest = new URLSearchParams(search)
   rest.delete('team'); rest.delete('view')
@@ -149,7 +156,7 @@ export function legacyTarget(pathname: string, search: URLSearchParams): string 
     case '/teams': return team ? `/app/teams/${encodeURIComponent(team)}` : '/app/teams'
     case '/integrations': return team ? `/app/teams/${encodeURIComponent(team)}/integrations${query(rest)}` : '/app/teams'
     case '/whats-new': return '/app/whats-new'
-    case '/account': return `/app/account${rest.has('google') ? '/security' : ''}${query(rest)}`
+    case '/account': return `/app/account${rest.has('google') ? '/security' : accountPageOf[hash] ?? ''}${query(rest)}`
     case '/operator': return '/app/operator'
     default: return HOME
   }
@@ -157,7 +164,7 @@ export function legacyTarget(pathname: string, search: URLSearchParams): string 
 
 function Legacy() {
   const location = useLocation()
-  return <Navigate to={legacyTarget(location.pathname, new URLSearchParams(location.search))} replace />
+  return <Navigate to={legacyTarget(location.pathname, new URLSearchParams(location.search), location.hash)} replace />
 }
 
 function OperatorOnly({ children }: { children: ReactNode }) {
