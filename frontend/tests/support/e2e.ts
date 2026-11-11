@@ -65,7 +65,8 @@ export async function fillRegistration(page: Page, email: string, secret: string
 export async function login(page: Page, email = owner, secret = email === member ? memberPassword : password) {
   await page.goto('/login')
   await submitLogin(page, email, secret)
-  await expect(page).toHaveURL(/\/dashboard$/)
+  // A person without a team lands on the first start (F01); everyone else on My work.
+  await expect(page).toHaveURL(/\/app\/(?:work|start)(?:\?|$)/)
 }
 
 export async function signOut(page: Page) {

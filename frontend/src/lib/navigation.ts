@@ -1,13 +1,17 @@
+export const HOME = '/app/work'
+const legacyPages = new Set(['/dashboard', '/teams', '/projects', '/time', '/integrations', '/whats-new', '/account', '/operator'])
+const appPage = /^\/app(?:\/[A-Za-z0-9_-]{1,64}){1,4}$/
+const invitation = /^\/invite\/[A-Za-z0-9_-]{1,255}$/
+
+/** A same-origin page of the app to return to after signing in; anything else falls back to My work. */
 export function safeReturnTo(value: string | null): string {
-  if (!value) return '/dashboard'
+  if (!value) return HOME
   try {
     const url = new URL(value, window.location.origin)
-    if (url.origin !== window.location.origin) return '/dashboard'
-    if (url.pathname === '/dashboard' || url.pathname === '/teams' || url.pathname === '/projects' || url.pathname === '/time' || url.pathname === '/integrations' || url.pathname === '/whats-new' || /^\/invite\/[A-Za-z0-9_-]{1,255}$/.test(url.pathname)) {
-      return url.pathname + url.search
-    }
+    if (url.origin !== window.location.origin) return HOME
+    if (appPage.test(url.pathname) || legacyPages.has(url.pathname) || invitation.test(url.pathname)) return url.pathname + url.search
   } catch { /* Ignore malformed or external return addresses. */ }
-  return '/dashboard'
+  return HOME
 }
 
 export const loginUrl = (returnTo: string) => `/login?returnTo=${encodeURIComponent(returnTo)}`

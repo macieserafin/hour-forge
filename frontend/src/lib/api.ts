@@ -149,10 +149,10 @@ export async function getDashboardSummary(teamId: string, signal?: AbortSignal, 
   const response = await request(`/api/dashboard/summary?${new URLSearchParams({ teamId, weekStart })}`, { signal })
   if (!response.ok) {
     const messages: Record<number, string> = {
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       404: 'Nie znaleziono zespołu lub nie masz już do niego dostępu.',
     }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wczytać podsumowania czasu. Spróbuj ponownie.')
+    throw new ApiError(response.status, messages[response.status] ?? localizedError("Nie udało się wczytać podsumowania czasu. Spróbuj ponownie.", "Could not load your time summary. Try again."))
   }
   return response.json() as Promise<DashboardSummary>
 }
@@ -208,11 +208,11 @@ export async function getTimeEntryHistory(teamId: string, filters: TimeEntryHist
   if (!response.ok) {
     const messages: Record<number, string> = {
       400: 'Sprawdź zakres dat i wybrany projekt.',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Nie masz uprawnień do przeglądania tej historii.',
       404: 'Nie znaleziono projektu lub zespołu albo nie masz już do niego dostępu.',
     }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się wczytać historii czasu. Spróbuj ponownie.')
+    throw new ApiError(response.status, messages[response.status] ?? localizedError("Nie udało się wczytać historii czasu. Spróbuj ponownie.", "Could not load your time history. Try again."))
   }
   return response.json() as Promise<TimeEntryHistory>
 }
@@ -226,6 +226,10 @@ interface CsrfToken {
   token: string
   headerName: string
   parameterName: string
+}
+
+function localizedError(pl: string, en: string) {
+  return typeof document !== 'undefined' && document.documentElement.lang === 'en' ? en : pl
 }
 
 export class ApiError extends Error {
@@ -247,7 +251,7 @@ async function request(path: string, options?: RequestInit): Promise<Response> {
     return await fetch(path, { ...options, credentials: 'include', cache: 'no-store' })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error
-    throw new ApiError(0, 'Nie udało się połączyć. Sprawdź połączenie i spróbuj ponownie.')
+    throw new ApiError(0, localizedError("Nie udało się połączyć. Sprawdź połączenie i spróbuj ponownie.", "Could not connect. Check your connection and try again."))
   }
 }
 
@@ -260,7 +264,7 @@ export async function getUser(signal?: AbortSignal): Promise<User | null> {
 
 async function getCsrf(): Promise<CsrfToken> {
   const response = await request('/api/auth/csrf')
-  if (!response.ok) throw new ApiError(response.status, 'Nie udało się przygotować bezpiecznej sesji. Spróbuj ponownie.')
+  if (!response.ok) throw new ApiError(response.status, localizedError("Nie udało się przygotować bezpiecznej sesji. Spróbuj ponownie.", "Could not prepare a secure session. Try again."))
   return response.json() as Promise<CsrfToken>
 }
 
@@ -274,18 +278,18 @@ export async function login({ email, password, rememberMe }: { email: string; pa
   })
   if (response.status === 202) return 'TWO_FACTOR_REQUIRED'
   if (response.status === 429) throw new ApiError(429, tooManyRequestsMessage(response))
-  if (response.status === 401) throw new ApiError(401, 'Nieprawidłowy adres e-mail lub hasło.')
+  if (response.status === 401) throw new ApiError(401, localizedError("Nieprawidłowy adres e-mail lub hasło.", "Incorrect email address or password."))
   if (response.status === 403) {
     const body = await response.json().catch(() => null) as { code?: string } | null
     if (body?.code === 'EMAIL_NOT_VERIFIED') {
-      throw new ApiError(403, 'Potwierdź adres e-mail, aby się zalogować. Link wysłaliśmy po rejestracji.', 'EMAIL_NOT_VERIFIED')
+      throw new ApiError(403, localizedError("Potwierdź adres e-mail, aby się zalogować. Link wysłaliśmy po rejestracji.", "Verify your email address to sign in. We sent a link when you registered."), 'EMAIL_NOT_VERIFIED')
     }
     if (body?.code === 'ACCOUNT_BLOCKED') {
-      throw new ApiError(403, 'To konto zostało zablokowane przez operatora serwisu. Jeśli to pomyłka, skontaktuj się z administratorem.', 'ACCOUNT_BLOCKED')
+      throw new ApiError(403, localizedError("To konto zostało zablokowane przez operatora serwisu. Jeśli to pomyłka, skontaktuj się z administratorem.", "The service operator has blocked this account. Contact your administrator if you think this is a mistake."), 'ACCOUNT_BLOCKED')
     }
-    throw new ApiError(403, 'Sesja formularza wygasła. Spróbuj zalogować się ponownie.')
+    throw new ApiError(403, localizedError("Sesja formularza wygasła. Spróbuj zalogować się ponownie.", "The form session expired. Try signing in again."))
   }
-  if (!response.ok) throw new ApiError(response.status, 'Logowanie jest chwilowo niedostępne. Spróbuj ponownie.')
+  if (!response.ok) throw new ApiError(response.status, localizedError("Logowanie jest chwilowo niedostępne. Spróbuj ponownie.", "Sign-in is temporarily unavailable. Try again."))
   return 'SIGNED_IN'
 }
 
@@ -296,10 +300,10 @@ export async function answerTwoFactor(code: string): Promise<void> {
     headers: { 'Content-Type': 'application/json', [csrf.headerName]: csrf.token }, body: JSON.stringify({ code: code.trim() }) })
   if (response.ok) return
   if (response.status === 429) throw new ApiError(429, tooManyRequestsMessage(response))
-  if (response.status === 400) throw new ApiError(400, 'Nieprawidłowy kod. Sprawdź kod w aplikacji i spróbuj ponownie.')
-  if (response.status === 401) throw new ApiError(401, 'Czas na podanie kodu minął albo było zbyt wiele prób. Zaloguj się ponownie.', 'SIGN_IN_AGAIN')
-  if (response.status === 403) throw new ApiError(403, 'Sesja formularza wygasła. Zaloguj się ponownie.', 'SIGN_IN_AGAIN')
-  throw new ApiError(response.status, 'Logowanie jest chwilowo niedostępne. Spróbuj ponownie.')
+  if (response.status === 400) throw new ApiError(400, localizedError("Nieprawidłowy kod. Sprawdź kod w aplikacji i spróbuj ponownie.", "Incorrect code. Check the code in your authenticator and try again."))
+  if (response.status === 401) throw new ApiError(401, localizedError("Czas na podanie kodu minął albo było zbyt wiele prób. Zaloguj się ponownie.", "The code expired or there were too many attempts. Sign in again."), 'SIGN_IN_AGAIN')
+  if (response.status === 403) throw new ApiError(403, localizedError("Sesja formularza wygasła. Zaloguj się ponownie.", "The form session expired. Sign in again."), 'SIGN_IN_AGAIN')
+  throw new ApiError(response.status, localizedError("Logowanie jest chwilowo niedostępne. Spróbuj ponownie.", "Sign-in is temporarily unavailable. Try again."))
 }
 
 async function publicPost(path: string, body: unknown, messages: Record<number, string>, fallback: string) {
@@ -403,7 +407,7 @@ async function accountRequest(path: string, method: 'PATCH' | 'POST', body: unkn
     const code = response.status === 400 ? (await response.json().catch(() => null) as { code?: string } | null)?.code : undefined
     if (code === 'PASSWORD_NOT_SET') throw new ApiError(400, passwordNotSetMessage, code)
     throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
-      : { 401: 'Sesja wygasła. Zaloguj się ponownie.', 403: 'Sesja formularza wygasła. Spróbuj ponownie.', ...messages }[response.status] ?? fallback)
+      : { 401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."), 403: 'Sesja formularza wygasła. Spróbuj ponownie.', ...messages }[response.status] ?? fallback)
   }
   return response
 }
@@ -469,7 +473,7 @@ export interface TwoFactorStatus {
 
 export async function getTwoFactorStatus(signal?: AbortSignal): Promise<TwoFactorStatus> {
   const response = await request('/api/account/two-factor', { signal })
-  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.' : 'Nie udało się wczytać ustawień logowania dwuetapowego.')
+  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again.") : 'Nie udało się wczytać ustawień logowania dwuetapowego.')
   return response.json() as Promise<TwoFactorStatus>
 }
 
@@ -500,13 +504,13 @@ export async function renewBackupCodes(currentPassword: string): Promise<string[
 
 export async function getLoginHistory(signal?: AbortSignal): Promise<LoginHistory> {
   const response = await request('/api/account/logins', { signal })
-  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.' : 'Nie udało się wczytać historii logowań.')
+  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again.") : 'Nie udało się wczytać historii logowań.')
   return response.json() as Promise<LoginHistory>
 }
 
 export async function getSessions(signal?: AbortSignal): Promise<DeviceSession[]> {
   const response = await request('/api/account/sessions', { signal })
-  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.' : 'Nie udało się wczytać listy urządzeń.')
+  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again.") : 'Nie udało się wczytać listy urządzeń.')
   return response.json() as Promise<DeviceSession[]>
 }
 
@@ -514,7 +518,7 @@ export async function endSession(id: string): Promise<void> {
   const csrf = await getCsrf()
   const response = await request(`/api/account/sessions/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { [csrf.headerName]: csrf.token } })
   if (!response.ok) {
-    throw new ApiError(response.status, { 401: 'Sesja wygasła. Zaloguj się ponownie.', 403: 'Sesja formularza wygasła. Spróbuj ponownie.',
+    throw new ApiError(response.status, { 401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."), 403: 'Sesja formularza wygasła. Spróbuj ponownie.',
       404: 'To urządzenie jest już wylogowane. Odśwież listę.' }[response.status] ?? 'Nie udało się wylogować urządzenia. Spróbuj ponownie.')
   }
 }
@@ -529,8 +533,8 @@ async function teamRequest<T>(path: string, body?: unknown, signal?: AbortSignal
   if (!response.ok) {
     const messages: Record<number, string> = {
       400: path.endsWith('/invites') ? 'Sprawdź datę wygaśnięcia (najwyżej 30 dni w przyszłości), dodatni limit użyć i adres e-mail.' : 'Sprawdź nazwę zespołu i strefę czasową.',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
-      403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
+      403: localizedError("Nie masz uprawnień do tej operacji lub sesja formularza wygasła.", "You do not have permission for this action or the form session expired."),
       404: path.startsWith('/api/invites/') ? 'Nie znaleziono zaproszenia. Sprawdź, czy link jest kompletny.' : 'Nie znaleziono zespołu lub nie masz już do niego dostępu.',
       409: 'Limit użyć tego zaproszenia został wyczerpany.',
       410: 'Zaproszenie wygasło lub zostało anulowane. Poproś właściciela o nowy link.',
@@ -559,7 +563,7 @@ async function invitationManagementRequest(path: string, method: 'GET' | 'DELETE
   if (!response.ok) {
     const messages: Record<number, string> = {
       400: 'Nieprawidłowa strona listy zaproszeń.',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Zarządzanie zaproszeniami jest dostępne wyłącznie dla właściciela zespołu lub sesja formularza wygasła.',
       404: 'Zespół lub zaproszenie są niedostępne. Odśwież listę.',
       409: 'Zarchiwizowanego zespołu nie można zmieniać.',
@@ -574,7 +578,7 @@ export async function getInvitationPreview(token: string, signal?: AbortSignal):
   const response = await request(`/api/invites/${encodeURIComponent(token)}`, { signal })
   if (!response.ok) {
     const messages: Record<number, string> = {
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       404: 'Nie znaleziono zaproszenia. Sprawdź, czy link jest kompletny.',
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się sprawdzić zaproszenia. Spróbuj ponownie.')
@@ -592,7 +596,7 @@ async function teamManagementRequest<T>(path: string, method: 'GET' | 'PATCH' | 
   if (!response.ok) {
     const messages: Record<number, string> = {
       400: 'Sprawdź nazwę zespołu, strefę czasową i wybraną osobę.',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Tej operacji nie możesz wykonać w tym zespole lub sesja formularza wygasła.',
       404: 'Zespół lub wybrana osoba są niedostępne. Odśwież listę.',
       409: method === 'PATCH' ? 'Zarchiwizowanego zespołu nie można zmieniać. Reguła wymagająca tagu lub zadania Jira wymaga najpierw dodania tagu albo połączenia z Jira.'
@@ -623,8 +627,8 @@ async function projectRequest<T>(path: string, method = 'GET', body?: ProjectInp
   if (!response.ok) {
     const messages: Record<number, string> = {
       400: 'Wpisz nazwę projektu (maksymalnie 255 znaków). Opis może mieć najwyżej 2000 znaków. Link musi wskazywać repozytorium https://github.com/właściciel/repozytorium, bez danych logowania i parametrów (maksymalnie 2048 znaków).',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
-      403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
+      403: localizedError("Nie masz uprawnień do tej operacji lub sesja formularza wygasła.", "You do not have permission for this action or the form session expired."),
       404: 'Nie znaleziono projektu lub zespołu albo nie masz już do niego dostępu.',
       409: path.endsWith('/archive')
         ? 'Projekt ma aktywny timer. Zatrzymaj go przed archiwizacją.'
@@ -663,10 +667,10 @@ async function timeRequest(path: string, body?: unknown, signal?: AbortSignal): 
   if (!response.ok) {
     const messages: Record<number, string> = {
       400: 'Sprawdź projekt, datę i czas trwania wpisu. Wpis może mieć najwyżej 24 godziny, podana data pracy musi mieścić się w ostatnich 2 latach i nie może być z przyszłości, a opis może mieć najwyżej 2000 znaków. Wpis ręczny może być bez daty.',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
-      403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
-      404: 'Nie znaleziono wpisu, projektu lub zespołu albo nie masz już do niego dostępu.',
-      422: 'Zespół wymaga opisu pracy albo tagu lub zadania Jira. Uzupełnij wpis i spróbuj ponownie.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
+      403: localizedError("Nie masz uprawnień do tej operacji lub sesja formularza wygasła.", "You do not have permission for this action or the form session expired."),
+      404: localizedError("Nie znaleziono wpisu, projektu lub zespołu albo nie masz już do niego dostępu.", "The entry, project, or team could not be found or you no longer have access."),
+      422: localizedError("Zespół wymaga opisu pracy albo tagu lub zadania Jira. Uzupełnij wpis i spróbuj ponownie.", "The team requires a description, a tag, or a Jira issue. Complete the entry and try again."),
       409: path.endsWith('/pause') || path.endsWith('/resume') ? 'Stan timera uległ zmianie. Sprawdź aktualny stan i spróbuj ponownie.'
         : path.endsWith('/start') ? 'Nie można uruchomić timera. Sprawdź aktywny timer, status projektu i połączenie z Jira.'
         : path.endsWith('/stop') ? 'Nie można zatrzymać tego timera. Mógł już zostać zatrzymany lub nie upłynęła jeszcze pełna sekunda.'
@@ -675,7 +679,7 @@ async function timeRequest(path: string, body?: unknown, signal?: AbortSignal): 
         : path.endsWith('/discard') ? 'Nie można odrzucić tego timera. Mógł już zostać zatrzymany lub odrzucony.'
         : 'Zespół jest zarchiwizowany i nie można dodać do niego czasu.',
     }
-    throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się odczytać lub zapisać czasu. Odśwież stan przed ponowieniem operacji.')
+    throw new ApiError(response.status, messages[response.status] ?? localizedError("Nie udało się odczytać lub zapisać czasu. Odśwież stan przed ponowieniem operacji.", "Could not load or save time. Refresh to check the current state before retrying."))
   }
   return response.status === 204 ? null : response.json() as Promise<TimeEntry>
 }
@@ -714,11 +718,11 @@ async function changeTimeEntry(id: string, method: 'PATCH' | 'DELETE', body?: Up
   if (!response.ok) {
     const messages: Record<number, string> = {
       400: 'Sprawdź projekt, datę i czas trwania. Wpis może mieć najwyżej 24 godziny, podana data pracy musi mieścić się w ostatnich 2 latach i nie może być z przyszłości, a opis może mieć najwyżej 2000 znaków. Wpis z timera wymaga daty.',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
-      403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
+      403: localizedError("Nie masz uprawnień do tej operacji lub sesja formularza wygasła.", "You do not have permission for this action or the form session expired."),
       404: 'Wpis został usunięty lub nie masz już dostępu do wpisu, projektu lub zespołu.',
       409: 'Wpis został w międzyczasie zmieniony (przez Ciebie lub kogoś innego), jest aktywnym timerem albo wybrany projekt lub tag jest archiwalny. Zamknij formularz, odśwież historię i spróbuj ponownie.',
-      422: 'Zespół wymaga opisu pracy albo tagu lub zadania Jira. Uzupełnij wpis i spróbuj ponownie.',
+      422: localizedError("Zespół wymaga opisu pracy albo tagu lub zadania Jira. Uzupełnij wpis i spróbuj ponownie.", "The team requires a description, a tag, or a Jira issue. Complete the entry and try again."),
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się zmienić wpisu. Odśwież historię przed ponowieniem operacji.')
   }
@@ -805,8 +809,8 @@ async function membershipRequest(path: string, method: 'GET' | 'DELETE' | 'POST'
   if (!response.ok) {
     const messages: Record<number, string> = {
       400: 'Sprawdź wybraną stronę listy członków.',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
-      403: 'Nie masz uprawnień do tej operacji lub sesja formularza wygasła.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
+      403: localizedError("Nie masz uprawnień do tej operacji lub sesja formularza wygasła.", "You do not have permission for this action or the form session expired."),
       404: 'Zespół lub członek jest niedostępny. Możliwe, że członkostwo już się zakończyło.',
       409: 'Właściciel nie może opuścić zespołu ani zostać z niego usunięty.',
     }
@@ -884,7 +888,7 @@ async function reportRequest<T>(teamId: string, endpoint: string, params: URLSea
   if (!response.ok) {
     const messages: Record<number, string> = {
       400: 'Sprawdź zakres dat (najwyżej 366 dni) i filtry raportu.',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Widok zespołu jest dostępny wyłącznie dla jego właściciela, a podgląd aktywnych timerów można wyłączyć w ustawieniach zespołu.',
       404: 'Zespół lub wybrane dane są niedostępne. Sprawdź swoje uprawnienia i filtry.',
     }
@@ -938,7 +942,7 @@ export async function downloadReport(teamId: string, filters: ReportFilters, kin
   if (!response.ok) {
     throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
       : response.status === 400 ? 'Sprawdź zakres dat (najwyżej 366 dni), klucz zadania Jira i filtry. Plik CSV lub Excel może mieć najwyżej 50 000 wpisów, więc zawęź raport.'
-      : response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.'
+      : response.status === 401 ? localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again.")
       : response.status === 403 || response.status === 404 ? 'Raport jest niedostępny. Sprawdź swoje uprawnienia i filtry.'
       : 'Nie udało się pobrać pliku. Spróbuj ponownie.')
   }
@@ -954,7 +958,7 @@ export async function downloadAccountData(): Promise<{ blob: Blob; filename: str
   const response = await request('/api/account/export')
   if (!response.ok) {
     throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
-      : response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.' : 'Nie udało się pobrać danych. Spróbuj ponownie.')
+      : response.status === 401 ? localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again.") : 'Nie udało się pobrać danych. Spróbuj ponownie.')
   }
   return { blob: await response.blob(), filename: filenameFrom(response, 'hourforge-export.json') }
 }
@@ -983,7 +987,7 @@ const googleOutcomes: Record<string, { tone: 'success' | 'error'; login: string;
   GOOGLE_ALREADY_LINKED: { tone: 'error', login: 'To konto Google jest już połączone z innym kontem HourForge.' },
   GOOGLE_ALREADY_LINKED_TO_YOU: { tone: 'error', login: 'Twoje konto jest już połączone z innym kontem Google. Najpierw je odłącz.' },
   LINK_EXPIRED: { tone: 'error', login: 'Czas na połączenie z Google minął. Spróbuj ponownie.' },
-  ACCOUNT_BLOCKED: { tone: 'error', login: 'To konto zostało zablokowane przez operatora serwisu. Jeśli to pomyłka, skontaktuj się z administratorem.' },
+  ACCOUNT_BLOCKED: { tone: 'error', login: localizedError("To konto zostało zablokowane przez operatora serwisu. Jeśli to pomyłka, skontaktuj się z administratorem.", "The service operator has blocked this account. Contact your administrator if you think this is a mistake.") },
   EMAIL_NOT_VERIFIED: { tone: 'error', login: 'Potwierdź adres e-mail, aby się zalogować. Link wysłaliśmy na adres konta.' },
 }
 
@@ -1001,7 +1005,7 @@ async function googleAccountRequest(path: string, body: unknown, messages: Recor
   if (!response.ok) {
     const code = response.status === 409 ? (await response.json().catch(() => null) as { code?: string } | null)?.code : undefined
     throw new ApiError(response.status, response.status === 429 ? tooManyRequestsMessage(response)
-      : (code && codes[code]) || ({ 401: 'Sesja wygasła. Zaloguj się ponownie.', 403: 'Sesja formularza wygasła. Spróbuj ponownie.',
+      : (code && codes[code]) || ({ 401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."), 403: 'Sesja formularza wygasła. Spróbuj ponownie.',
         404: 'Logowanie przez Google jest niedostępne na tym serwerze.', ...messages }[response.status] ?? fallback), code)
   }
   return response
@@ -1049,7 +1053,7 @@ async function jiraRequest<T>(path: string, method = 'GET', body?: unknown, sign
   })
   if (!response.ok) {
     const messages: Record<number, string> = {
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Tej operacji nie możesz wykonać w tym zespole lub sesja formularza wygasła.',
       404: 'Nie znaleziono zespołu lub witryny Jira albo nie masz już do nich dostępu.',
       409: 'Najpierw połącz konto Jira. Właściciel zespołu musi też wybrać witrynę Jira.',
@@ -1113,7 +1117,7 @@ export interface Preferences {
 
 export async function getPreferences(signal?: AbortSignal): Promise<Preferences> {
   const response = await request('/api/account/preferences', { signal })
-  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.' : 'Nie udało się wczytać ustawień.')
+  if (!response.ok) throw new ApiError(response.status, response.status === 401 ? localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again.") : 'Nie udało się wczytać ustawień.')
   return response.json() as Promise<Preferences>
 }
 
@@ -1124,7 +1128,7 @@ export async function savePreferences(input: Preferences): Promise<Preferences> 
   if (!response.ok) {
     const messages: Record<number, string> = {
       400: 'Sprawdź wybrane ustawienia. Zespół domyślny musi być jednym z Twoich zespołów.',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Sesja formularza wygasła. Spróbuj ponownie.',
     }
     throw new ApiError(response.status, messages[response.status] ?? 'Nie udało się zapisać ustawień. Spróbuj ponownie.')
@@ -1145,7 +1149,7 @@ export async function copyDay(input: { teamId: string; fromDate: string; toDate:
   if (!response.ok) {
     const messages: Record<number, string> = {
       400: 'Nie można skopiować tego dnia: wybierz inny dzień docelowy z ostatnich 2 lat (nie z przyszłości); wpisów może być najwyżej 100, a żaden nie może trwać dłużej niż 24 godziny.',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Sesja formularza wygasła. Spróbuj ponownie.',
       404: 'Nie ma wpisów do skopiowania albo nie masz już dostępu do zespołu.',
       409: 'Nie można dodać czasu: zespół, projekt albo tag któregoś z wpisów jest zarchiwizowany.',
@@ -1184,7 +1188,7 @@ async function templateRequest<T>(teamId: string, method: string, suffix = '', b
   if (!response.ok) {
     const messages: Record<number, string> = {
       400: 'Sprawdź nazwę szablonu (najwyżej 80 znaków) i opis (najwyżej 2000 znaków).',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Sesja formularza wygasła. Spróbuj ponownie.',
       404: 'Nie znaleziono szablonu, projektu lub zadania Jira albo nie masz już dostępu.',
       409: 'Szablon o takiej nazwie już istnieje, masz ich za dużo (najwyżej 30 w zespole), projekt lub tag jest archiwalny albo zespół jest zarchiwizowany.',
@@ -1215,7 +1219,7 @@ export interface DashboardActivity {
 async function dashboardRequest<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await request(path, { signal })
   if (!response.ok) {
-    throw new ApiError(response.status, response.status === 401 ? 'Sesja wygasła. Zaloguj się ponownie.' : 'Nie udało się wczytać podsumowania czasu. Spróbuj ponownie.')
+    throw new ApiError(response.status, response.status === 401 ? localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again.") : localizedError("Nie udało się wczytać podsumowania czasu. Spróbuj ponownie.", "Could not load your time summary. Try again."))
   }
   return response.json() as Promise<T>
 }
@@ -1239,7 +1243,7 @@ async function correctionRequest<T>(path: string, method: 'GET' | 'POST' | 'PATC
   if (!response.ok) {
     const messages: Record<number, string> = {
       400: 'Sprawdź projekt, datę i czas trwania. Wpis może mieć najwyżej 24 godziny, a data pracy musi mieścić się w ostatnich 2 latach i nie może być z przyszłości.',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Korekty czasu może wykonywać tylko właściciel lub administrator zespołu albo sesja formularza wygasła.',
       404: 'Wpis, osoba lub projekt są niedostępne. Odśwież listę.',
       409: 'Zespół jest zarchiwizowany, wpis jest uruchomionym timerem, projekt jest archiwalny albo wpis został w międzyczasie zmieniony. Odśwież listę i spróbuj ponownie.',
@@ -1280,7 +1284,7 @@ async function tagRequest<T>(teamId: string, method: 'GET' | 'POST' | 'PUT', suf
   if (!response.ok) {
     const messages: Record<number, string> = {
       400: 'Podaj nazwę tagu (do 40 znaków) i wybierz kolor z listy.',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Tagami zarządza właściciel lub administrator zespołu albo sesja formularza wygasła.',
       404: 'Zespół lub tag są niedostępne. Odśwież listę.',
       409: method === 'GET' ? 'Nie udało się wczytać tagów.' : 'Tag o tej nazwie już istnieje, jest zarchiwizowany albo zespół jest zarchiwizowany.',
@@ -1365,7 +1369,7 @@ async function operatorRequest<T>(path: string, method: 'GET' | 'POST' | 'PUT' |
   if (!response.ok) {
     throw new ApiError(response.status, {
       400: 'Sprawdź wpisane dane.',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Panel operatora jest dostępny tylko dla operatorów tej instancji.',
       404: 'Nie znaleziono konta lub zespołu. Odśwież listę.',
       409: 'Tego nie da się teraz zrobić: konto jest właścicielem zespołów albo zmieniło się w międzyczasie. Odśwież listę.',
@@ -1403,7 +1407,7 @@ async function pictureRequest(path: string, picture: Blob | null): Promise<void>
   if (!response.ok) {
     throw new ApiError(response.status, {
       400: 'Wybierz zdjęcie JPEG lub PNG do 2 MB i najwyżej 4096 × 4096 pikseli.',
-      401: 'Sesja wygasła. Zaloguj się ponownie.',
+      401: localizedError("Sesja wygasła. Zaloguj się ponownie.", "Your session expired. Sign in again."),
       403: 'Logo mogą zmieniać właściciel i administratorzy zespołu albo sesja formularza wygasła.',
       404: 'Nie znaleziono zespołu.',
       409: 'Zarchiwizowanego zespołu nie można zmieniać.',

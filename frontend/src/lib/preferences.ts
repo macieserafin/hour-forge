@@ -31,4 +31,5 @@ export function pickTeam(teams: Team[] | undefined, selectedId: string | null, d
   return teams.find(team => team.id === defaultTeamId) ?? teams[0]
 }
 
-export const startPaths = { DASHBOARD: '/dashboard', TIME: '/time', PROJECTS: '/projects', TEAMS: '/teams' } as const
+/** Start pages stored on the account (old names kept until B05 adds the new views); all lead into the new app. */
+export const startPaths = { DASHBOARD: '/app/work', TIME: '/app/work', PROJECTS: '/app/projects', TEAMS: '/app/teams' } as const

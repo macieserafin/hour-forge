@@ -11,6 +11,8 @@ export default defineConfig({
   use: {
     baseURL,
     channel: 'chrome',
+    // The interface follows the browser language (O03); tests read Polish texts.
+    locale: 'pl-PL',
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },

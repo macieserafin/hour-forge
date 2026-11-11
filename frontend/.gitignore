@@ -1,6 +1,5 @@
 node_modules/
 dist/
-*.tsbuildinfo
-playwright-report/
 test-results/
-coverage/
+playwright-report/
+*.tsbuildinfo

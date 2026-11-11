@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, archiveProject, restoreProject, deleteProject, createProject, getProject, getProjects, updateProject, type ProjectInput } from './api'
 import { teamsKey, useAuthError } from './teams'
 
-const projectsKey = (userId: string, teamId: string) => ['projects', userId, teamId] as const
+export const projectsKey = (userId: string, teamId: string) => ['projects', userId, teamId] as const
 const retry = (count: number, error: Error) => count < 1 && error instanceof ApiError && (error.status === 0 || error.status >= 500)
 
 export function useProjects(userId: string, teamId: string, includeArchived: boolean, enabled = true) {

@@ -5,7 +5,7 @@ import { teamsKey, useAuthError } from './teams'
 import { dashboardKey } from './dashboard'
 
 export const activeTimerKey = (userId: string) => ['timer', userId, 'active'] as const
-const historyKey = (userId: string) => ['time-entries', userId] as const
+export const historyKey = (userId: string) => ['time-entries', userId] as const
 
 export function useTimeEntryHistory(userId: string, teamId: string, filters: TimeEntryHistoryFilters, page: number) {
   const handleError = useAuthError()
