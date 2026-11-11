@@ -586,6 +586,7 @@
   font-size: var(--text-sm);
   font-weight: 600;
   text-decoration: none;
+  margin-bottom: var(--space-6);
 }
 .back-link:hover,
 .action-link:hover {
