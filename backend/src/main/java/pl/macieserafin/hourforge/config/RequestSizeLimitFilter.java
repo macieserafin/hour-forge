@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.Locale;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -38,7 +39,7 @@ public class RequestSizeLimitFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         var type = request.getContentType();
-        if (type != null && type.toLowerCase(java.util.Locale.ROOT).startsWith("multipart/")) {
+        if (type != null && type.toLowerCase(Locale.ROOT).startsWith("multipart/")) {
             chain.doFilter(request, response);
             return;
         }

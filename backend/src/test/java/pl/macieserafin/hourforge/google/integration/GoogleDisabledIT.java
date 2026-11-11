@@ -19,7 +19,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** The default (F6): without GOOGLE_CLIENT_ID the application starts as before and nothing of Google is reachable. */
+/** The default: without GOOGLE_CLIENT_ID the application starts as before and nothing of Google is reachable. */
 class GoogleDisabledIT extends ApiIntegrationTestSupport {
     @Autowired MockMvc mvc;
     @Autowired ApplicationContext context;

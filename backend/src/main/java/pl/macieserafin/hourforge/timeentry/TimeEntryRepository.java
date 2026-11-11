@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 import java.util.List;
 import java.util.Optional;
@@ -37,12 +39,12 @@ public interface TimeEntryRepository extends JpaRepository<TimeEntry, UUID>, Jpa
     /** Running, not paused timers that started early enough to have reached the limit and were not reminded yet. */
     @Query("select e from TimeEntry e join fetch e.user join fetch e.team join fetch e.project where e.entryType = pl.macieserafin.hourforge.timeentry.EntryType.TIMER"
             + " and e.endedAt is null and e.pausedAt is null and e.longTimerRemindedAt is null and e.startedAt <= :startedBefore")
-    List<TimeEntry> findDueForLongTimerReminder(java.time.Instant startedBefore);
+    List<TimeEntry> findDueForLongTimerReminder(Instant startedBefore);
 
     /** Finished entries of one person in one team on one day, in the order they were written. */
     @Query("select e from TimeEntry e join fetch e.project where e.user.id = :userId and e.team.id = :teamId and e.workDate = :date"
             + " and e.durationSeconds is not null order by e.createdAt, e.id")
-    List<TimeEntry> findDayOf(UUID userId, UUID teamId, java.time.LocalDate date);
+    List<TimeEntry> findDayOf(UUID userId, UUID teamId, LocalDate date);
 
     Optional<TimeEntry> findByUserIdAndEntryTypeAndEndedAtIsNull(UUID userId, EntryType entryType);
 

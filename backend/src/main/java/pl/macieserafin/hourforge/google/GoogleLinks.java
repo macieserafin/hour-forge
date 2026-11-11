@@ -19,8 +19,8 @@ import java.time.Clock;
 import java.util.UUID;
 
 /**
- * Linking and unlinking Google on the account page (F4, F5). Both are confirmed with the current password when the
- * account has one (D2), and wrong answers share the limit of the password change. One Google account per account (D14).
+ * Linking and unlinking Google on the account page. Both are confirmed with the current password when the
+ * account has one, and wrong answers share the limit of the password change. One Google account per account.
  */
 @Service
 public class GoogleLinks {
@@ -81,8 +81,8 @@ public class GoogleLinks {
     }
 
     /**
-     * Removes the link and returns the new credential version: every other session ends (D5), also those signed in
-     * with Google. The last way to sign in cannot be removed (A13.3).
+     * Removes the link and returns the new credential version: every other session ends, also those signed in
+     * with Google. The last way to sign in cannot be removed.
      */
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public int unlink(UUID userId, String currentPassword) {

@@ -3,8 +3,11 @@ package pl.macieserafin.hourforge.twofactor;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayOutputStream;
+import java.net.URLEncoder;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Locale;
@@ -58,7 +61,7 @@ public final class Totp {
         long current = step(now);
         for (long step = current - 1; step <= current + 1; step++) {
             if (lastUsedStep != null && step <= lastUsedStep) continue;
-            if (java.security.MessageDigest.isEqual(code(secret, step).getBytes(), code.getBytes())) return OptionalLong.of(step);
+            if (MessageDigest.isEqual(code(secret, step).getBytes(), code.getBytes())) return OptionalLong.of(step);
         }
         return OptionalLong.empty();
     }
@@ -105,6 +108,6 @@ public final class Totp {
     }
 
     private static String encode(String value) {
-        return java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 }

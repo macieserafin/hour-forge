@@ -8,7 +8,7 @@ import pl.macieserafin.hourforge.google.GoogleSignInConfig;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** When the Google client exists, and what a partial configuration does to the start-up (A13-D15). */
+/** When the Google client exists, and what a partial configuration does to the start-up. */
 class GoogleSignInConfigTest {
     private final ApplicationContextRunner runner = new ApplicationContextRunner().withUserConfiguration(GoogleSignInConfig.class);
 

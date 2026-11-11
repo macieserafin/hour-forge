@@ -37,8 +37,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Removing an account that has no password (A13-D8, C2): a link by e-mail instead of the password. Runs with the sign-in
- * with Google switched off, because such an account still exists then (C1).
+ * Removing an account that has no password: a link by e-mail instead of the password. Runs with the sign-in
+ * with Google switched off, because such an account still exists then.
  */
 class AccountDeletionByEmailIT extends ApiIntegrationTestSupport {
     private static final String EMAIL = "google-only@example.com";

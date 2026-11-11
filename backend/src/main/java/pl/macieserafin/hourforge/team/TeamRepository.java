@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import jakarta.persistence.LockModeType;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -14,7 +15,7 @@ public interface TeamRepository extends JpaRepository<Team, UUID> {
     @Query("select team from Team team where team.id = :id")
     Optional<Team> findLockedById(UUID id);
 
-    java.util.List<Team> findByWeeklyReportEnabledTrueAndArchivedAtIsNull();
+    List<Team> findByWeeklyReportEnabledTrueAndArchivedAtIsNull();
 
     @Modifying(clearAutomatically = true)
     @Query("delete from Team team where team.id = :id")

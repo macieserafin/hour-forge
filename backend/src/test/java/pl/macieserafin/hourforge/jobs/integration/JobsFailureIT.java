@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Real commits on PostgreSQL: when the commit of one team or timer is rejected, the others are marked and mailed exactly
- * once, the rejected one is neither marked nor mailed, and a later run does not repeat anything (HF-AUD-019).
+ * once, the rejected one is neither marked nor mailed, and a later run does not repeat anything.
  */
 @TestPropertySource(properties = "test.mail.after-commit=true")
 class JobsFailureIT extends IntegrationTestSupport {

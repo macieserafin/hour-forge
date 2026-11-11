@@ -3,6 +3,8 @@ package pl.macieserafin.hourforge.report;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Tuple;
 import jakarta.persistence.criteria.*;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -88,12 +90,12 @@ public class ReportRepository {
 
     private ReportResponse.Bucket bucket(Tuple row, ReportGrouping grouping) {
         int index = 0;
-        var day = grouping.day ? row.get(index++, java.time.LocalDate.class) : null;
+        var day = grouping.day ? row.get(index++, LocalDate.class) : null;
         var userId = grouping.member ? row.get(index++, UUID.class) : null;
         var name = grouping.member ? row.get(index++, String.class) : null;
         var projectId = grouping.project ? row.get(index++, UUID.class) : null;
         var projectName = grouping.project ? row.get(index++, String.class) : null;
-        var archived = grouping.project ? row.get(index++, java.time.Instant.class) : null;
+        var archived = grouping.project ? row.get(index++, Instant.class) : null;
         var color = grouping.project ? row.get(index++, pl.macieserafin.hourforge.project.ProjectColor.class) : null;
         var tagId = grouping.tag ? row.get(index++, UUID.class) : null;
         var tagName = grouping.tag ? row.get(index++, String.class) : null;

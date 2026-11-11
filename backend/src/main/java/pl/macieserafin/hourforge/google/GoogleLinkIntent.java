@@ -8,8 +8,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Permission to link Google to the signed-in account, given by {@code POST /api/account/google/link} after the password
- * (D2). It lives in that session only, for ten minutes, and is used once: the return from Google takes it, whatever
+ * Permission to link Google to the signed-in account, given by {@code POST /api/account/google/link} after the password.
+ * It lives in that session only, for ten minutes, and is used once: the return from Google takes it, whatever
  * the outcome. The credential version it was given for must still be current, so a password change, an unlink or
  * "sign out everywhere" in between voids it.
  */

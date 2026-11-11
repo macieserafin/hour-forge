@@ -3,6 +3,7 @@ package pl.macieserafin.hourforge.jira;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -11,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.security.TooManyRequestsException;
+import pl.macieserafin.hourforge.team.TeamAccess;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 
 /**
@@ -83,7 +85,7 @@ public class JiraIssueService {
         var cached = cache.get(key);
         if (cached.isPresent()) return cached.get().issues().get(0);
         var issue = find(userId, teamId, issueId).issue();
-        cache.put(key, new JiraApiClient.SearchResult(java.util.List.of(issue), null));
+        cache.put(key, new JiraApiClient.SearchResult(List.of(issue), null));
         return issue;
     }
 
@@ -136,8 +138,7 @@ public class JiraIssueService {
     }
 
     private JiraConnection connection(UUID userId, UUID teamId) {
-        members.findByTeamIdAndUserId(teamId, userId).filter(member -> member.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        TeamAccess.member(members, teamId, userId);
         return connections.findByTeamId(teamId).filter(JiraConnection::isEnabled)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "The team has no Jira site"));
     }

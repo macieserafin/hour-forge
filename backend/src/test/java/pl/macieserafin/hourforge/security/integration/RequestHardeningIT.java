@@ -16,7 +16,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Rejected input is answered briefly and never copied into the log; oversized bodies are refused before they are read (HF-AUD-006). */
+/** Rejected input is answered briefly and never copied into the log; oversized bodies are refused before they are read. */
 class RequestHardeningIT extends ApiIntegrationTestSupport {
     private static final String MARKER = "RejectedValueMarker";
 

@@ -8,7 +8,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
+import pl.macieserafin.hourforge.security.Tokens;
 import pl.macieserafin.hourforge.team.Team;
+import pl.macieserafin.hourforge.team.TeamAccess;
 import pl.macieserafin.hourforge.team.TeamMember;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
@@ -17,16 +19,10 @@ import pl.macieserafin.hourforge.team.TeamRole;
 import pl.macieserafin.hourforge.user.UserRepository;
 
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
-import java.util.Base64;
-import java.util.HexFormat;
 import java.util.UUID;
 
 @Service
@@ -40,7 +36,6 @@ public class InvitationService {
     private final String frontendUrl;
     private final Clock clock;
     private final pl.macieserafin.hourforge.team.TeamMailService mail;
-    private final SecureRandom random = new SecureRandom();
 
     public InvitationService(TeamInviteRepository invites, TeamRepository teams, TeamMemberRepository members,
                              UserRepository users, @Value("${app.frontend-url}") String frontendUrl, Clock clock,
@@ -65,12 +60,7 @@ public class InvitationService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         var team = teams.findLockedById(teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        var membership = members.findByTeamIdAndUserId(teamId, currentUserId)
-                .filter(member -> member.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (!membership.getRole().canManage()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        }
+        TeamAccess.manager(members, teamId, currentUserId);
         if (team.isArchived()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived teams cannot invite new members");
         }
@@ -81,10 +71,8 @@ public class InvitationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Expiration must be within 30 days and use limit positive");
         }
 
-        byte[] tokenBytes = new byte[32];
-        random.nextBytes(tokenBytes);
-        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
-        var invite = invites.saveAndFlush(new TeamInvite(team, creator, hash(token), maxUses, expiry, now));
+        String token = Tokens.random();
+        var invite = invites.saveAndFlush(new TeamInvite(team, creator, Tokens.sha256(token), maxUses, expiry, now));
         String url = UriComponentsBuilder.fromUriString(frontendUrl).pathSegment("invite", token).build().toUriString();
         return new InviteResponse(invite.getId(), teamId, url, token, invite.getExpiresAt(), invite.getMaxUses());
     }
@@ -104,7 +92,7 @@ public class InvitationService {
         if (token == null || !token.matches("[A-Za-z0-9_-]{43}")) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Invitation not found");
         }
-        String tokenHash = hash(token);
+        String tokenHash = Tokens.sha256(token);
         UUID teamId = invites.findTeamIdByTokenHash(tokenHash)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invitation not found"));
         // Serializing by team also prevents duplicate memberships through DIFFERENT invite tokens.
@@ -150,7 +138,7 @@ public class InvitationService {
         if (token == null || !token.matches("[A-Za-z0-9_-]{43}")) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Invitation not found");
         }
-        var invite = invites.findByTokenHash(hash(token))
+        var invite = invites.findByTokenHash(Tokens.sha256(token))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invitation not found"));
         var team = invite.getTeam();
         var existing = members.findByTeamIdAndUserId(team.getId(), currentUserId);
@@ -177,7 +165,7 @@ public class InvitationService {
 
     @Transactional(readOnly = true)
     public InviteSummaryResponse.Page list(UUID actorId, UUID teamId, int page, int size) {
-        requireOwner(actorId, teamId);
+        requireManager(teamId, actorId);
         if (page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid pagination");
         }
@@ -202,7 +190,7 @@ public class InvitationService {
     public void revoke(UUID actorId, UUID teamId, UUID inviteId) {
         if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         teams.findLockedById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        var team = requireOwner(actorId, teamId);
+        var team = requireManager(teamId, actorId);
         if (team.isArchived()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived teams cannot be changed");
         var invite = invites.findByIdAndTeamId(inviteId, teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
@@ -212,19 +200,8 @@ public class InvitationService {
         }
     }
 
-    private Team requireOwner(UUID actorId, UUID teamId) {
+    private Team requireManager(UUID teamId, UUID actorId) {
         if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        var member = members.findByTeamIdAndUserId(teamId, actorId).filter(m -> m.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (!member.getRole().canManage()) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        return member.getTeam();
-    }
-
-    private String hash(String token) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256 is unavailable", exception);
-        }
+        return TeamAccess.manager(members, teamId, actorId).getTeam();
     }
 }

@@ -21,7 +21,7 @@ import java.util.UUID;
 
 /**
  * Finds or creates the account behind a Google sign-in. An account is found only by the Google {@code sub}; an address
- * that already has an account never links or creates anything (A13.2, D1).
+ * that already has an account never links or creates anything.
  */
 @Service
 class GoogleAccounts {
@@ -64,20 +64,20 @@ class GoogleAccounts {
             var user = linked.get().getUser();
             // Removing an account deletes its link; this only guards against a link left behind.
             if (user.getDeletedAt() != null) return Result.refuse(GoogleOutcome.GOOGLE_FAILED);
-            // The local address stays as it is (D13); the Google address shown in the settings follows Google.
+            // The local address stays as it is; the Google address shown in the settings follows Google.
             linked.get().recordUse(now, claims.emailForDisplay());
             return Result.signIn(user);
         }
-        // No account without an address Google has verified (D4).
+        // No account without an address Google has verified.
         if (!claims.usableEmail()) return Result.refuse(GoogleOutcome.GOOGLE_EMAIL_UNVERIFIED);
         var existing = users.findByEmailIgnoreCase(claims.email());
         if (existing.isPresent()) {
-            // Whoever proved this Google account learns that the address has an account; its owner is told (D1).
+            // Whoever proved this Google account learns that the address has an account; its owner is told.
             mail.sendGoogleSignInAttempt(existing.get());
             return Result.refuse(GoogleOutcome.GOOGLE_ACCOUNT_EXISTS);
         }
         try {
-            // Shares the limit of the password registration; no bot check, Google already asks a person (D9).
+            // Shares the limit of the password registration; no bot check, Google already asks a person.
             rateLimits.registration(ip);
         } catch (TooManyRequestsException exception) {
             return Result.refuse(GoogleOutcome.GOOGLE_FAILED);
@@ -89,7 +89,7 @@ class GoogleAccounts {
         var identity = new UserIdentity(user, IdentityProvider.GOOGLE, claims.subject(), claims.emailForDisplay(), now);
         identity.recordUse(now, claims.emailForDisplay());
         identities.saveAndFlush(identity);
-        // Not vouched for by Google: confirmed with our own link, like a password registration (D4, F10).
+        // Not vouched for by Google: confirmed with our own link, like a password registration.
         if (!user.isEmailVerified()) verification.sendConfirmation(user);
         return Result.signIn(user);
     }

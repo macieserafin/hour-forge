@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.team.Team;
+import pl.macieserafin.hourforge.team.TeamAccess;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
 import pl.macieserafin.hourforge.user.UserRepository;
@@ -33,21 +34,21 @@ public class TagService {
 
     @Transactional(readOnly = true)
     public List<TagResponse> list(UUID userId, UUID teamId, boolean includeArchived) {
-        requireMember(userId, teamId, false);
+        requireMember(teamId, userId, false);
         var result = includeArchived ? tags.findByTeamIdOrderByNameAscIdAsc(teamId) : tags.findByTeamIdAndArchivedAtIsNullOrderByNameAscIdAsc(teamId);
         return result.stream().map(TagResponse::of).toList();
     }
 
     @Transactional
     public TagResponse create(UUID userId, UUID teamId, TagRequest request) {
-        var team = requireMember(userId, teamId, true);
+        var team = requireMember(teamId, userId, true);
         requireUniqueName(teamId, request.name(), null);
         return TagResponse.of(save(new Tag(team, request.name(), request.color())));
     }
 
     @Transactional
     public TagResponse update(UUID userId, UUID teamId, UUID tagId, TagRequest request) {
-        requireMember(userId, teamId, true);
+        requireMember(teamId, userId, true);
         var tag = find(teamId, tagId);
         if (tag.getArchivedAt() != null) throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived tags cannot be edited");
         requireUniqueName(teamId, request.name(), tagId);
@@ -58,7 +59,7 @@ public class TagService {
 
     @Transactional
     public TagResponse archive(UUID userId, UUID teamId, UUID tagId) {
-        requireMember(userId, teamId, true);
+        requireMember(teamId, userId, true);
         var tag = find(teamId, tagId);
         if (tag.getArchivedAt() == null) tag.setArchivedAt(clock.instant().truncatedTo(ChronoUnit.MICROS));
         return TagResponse.of(save(tag));
@@ -66,7 +67,7 @@ public class TagService {
 
     @Transactional
     public TagResponse restore(UUID userId, UUID teamId, UUID tagId) {
-        requireMember(userId, teamId, true);
+        requireMember(teamId, userId, true);
         var tag = find(teamId, tagId);
         tag.setArchivedAt(null);
         return TagResponse.of(save(tag));
@@ -92,13 +93,12 @@ public class TagService {
     }
 
     /** Reads need only active membership; writes take the team lock, need owner or admin and a team that is not archived. */
-    private Team requireMember(UUID userId, UUID teamId, boolean write) {
+    private Team requireMember(UUID teamId, UUID userId, boolean write) {
         if (!users.existsById(userId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         var team = (write ? teams.findLockedById(teamId) : teams.findById(teamId))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        var member = members.findByTeamIdAndUserId(teamId, userId).filter(m -> m.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (write && !member.getRole().canManage()) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        if (write) TeamAccess.manager(members, teamId, userId);
+        else TeamAccess.member(members, teamId, userId);
         if (write && team.isArchived()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Tags of an archived team cannot be changed");
         return team;
     }

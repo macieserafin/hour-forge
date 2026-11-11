@@ -33,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * The first uses of the CSRF token in a fresh session, at once: the frontend asks for the token before every change, so
  * two changes sent together right after signing in ask for it twice. Real commits in the database session store, so no
- * test transaction (HF-W-014).
+ * test transaction.
  */
 @AutoConfigureMockMvc
 class CsrfConcurrencyIT extends IntegrationTestSupport {
@@ -127,9 +127,9 @@ class CsrfConcurrencyIT extends IntegrationTestSupport {
     }
 
     /**
-     * A fresh session after signing in, with one ordinary request first. Before HF-W-012 that request stored the day of
+     * A fresh session after signing in, with one ordinary request first. Before the activity day moved out of the session, that request stored the day of
      * activity in the session, which isolated the CSRF token as the only attribute the parallel requests could still
-     * add. Since HF-W-012 the activity day is no longer a session attribute; the request stays and does no harm.
+     * add. The activity day is no longer a session attribute; the request stays and does no harm.
      */
     private BrowserSession signedInSession() throws Exception {
         var browser = new BrowserSession(mvc);

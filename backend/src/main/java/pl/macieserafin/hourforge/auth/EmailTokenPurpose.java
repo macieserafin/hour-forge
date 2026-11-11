@@ -6,7 +6,7 @@ public enum EmailTokenPurpose {
     VERIFY_EMAIL(Duration.ofHours(24), false),
     RESET_PASSWORD(Duration.ofHours(1), true),
     CHANGE_EMAIL(Duration.ofHours(24), true),
-    /** Confirms the removal of an account without a password (A13-D8); dies with a password, unlink or sign-out-everywhere. */
+    /** Confirms the removal of an account without a password; dies with a password, unlink or sign-out-everywhere. */
     DELETE_ACCOUNT(Duration.ofHours(24), true);
 
     private final Duration validity;

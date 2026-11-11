@@ -2,9 +2,11 @@ package pl.macieserafin.hourforge.jira;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,7 +77,7 @@ public class JiraApiClient {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
                 .contentType(MediaType.APPLICATION_JSON).accept(MediaType.APPLICATION_JSON).body(body)
                 .retrieve().body(new ParameterizedTypeReference<Map<String, Object>>() { }));
-        var issues = new java.util.ArrayList<Issue>();
+        var issues = new ArrayList<Issue>();
         if (response != null && response.get("issues") instanceof List<?> raw) {
             for (var item : raw) {
                 if (item instanceof Map<?, ?> map) issues.add(issue(map));
@@ -100,7 +102,7 @@ public class JiraApiClient {
         return properties.apiBaseUrl() + "/ex/jira/" + cloudId;
     }
 
-    private <T> T call(java.util.function.Supplier<T> request) {
+    private <T> T call(Supplier<T> request) {
         try {
             return request.get();
         } catch (RestClientResponseException exception) {

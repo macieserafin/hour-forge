@@ -2,6 +2,7 @@ package pl.macieserafin.hourforge.twofactor;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -136,7 +137,7 @@ public class TwoFactorSignIn {
         return version != null && credentials.findSessionVersion(userId).filter(version::equals).isPresent();
     }
 
-    private static void forget(jakarta.servlet.http.HttpSession session) {
+    private static void forget(HttpSession session) {
         session.removeAttribute(PENDING);
         session.removeAttribute(PENDING_VERSION);
     }

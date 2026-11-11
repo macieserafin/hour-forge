@@ -21,7 +21,7 @@ public interface TeamInviteRepository extends JpaRepository<TeamInvite, UUID> {
 
     @Modifying
     @Query("update TeamInvite invite set invite.revokedAt = :now where invite.createdBy.id = :userId and invite.revokedAt is null")
-    int revokeActiveCreatedBy(UUID userId, java.time.Instant now);
+    int revokeActiveCreatedBy(UUID userId, Instant now);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("delete from TeamInvite invite where invite.expiresAt < :before or (invite.revokedAt is not null and invite.revokedAt < :before)")

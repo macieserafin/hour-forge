@@ -32,7 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Linking Google from the account page and unlinking it (A13 K3, flows F4 and F5, D2, D5, D14, C9, C15). */
+/** Linking Google from the account page and unlinking it. */
 class GoogleLinkIT extends GoogleSignInTestSupport {
     private static final String EMAIL = "owner@example.com";
     private static final String PASSWORD = "Test-password-2026";
@@ -59,7 +59,7 @@ class GoogleLinkIT extends GoogleSignInTestSupport {
         GOOGLE.account = Account.gmail("sub-owner", "someone.else@gmail.com");
     }
 
-    // --- F4: linking ----------------------------------------------------------------------------------------------
+    // --- Linking ----------------------------------------------------------------------------------------------
 
     @Test
     void theOwnerLinksAGoogleAccountWithAnotherAddressStaysSignedInAndCanThenSignInWithIt() throws Exception {
@@ -216,7 +216,7 @@ class GoogleLinkIT extends GoogleSignInTestSupport {
         browser.perform(get("/api/me")).andExpect(status().isOk());
     }
 
-    // --- A shared browser: a new sign-in ends what the previous person started (review K3 D5) ----------------------
+    // --- A shared browser: a new sign-in ends what the previous person started ----------------------
 
     @Test
     void anAbandonedLinkOfThePreviousPersonNeitherLinksNorReplacesAPasswordSignIn() throws Exception {
@@ -279,7 +279,7 @@ class GoogleLinkIT extends GoogleSignInTestSupport {
         browser.perform(get("/api/me")).andExpect(jsonPath("$.id").value(next.getId().toString()));
     }
 
-    // --- F5: unlinking --------------------------------------------------------------------------------------------
+    // --- Unlinking --------------------------------------------------------------------------------------------
 
     @Test
     void unlinkingNeedsThePasswordEndsTheOtherSessionsAndKeepsThisOne() throws Exception {

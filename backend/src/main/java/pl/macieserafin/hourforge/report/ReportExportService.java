@@ -1,6 +1,7 @@
 package pl.macieserafin.hourforge.report;
 
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -177,7 +178,7 @@ public class ReportExportService {
         return String.join("; ", parts);
     }
 
-    private static String date(java.time.LocalDate date) {
+    private static String date(LocalDate date) {
         return date == null ? "Bez daty" : date.toString();
     }
 

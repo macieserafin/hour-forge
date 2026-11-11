@@ -34,6 +34,7 @@ import pl.macieserafin.hourforge.twofactor.TwoFactorService;
 import pl.macieserafin.hourforge.user.UserRepository;
 
 import java.time.Clock;
+import java.util.Base64;
 import java.util.UUID;
 
 /** The user's data rights: a copy of their data and deletion of the account (anonymization). */
@@ -132,7 +133,7 @@ public class AccountDataService {
                         identity.getSubject())).orElse(null);
         return new AccountExport(clock.instant(),
                 new AccountExport.Profile(user.getId(), user.getEmail(), user.getDisplayName(), user.getCreatedAt(),
-                        user.getEmailVerifiedAt(), images.avatar(userId).map(java.util.Base64.getEncoder()::encodeToString).orElse(null)),
+                        user.getEmailVerifiedAt(), images.avatar(userId).map(Base64.getEncoder()::encodeToString).orElse(null)),
                 teamsOfUser, timeEntries, preferences.get(userId),
                 logins.findByUserIdOrderByOccurredAtAsc(userId).stream()
                         .map(login -> new AccountExport.Login(login.getOccurredAt(), login.getOutcome().name(), login.getMethod().name(), login.getBrowser(),
@@ -163,7 +164,7 @@ public class AccountDataService {
     }
 
     /**
-     * D8: an account without a password asks for a link instead (C2). Nothing is removed yet; the same checks as the
+     * An account without a password asks for a link instead. Nothing is removed yet; the same checks as the
      * removal itself run first (owned teams: 409), so the link is not sent for nothing. At most three links an hour.
      * An account with a password gives the password (400 here).
      */

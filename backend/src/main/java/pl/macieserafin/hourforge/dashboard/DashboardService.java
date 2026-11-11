@@ -3,12 +3,18 @@ package pl.macieserafin.hourforge.dashboard;
 import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import pl.macieserafin.hourforge.team.TeamAccess;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.user.UserRepository;
 
@@ -34,7 +40,7 @@ public class DashboardService {
     @Transactional(readOnly = true)
     public DashboardOverview overview(UUID userId, pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart firstDay) {
         if (!users.existsById(userId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        var teams = new java.util.ArrayList<DashboardOverview.TeamTotal>();
+        var teams = new ArrayList<DashboardOverview.TeamTotal>();
         long today = 0;
         long week = 0;
         for (var membership : members.findActiveByUserId(userId)) {
@@ -44,8 +50,8 @@ public class DashboardService {
             today += summary.todaySeconds();
             week += summary.weekSeconds();
         }
-        teams.sort(java.util.Comparator.comparing(DashboardOverview.TeamTotal::teamName, String.CASE_INSENSITIVE_ORDER));
-        return new DashboardOverview(today, week, java.util.List.copyOf(teams));
+        teams.sort(Comparator.comparing(DashboardOverview.TeamTotal::teamName, String.CASE_INSENSITIVE_ORDER));
+        return new DashboardOverview(today, week, List.copyOf(teams));
     }
 
     /** Whole weeks ending with the current one, with every day present (zero when nothing was recorded). */
@@ -56,12 +62,12 @@ public class DashboardService {
         var now = clock.instant();
         // "Today" is the latest date in any of the person's teams, so nobody's current day is cut off.
         var today = members.findActiveByUserId(userId).stream().map(member -> now.atZone(ZoneId.of(member.getTeam().getTimezone())).toLocalDate())
-                .max(java.util.Comparator.naturalOrder()).orElse(now.atZone(java.time.ZoneOffset.UTC).toLocalDate());
+                .max(Comparator.naturalOrder()).orElse(now.atZone(ZoneOffset.UTC).toLocalDate());
         var day = firstDay == pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart.SUNDAY ? DayOfWeek.SUNDAY : DayOfWeek.MONDAY;
         var from = today.with(TemporalAdjusters.previousOrSame(day)).minusWeeks(weeks - 1L);
         var to = from.plusWeeks(weeks).minusDays(1);
         var perDay = dashboard.dailyTotalsAllTeams(userId, from, to).stream()
-                .collect(java.util.stream.Collectors.toMap(DashboardDayTotal::workDate, DashboardDayTotal::seconds));
+                .collect(Collectors.toMap(DashboardDayTotal::workDate, DashboardDayTotal::seconds));
         var days = from.datesUntil(to.plusDays(1)).map(date -> new DashboardDayTotal(date, perDay.getOrDefault(date, 0L))).toList();
         long max = days.stream().mapToLong(DashboardDayTotal::seconds).max().orElse(0);
         return new DashboardActivity(from, to, today, max, days);
@@ -70,16 +76,14 @@ public class DashboardService {
     @Transactional(readOnly = true)
     public DashboardSummary summary(UUID userId, UUID teamId, pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart firstDay) {
         if (!users.existsById(userId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        var membership = members.findByTeamIdAndUserId(teamId, userId)
-                .filter(member -> member.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        var membership = TeamAccess.member(members, teamId, userId);
         var timezone = membership.getTeam().getTimezone();
         var today = clock.instant().atZone(ZoneId.of(timezone)).toLocalDate();
         var weekStart = today.with(TemporalAdjusters.previousOrSame(firstDay == pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart.SUNDAY ? DayOfWeek.SUNDAY : DayOfWeek.MONDAY));
         var weekEnd = weekStart.plusDays(6);
         var totals = dashboard.totals(userId, teamId, today, weekStart, weekEnd);
         var perDay = dashboard.dailyTotals(userId, teamId, weekStart, weekEnd).stream()
-                .collect(java.util.stream.Collectors.toMap(DashboardDayTotal::workDate, DashboardDayTotal::seconds));
+                .collect(Collectors.toMap(DashboardDayTotal::workDate, DashboardDayTotal::seconds));
         var days = weekStart.datesUntil(weekEnd.plusDays(1)).map(date -> new DashboardSummary.Day(date, perDay.getOrDefault(date, 0L))).toList();
         return new DashboardSummary(teamId, timezone, today, weekStart, weekEnd, totals.todaySeconds(), totals.weekSeconds(), days);
     }

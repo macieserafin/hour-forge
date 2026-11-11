@@ -49,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Sign-in and sign-up with Google (A13 K2, flows F1–F3 and F7–F10 of the contract) against {@link FakeGoogle}. */
+/** Sign-in and sign-up with Google against {@link FakeGoogle}. */
 @ExtendWith(OutputCaptureExtension.class)
 class GoogleSignInIT extends GoogleSignInTestSupport {
     private static final String PASSWORD = "Test-password-2026";
@@ -142,7 +142,7 @@ class GoogleSignInIT extends GoogleSignInTestSupport {
         browser.perform(get("/api/auth/oauth2/callback/other")).andExpect(header().exists("Retry-After"));
     }
 
-    // --- F1: a new account ----------------------------------------------------------------------------------------
+    // --- A new account ----------------------------------------------------------------------------------------
 
     @Test
     void aNewGmailAccountIsCreatedConfirmedWithoutAPasswordAndSignedIn() throws Exception {
@@ -194,7 +194,7 @@ class GoogleSignInIT extends GoogleSignInTestSupport {
         assertThat(mail.last().subject()).isEqualTo("Potwierdź adres e-mail w HourForge");
         browser.perform(get("/api/me")).andExpect(status().isUnauthorized());
 
-        // F10: back again before the link was opened, still not signed in.
+        // Back again before the link was opened, still not signed in.
         signInWithGoogle(new BrowserSession(mvc)).andExpect(redirectedUrl(FRONTEND + "/login?google=EMAIL_NOT_VERIFIED"));
     }
 
@@ -231,7 +231,7 @@ class GoogleSignInIT extends GoogleSignInTestSupport {
         signInWithGoogle(new BrowserSession(mvc).device(null, "203.0.113.41")).andExpect(redirectedUrl(FRONTEND + "/dashboard"));
     }
 
-    // --- F2: coming back ------------------------------------------------------------------------------------------
+    // --- Coming back ------------------------------------------------------------------------------------------
 
     @Test
     void comingBackFindsTheAccountByTheSubjectOnlyAndKeepsTheLocalAddress() throws Exception {
@@ -241,7 +241,7 @@ class GoogleSignInIT extends GoogleSignInTestSupport {
         var firstUse = identities.findByProviderAndSubject(IdentityProvider.GOOGLE, "sub-returning").orElseThrow().getLastUsedAt();
         var accounts = users.count();
 
-        // The address changed at Google: the same sub still signs in to the same account (D13).
+        // The address changed at Google: the same sub still signs in to the same account.
         GOOGLE.account = Account.gmail("sub-returning", "renamed@gmail.com");
         var browser = new BrowserSession(mvc);
         signInWithGoogle(browser).andExpect(redirectedUrl(FRONTEND + "/dashboard"));
@@ -265,7 +265,7 @@ class GoogleSignInIT extends GoogleSignInTestSupport {
         assertThat(identities.findByProviderAndSubject(IdentityProvider.GOOGLE, "sub-case")).isEmpty();
     }
 
-    // --- F3: an address that already has an account --------------------------------------------------------------
+    // --- An address that already has an account --------------------------------------------------------------
 
     @Test
     void anAddressWithAPasswordAccountIsNeitherLinkedNorTakenAndItsOwnerIsTold() throws Exception {
@@ -295,7 +295,7 @@ class GoogleSignInIT extends GoogleSignInTestSupport {
         assertThat(identities.findByProviderAndSubject(IdentityProvider.GOOGLE, "sub-second")).isEmpty();
     }
 
-    // --- F9, F10 and the order of the checks ----------------------------------------------------------------------
+    // --- The order of the checks ---------------------------------------------------------------------------------
 
     @Test
     void aBlockedAccountIsToldSoAndNotSignedIn() throws Exception {
@@ -325,7 +325,7 @@ class GoogleSignInIT extends GoogleSignInTestSupport {
         assertThat(sessions.findByPrincipalName(user.getId().toString())).isEmpty();
     }
 
-    // --- F8: two-step sign-in -------------------------------------------------------------------------------------
+    // --- Two-step sign-in -------------------------------------------------------------------------------------
 
     @Test
     void anAccountWithTwoStepSignInAsksForTheCodeAfterGoogleAndKeepsTheReturnAddress() throws Exception {
@@ -390,7 +390,7 @@ class GoogleSignInIT extends GoogleSignInTestSupport {
         assertThat(GOOGLE.authorizations()).isEmpty();
     }
 
-    // --- F7: cancelled or broken ----------------------------------------------------------------------------------
+    // --- Cancelled or broken ----------------------------------------------------------------------------------
 
     @Test
     void cancellingAtGoogleSaysSo() throws Exception {
@@ -491,7 +491,7 @@ class GoogleSignInIT extends GoogleSignInTestSupport {
     }
 
     /**
-     * The return from Google replaces the CSRF token and stores the new one at once (HF-W-014), so the first requests
+     * The return from Google replaces the CSRF token and stores the new one at once, so the first requests
      * for it in parallel all succeed. Real commits: the parallel requests run outside the test transaction.
      */
     @Test
@@ -502,7 +502,7 @@ class GoogleSignInIT extends GoogleSignInTestSupport {
         try {
             var before = browser.csrfToken();
             signInWithGoogle(browser).andExpect(redirectedUrl(FRONTEND + "/dashboard"));
-            // One ordinary request first, as in CsrfConcurrencyIT: without HF-W-012 it would add the activity day itself.
+            // One ordinary request first, as in CsrfConcurrencyIT: it once added the activity day to the session itself.
             // Nothing that checks a token may run before the parallel requests: a check stores a missing token itself.
             browser.perform(get("/api/me")).andExpect(status().isOk());
 

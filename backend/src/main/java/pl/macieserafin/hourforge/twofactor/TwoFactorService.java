@@ -15,16 +15,15 @@ import pl.macieserafin.hourforge.jira.TokenCipher;
 import pl.macieserafin.hourforge.security.PasswordChangeAttempts;
 import pl.macieserafin.hourforge.security.RateLimitProperties;
 import pl.macieserafin.hourforge.security.RateLimiter;
+import pl.macieserafin.hourforge.security.Tokens;
 import pl.macieserafin.hourforge.security.TooManyRequestsException;
 import pl.macieserafin.hourforge.user.UserRepository;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -178,7 +177,7 @@ public class TwoFactorService {
     }
 
     private boolean usesBackupCode(UUID userId, String answer) {
-        var hash = hash(answer).getBytes(StandardCharsets.US_ASCII);
+        var hash = Tokens.sha256(answer).getBytes(StandardCharsets.US_ASCII);
         for (var candidate : backupCodes.findByUserIdAndUsedAtIsNull(userId)) {
             if (MessageDigest.isEqual(hash, candidate.getCodeHash().getBytes(StandardCharsets.US_ASCII))) {
                 candidate.use(clock.instant());
@@ -194,7 +193,7 @@ public class TwoFactorService {
         for (int i = 0; i < BACKUP_CODES; i++) {
             var raw = new StringBuilder();
             for (int j = 0; j < 10; j++) raw.append(CODE_ALPHABET.charAt(random.nextInt(CODE_ALPHABET.length())));
-            backupCodes.save(new BackupCode(userId, hash(raw.toString())));
+            backupCodes.save(new BackupCode(userId, Tokens.sha256(raw.toString())));
             codes.add(raw.substring(0, 5) + "-" + raw.substring(5));
         }
         return new BackupCodes(codes);
@@ -224,14 +223,6 @@ public class TwoFactorService {
         if (code == null || code.length() > 32) return null;
         var answer = code.replace(" ", "").replace("-", "").toLowerCase(Locale.ROOT);
         return answer.isEmpty() ? null : answer;
-    }
-
-    private static String hash(String code) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(code.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException(exception);
-        }
     }
 
     private static String context(UUID userId) {

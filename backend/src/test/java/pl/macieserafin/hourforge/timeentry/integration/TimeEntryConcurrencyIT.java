@@ -122,7 +122,7 @@ class TimeEntryConcurrencyIT extends IntegrationTestSupport {
     @Test
     void manualWriteAndArchiveBothSucceedAndPreserveHistory() throws Exception {
         var outcomes = concurrently(() -> outcome(() -> service.createManual(first.getId(),
-                        new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(java.time.ZoneOffset.UTC), 60, null)), 201),
+                        new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(java.time.ZoneOffset.UTC), 60, null), null), 201),
                 () -> outcome(() -> projectService.archive(first.getId(), team.getId(), project.getId()), 200));
         assertThat(outcomes).containsExactly(201, 200);
         assertThat(projects.findById(project.getId()).orElseThrow().getArchivedAt()).isNotNull();
@@ -135,7 +135,7 @@ class TimeEntryConcurrencyIT extends IntegrationTestSupport {
     void deleteAndNewEntryCannotLoseWorkOrLeaveAnOrphan(boolean manual) throws Exception {
         var outcomes = concurrently(() -> outcome(() -> { projectService.delete(first.getId(), team.getId(), project.getId()); return null; }, 204),
                 () -> manual ? outcome(() -> service.createManual(second.getId(),
-                        new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(java.time.ZoneOffset.UTC), 60, null)), 201)
+                        new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(java.time.ZoneOffset.UTC), 60, null), null), 201)
                         : start(second, project));
         assertThat(List.of(List.of(204, 404), List.of(409, 201))).contains(outcomes);
         assertThat(projects.existsById(project.getId())).isEqualTo(outcomes.getLast() == 201);
@@ -146,11 +146,11 @@ class TimeEntryConcurrencyIT extends IntegrationTestSupport {
     void removalAndManualWriteAreSerializedAndFurtherWritesAreRefused() throws Exception {
         var outcomes = concurrently(() -> outcome(() -> { memberships.remove(first.getId(), team.getId(), second.getId()); return null; }, 204),
                 () -> outcome(() -> service.createManual(second.getId(),
-                        new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(java.time.ZoneOffset.UTC), 60, null)), 201));
+                        new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(java.time.ZoneOffset.UTC), 60, null), null), 201));
         assertThat(List.of(List.of(204, 201), List.of(204, 404))).contains(outcomes);
         assertThat(members.findByTeamIdAndUserId(team.getId(), second.getId()).orElseThrow().getLeftAt()).isNotNull();
         assertThat(outcome(() -> service.createManual(second.getId(),
-                new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(java.time.ZoneOffset.UTC), 60, null)), 201)).isEqualTo(404);
+                new ManualTimeEntryRequest(team.getId(), project.getId(), LocalDate.now(java.time.ZoneOffset.UTC), 60, null), null), 201)).isEqualTo(404);
     }
 
     @Test
@@ -160,16 +160,16 @@ class TimeEntryConcurrencyIT extends IntegrationTestSupport {
         assertThat(List.of(List.of(204, 201), List.of(204, 404))).contains(outcomes);
         assertThat(jdbc.queryForObject("select count(*) from time_entries where user_id = ?", Long.class, second.getId()))
                 .isEqualTo(outcomes.getLast() == 201 ? 1L : 0L);
-        assertThat(outcome(() -> service.start(second.getId(), new StartTimerRequest(team.getId(), project.getId(), null)), 201)).isEqualTo(404);
+        assertThat(outcome(() -> service.start(second.getId(), new StartTimerRequest(team.getId(), project.getId(), null), null), 201)).isEqualTo(404);
     }
 
     private int start(User user, Project project) throws Exception {
-        return outcome(() -> service.start(user.getId(), new StartTimerRequest(project.getTeam().getId(), project.getId(), null)), 201);
+        return outcome(() -> service.start(user.getId(), new StartTimerRequest(project.getTeam().getId(), project.getId(), null), null), 201);
     }
 
     @Test
     void concurrentPausesAndResumesApplyEachTransitionOnlyOnce() throws Exception {
-        var timer = service.start(first.getId(), new StartTimerRequest(team.getId(), project.getId(), null));
+        var timer = service.start(first.getId(), new StartTimerRequest(team.getId(), project.getId(), null), null);
         var request = new TimerStateRequest(timer.id(), null);
         assertThat(concurrently(() -> outcome(() -> service.pause(first.getId(), request), 200),
                 () -> outcome(() -> service.pause(first.getId(), request), 200)))

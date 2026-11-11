@@ -34,7 +34,7 @@ import java.util.regex.Pattern;
 /**
  * Finishes the return from Google with a redirect to the frontend, never with a page or JSON of its own. After Spring
  * has checked the state, the PKCE verifier and the ID token (signature, issuer, audience, expiry, nonce), the same checks
- * as for a password follow, in the same order: removed, blocked, confirmed address, second step (D3), then the sign-in.
+ * as for a password follow, in the same order: removed, blocked, confirmed address, second step, then the sign-in.
  * The session then holds the application's own principal with the credential version, never Google's tokens or claims.
  */
 final class GoogleSignInHandler implements AuthenticationSuccessHandler, AuthenticationFailureHandler {
@@ -131,8 +131,8 @@ final class GoogleSignInHandler implements AuthenticationSuccessHandler, Authent
     }
 
     /**
-     * F4: links the Google account to the person who asked for it from the account page. The intent is used once,
-     * whatever happens, and the person's own sign-in is put back in the session (C15); Spring replaced it on the way.
+     * Links the Google account to the person who asked for it from the account page. The intent is used once,
+     * whatever happens, and the person's own sign-in is put back in the session; Spring replaced it on the way.
      */
     private void link(HttpServletRequest request, HttpServletResponse response, GoogleIntent intent, Authentication authentication)
             throws IOException {
@@ -192,7 +192,7 @@ final class GoogleSignInHandler implements AuthenticationSuccessHandler, Authent
         redirect(response, refusal(intent, cancelled ? GoogleOutcome.GOOGLE_CANCELLED : GoogleOutcome.GOOGLE_FAILED));
     }
 
-    /** Where the browser goes back to: the account page for a link (C9), the sign-in page otherwise. */
+    /** Where the browser goes back to: the account page for a link, the sign-in page otherwise. */
     static String refusal(GoogleIntent intent, GoogleOutcome outcome) {
         if (intent.mode() == GoogleIntent.Mode.LINK) return "/account?google=" + outcome.name() + "#google";
         return "/login?google=" + outcome.name() + returnToParameter(intent);

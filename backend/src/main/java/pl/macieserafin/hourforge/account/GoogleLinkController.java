@@ -27,14 +27,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Linking and unlinking Google from the account page (F4, F5). Exists only while the sign-in with Google is on; without
- * it both addresses answer 404 (F6).
+ * Linking and unlinking Google from the account page. Exists only while the sign-in with Google is on; without
+ * it both addresses answer 404.
  */
 @RestController
 @RequestMapping("/api/account/google")
 @Conditional(GoogleSignInEnabled.class)
 public class GoogleLinkController {
-    /** {@code currentPassword} is needed when the account has a password (D2). */
+    /** {@code currentPassword} is needed when the account has a password. */
     public record GoogleAccountRequest(@JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String currentPassword) {
         @Override
         public String toString() {
@@ -55,7 +55,7 @@ public class GoogleLinkController {
         this.clock = clock;
     }
 
-    /** The browser then goes to the returned address with a full page load (C4). */
+    /** The browser then goes to the returned address with a full page load. */
     @PostMapping("/link")
     public LinkStart link(@AuthenticationPrincipal AppUserPrincipal principal, @RequestBody(required = false) GoogleAccountRequest body,
                           HttpServletRequest request) {
@@ -64,7 +64,7 @@ public class GoogleLinkController {
         return new LinkStart(GoogleSignIn.START_PATH + "?mode=link");
     }
 
-    /** Ends the other sessions and keeps this one with the new credential version (D5), like a password change. */
+    /** Ends the other sessions and keeps this one with the new credential version, like a password change. */
     @PostMapping("/unlink")
     public ResponseEntity<Void> unlink(@AuthenticationPrincipal AppUserPrincipal principal, @RequestBody(required = false) GoogleAccountRequest body,
                                        HttpServletRequest request, HttpServletResponse response) {

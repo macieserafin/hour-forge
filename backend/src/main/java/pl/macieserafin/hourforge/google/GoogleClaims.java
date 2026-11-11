@@ -34,7 +34,7 @@ record GoogleClaims(String subject, String email, boolean emailVerified, String 
 
     /**
      * Google vouches for the address only for Gmail and for Workspace accounts ({@code hd}) with a verified address;
-     * only then does the new account count as confirmed (A13-D4).
+     * only then does the new account count as confirmed.
      */
     boolean authoritative() {
         return usableEmail() && (email.toLowerCase(Locale.ROOT).endsWith("@gmail.com") || (hostedDomain != null && !hostedDomain.isBlank()));

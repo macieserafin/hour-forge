@@ -4,6 +4,7 @@ import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import pl.macieserafin.hourforge.user.EmailAddress;
 
@@ -23,7 +24,7 @@ public interface UserCredentialRepository extends JpaRepository<UserCredential, 
     @Query("select c from UserCredential c where c.userId = :userId")
     Optional<UserCredential> findLockedByUserId(UUID userId);
 
-    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("delete from UserCredential c where c.userId = :userId")
     int deleteByUserId(UUID userId);
 

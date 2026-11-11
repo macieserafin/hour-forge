@@ -56,7 +56,7 @@ public class AccountMailService {
 
     /**
      * Sent to the owner of an address when somebody signed in with a Google account that has the same address. Nothing
-     * was linked or created (A13-D1); only the person who proved that Google account learns that the address is taken.
+     * was linked or created; only the person who proved that Google account learns that the address is taken.
      */
     public void sendGoogleSignInAttempt(User existing) {
         mailer.send(existing.getEmail(), MailContent.builder("Ktoś próbował zalogować się przez Google na Twój adres")
@@ -72,7 +72,7 @@ public class AccountMailService {
                 .build());
     }
 
-    /** The link that confirms the removal of an account without a password (A13-D8). */
+    /** The link that confirms the removal of an account without a password. */
     public void sendAccountDeletionLink(User user, String token) {
         mailer.send(user.getEmail(), MailContent.builder("Potwierdź usunięcie konta w HourForge")
                 .title("Potwierdź usunięcie konta")

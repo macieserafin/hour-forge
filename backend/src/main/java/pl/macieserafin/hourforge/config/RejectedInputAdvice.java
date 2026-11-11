@@ -9,6 +9,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -46,7 +47,7 @@ public class RejectedInputAdvice {
     }
 
     /** Two writers changed the same row at once; the later one is told to reload instead of overwriting. */
-    @ExceptionHandler(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     ResponseEntity<Map<String, Object>> changedMeanwhile() {
         return answer(HttpStatus.CONFLICT);
     }

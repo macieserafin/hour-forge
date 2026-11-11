@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * The first requests of a new session, sent at once (a page loading several things after the sign-in). Each one goes
- * through the real filters and the database session store and commits, so there is no test transaction (HF-W-012).
+ * through the real filters and the database session store and commits, so there is no test transaction.
  */
 @AutoConfigureMockMvc
 class ActivityConcurrencyIT extends IntegrationTestSupport {

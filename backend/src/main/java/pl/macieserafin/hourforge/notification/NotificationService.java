@@ -1,7 +1,5 @@
 package pl.macieserafin.hourforge.notification;
 
-import java.security.SecureRandom;
-import java.util.Base64;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -11,6 +9,7 @@ import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.mail.Mailer;
 import pl.macieserafin.hourforge.preferences.UserPreferences;
 import pl.macieserafin.hourforge.preferences.UserPreferencesRepository;
+import pl.macieserafin.hourforge.security.Tokens;
 import pl.macieserafin.hourforge.user.User;
 
 /** Decides whether an optional e-mail is wanted and gives every one of them a way to stop. */
@@ -18,7 +17,6 @@ import pl.macieserafin.hourforge.user.User;
 public class NotificationService {
     private final UserPreferencesRepository preferences;
     private final String frontendUrl;
-    private final SecureRandom random = new SecureRandom();
 
     public NotificationService(UserPreferencesRepository preferences, @Value("${app.frontend-url}") String frontendUrl) {
         this.preferences = preferences;
@@ -42,9 +40,7 @@ public class NotificationService {
     public Mailer.Unsubscribe unsubscribeLinks(User person, NotificationKind kind) {
         var stored = preferences.findById(person.getId()).orElseGet(() -> new UserPreferences(person.getId()));
         if (stored.getUnsubscribeToken() == null) {
-            var bytes = new byte[32];
-            random.nextBytes(bytes);
-            stored.setUnsubscribeToken(Base64.getUrlEncoder().withoutPadding().encodeToString(bytes));
+            stored.setUnsubscribeToken(Tokens.random());
             preferences.saveAndFlush(stored);
         }
         var query = "token=" + stored.getUnsubscribeToken() + "&kind=" + kind.name();

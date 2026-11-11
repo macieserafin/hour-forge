@@ -10,6 +10,7 @@ import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.project.ProjectRepository;
 import pl.macieserafin.hourforge.tag.Tag;
 import pl.macieserafin.hourforge.tag.TagRepository;
+import pl.macieserafin.hourforge.team.TeamAccess;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
 import pl.macieserafin.hourforge.timeentry.IssueLink;
@@ -38,7 +39,7 @@ public class EntryTemplateService {
 
     @Transactional(readOnly = true)
     public List<TemplateResponse> list(UUID userId, UUID teamId) {
-        requireMember(userId, teamId);
+        requireMember(teamId, userId);
         return templates.findByUserIdAndTeamIdOrderByNameAsc(userId, teamId).stream().map(TemplateResponse::of).toList();
     }
 
@@ -82,7 +83,7 @@ public class EntryTemplateService {
 
     @Transactional
     public void delete(UUID userId, UUID teamId, UUID templateId) {
-        requireMember(userId, teamId);
+        requireMember(teamId, userId);
         var template = templates.findByIdAndUserId(templateId, userId).filter(found -> found.getTeam().getId().equals(teamId))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         templates.delete(template);
@@ -98,15 +99,14 @@ public class EntryTemplateService {
         }
     }
 
-    private void requireMember(UUID userId, UUID teamId) {
+    private void requireMember(UUID teamId, UUID userId) {
         if (!users.existsById(userId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        members.findByTeamIdAndUserId(teamId, userId).filter(member -> member.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        TeamAccess.member(members, teamId, userId);
     }
 
     /** Same team lock as project and time writes, so a template cannot point at a project that is being removed. */
     private pl.macieserafin.hourforge.team.Team lockedTeam(UUID userId, UUID teamId) {
-        requireMember(userId, teamId);
+        requireMember(teamId, userId);
         var team = teams.findLockedById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (team.isArchived()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived teams cannot be changed");
         return team;

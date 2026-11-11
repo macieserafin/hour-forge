@@ -2,6 +2,7 @@ package pl.macieserafin.hourforge.report;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import pl.macieserafin.hourforge.timeentry.EntryType;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -33,6 +34,6 @@ public record ReportFilter(@DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalD
         projectIds = projectIds == null ? List.of() : List.copyOf(projectIds);
         tagIds = tagIds == null ? List.of() : List.copyOf(tagIds);
         q = q == null || q.isBlank() ? null : q.strip();
-        issueKey = issueKey == null || issueKey.isBlank() ? null : issueKey.strip().toUpperCase(java.util.Locale.ROOT);
+        issueKey = issueKey == null || issueKey.isBlank() ? null : issueKey.strip().toUpperCase(Locale.ROOT);
     }
 }

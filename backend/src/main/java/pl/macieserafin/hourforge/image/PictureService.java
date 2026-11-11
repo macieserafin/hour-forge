@@ -66,7 +66,7 @@ public class PictureService {
 
     @Transactional(readOnly = true)
     public byte[] teamLogo(UUID viewerId, UUID teamId) {
-        teams.requireActiveMember(viewerId, teamId);
+        teams.requireActiveMember(teamId, viewerId);
         return images.teamLogo(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 

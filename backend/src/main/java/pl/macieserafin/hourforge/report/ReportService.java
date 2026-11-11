@@ -8,12 +8,19 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.team.Team;
+import pl.macieserafin.hourforge.team.TeamAccess;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.timeentry.DescriptionSearch;
 import pl.macieserafin.hourforge.timeentry.TimeEntry;
@@ -37,13 +44,13 @@ public class ReportService {
     }
 
     public ReportResponse.Summary summary(UUID actorId, UUID teamId, ReportFilter filter) {
-        var context = context(owner(actorId, teamId), filter, true);
+        var context = context(managerTeam(teamId, actorId), filter, true);
         return new ReportResponse.Summary(context, reports.totals(teamId, context.filter()));
     }
 
     public ReportResponse.Breakdown breakdown(UUID actorId, UUID teamId, ReportFilter filter,
             ReportGrouping grouping, int page, int size) {
-        var context = context(owner(actorId, teamId), filter, true);
+        var context = context(managerTeam(teamId, actorId), filter, true);
         pagination(page, size);
         if (grouping == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Grouping is required");
         return new ReportResponse.Breakdown(grouping, context, reports.breakdown(teamId, context.filter(), grouping, page, size));
@@ -54,7 +61,7 @@ public class ReportService {
 
     /** Time per person and day over the days of the filter, with totals; the default is the team's current week. */
     public ReportResponse.Timesheet timesheet(UUID actorId, UUID teamId, ReportFilter filter) {
-        var context = context(owner(actorId, teamId), filter, true);
+        var context = context(managerTeam(teamId, actorId), filter, true);
         var f = context.filter();
         if (f.undated() || f.from() == null || ChronoUnit.DAYS.between(f.from(), f.to()) + 1 > MAX_TIMESHEET_DAYS) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A timesheet needs a date range of at most " + MAX_TIMESHEET_DAYS + " days");
@@ -62,8 +69,8 @@ public class ReportService {
         var days = f.from().datesUntil(f.to().plusDays(1)).toList();
         var rows = reports.timesheet(teamId, f, MAX_TIMESHEET_ROWS);
         boolean truncated = rows.size() > MAX_TIMESHEET_ROWS;
-        var people = new java.util.LinkedHashMap<UUID, long[]>();
-        var names = new java.util.HashMap<UUID, String>();
+        var people = new LinkedHashMap<UUID, long[]>();
+        var names = new HashMap<UUID, String>();
         var dayTotals = new long[days.size()];
         for (var row : rows.subList(0, Math.min(rows.size(), MAX_TIMESHEET_ROWS))) {
             var userId = row.get(0, UUID.class);
@@ -74,15 +81,15 @@ public class ReportService {
             dayTotals[index] += seconds;
         }
         var result = people.entrySet().stream().map(entry -> new ReportResponse.TimesheetRow(entry.getKey(), names.get(entry.getKey()),
-                java.util.Arrays.stream(entry.getValue()).boxed().toList(), java.util.Arrays.stream(entry.getValue()).sum()))
-                .sorted(java.util.Comparator.comparing(ReportResponse.TimesheetRow::displayName).thenComparing(ReportResponse.TimesheetRow::userId)).toList();
-        return new ReportResponse.Timesheet(context, days, result, java.util.Arrays.stream(dayTotals).boxed().toList(),
-                java.util.Arrays.stream(dayTotals).sum(), truncated);
+                Arrays.stream(entry.getValue()).boxed().toList(), Arrays.stream(entry.getValue()).sum()))
+                .sorted(Comparator.comparing(ReportResponse.TimesheetRow::displayName).thenComparing(ReportResponse.TimesheetRow::userId)).toList();
+        return new ReportResponse.Timesheet(context, days, result, Arrays.stream(dayTotals).boxed().toList(),
+                Arrays.stream(dayTotals).sum(), truncated);
     }
 
     public ReportResponse.Result<ReportResponse.Entry> entries(UUID actorId, UUID teamId, ReportFilter filter,
             ReportEntrySort sort, boolean ascending, int page, int size) {
-        var context = context(owner(actorId, teamId), filter, true);
+        var context = context(managerTeam(teamId, actorId), filter, true);
         pagination(page, size);
         if (sort == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sort is required");
         var rows = reports.entries(teamId, context.filter(), false, sort, ascending, page, size)
@@ -91,7 +98,7 @@ public class ReportService {
     }
 
     public ReportResponse.Active active(UUID actorId, UUID teamId, ReportFilter filter, int page, int size) {
-        var team = owner(actorId, teamId);
+        var team = managerTeam(teamId, actorId);
         if (!team.isActiveTimersVisible()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "The live view is turned off in the team settings");
         }
@@ -104,7 +111,7 @@ public class ReportService {
     }
 
     public ReportResponse.Result<ReportResponse.Member> members(UUID actorId, UUID teamId, int page, int size) {
-        var team = owner(actorId, teamId);
+        var team = managerTeam(teamId, actorId);
         pagination(page, size);
         var rows = reports.members(teamId, page, size).stream().map(m -> new ReportResponse.Member(
                 m.getUser().getId(), m.getUser().getDisplayName(), m.getRole(), m.getJoinedAt(), m.getLeftAt(), m.getJobTitle(), m.getFtePercent())).toList();
@@ -112,7 +119,7 @@ public class ReportService {
     }
 
     public ReportResponse.Result<ReportResponse.Project> projects(UUID actorId, UUID teamId, int page, int size) {
-        var team = owner(actorId, teamId);
+        var team = managerTeam(teamId, actorId);
         pagination(page, size);
         var rows = reports.projects(teamId, page, size).stream().map(p -> new ReportResponse.Project(
                 p.getId(), p.getName(), p.getDescription(), p.getCreatedAt(), p.getArchivedAt())).toList();
@@ -124,9 +131,9 @@ public class ReportService {
      * entries, whatever person filter was sent.
      */
     public ReportResponse.Context exportContext(UUID actorId, UUID teamId, ReportFilter filter, boolean ownOnly) {
-        if (!ownOnly) return context(owner(actorId, teamId), filter, true);
-        var team = activeMemberTeam(actorId, teamId);
-        var own = new ReportFilter(filter.from(), filter.to(), java.util.List.of(actorId), filter.projectIds(),
+        if (!ownOnly) return context(managerTeam(teamId, actorId), filter, true);
+        var team = memberTeam(teamId, actorId);
+        var own = new ReportFilter(filter.from(), filter.to(), List.of(actorId), filter.projectIds(),
                 filter.entryType(), filter.undated(), filter.q(), filter.tagIds(), filter.issueKey());
         return context(team, own, true);
     }
@@ -136,7 +143,7 @@ public class ReportService {
      * Returns true when more entries existed than were delivered.
      */
     @Transactional(readOnly = true)
-    public boolean forEachEntry(UUID teamId, ReportFilter filter, int max, java.util.function.Consumer<ReportResponse.Entry> sink) {
+    public boolean forEachEntry(UUID teamId, ReportFilter filter, int max, Consumer<ReportResponse.Entry> sink) {
         final int pageSize = 500;
         int delivered = 0;
         for (int page = 0; ; page++) {
@@ -150,18 +157,15 @@ public class ReportService {
         }
     }
 
-    private Team activeMemberTeam(UUID actorId, UUID teamId) {
+    private Team memberTeam(UUID teamId, UUID actorId) {
         if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        return members.findByTeamIdAndUserId(teamId, actorId).filter(m -> m.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND)).getTeam();
+        return TeamAccess.member(members, teamId, actorId).getTeam();
     }
 
-    private Team owner(UUID actorId, UUID teamId) {
+    /** The whole team's report is for the owner and admins. */
+    private Team managerTeam(UUID teamId, UUID actorId) {
         if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        var membership = members.findByTeamIdAndUserId(teamId, actorId).filter(m -> m.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (!membership.getRole().canManage()) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        return membership.getTeam();
+        return TeamAccess.manager(members, teamId, actorId).getTeam();
     }
 
     private ReportResponse.Context context(Team team) {
@@ -221,6 +225,6 @@ public class ReportService {
     private long elapsed(TimeEntry entry, Instant now) {
         var end = entry.getPausedAt() == null ? now : entry.getPausedAt();
         return Math.max(0, Duration.between(entry.getStartedAt(), end)
-                .minus(entry.getPausedDurationMicros(), java.time.temporal.ChronoUnit.MICROS).getSeconds());
+                .minus(entry.getPausedDurationMicros(), ChronoUnit.MICROS).getSeconds());
     }
 }

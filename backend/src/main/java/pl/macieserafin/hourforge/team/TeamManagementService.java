@@ -1,5 +1,6 @@
 package pl.macieserafin.hourforge.team;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +18,7 @@ import pl.macieserafin.hourforge.timeentry.TimeEntryRepository;
 import pl.macieserafin.hourforge.user.UserRepository;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
@@ -95,7 +97,7 @@ public class TeamManagementService {
         if (actorId.equals(targetUserId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose another active member");
         }
-        var target = activeMember(teamId, targetUserId);
+        var target = TeamAccess.member(members, teamId, targetUserId);
         if (target.getRole() == TeamRole.OWNER) throw new ResponseStatusException(HttpStatus.CONFLICT, "The owner role cannot be changed");
         boolean wasAdmin = target.getRole() == TeamRole.ADMIN;
         target.setRole(role);
@@ -112,7 +114,7 @@ public class TeamManagementService {
         var target = members.findByTeamIdAndUserId(team.getId(), targetUserId)
                 .filter(member -> member.getLeftAt() == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        var owner = activeMember(team.getId(), actorId);
+        var owner = TeamAccess.member(members, team.getId(), actorId);
         // Demote first: the partial unique index allows exactly one active owner at any moment.
         owner.setRole(TeamRole.MEMBER);
         members.saveAndFlush(owner);
@@ -130,7 +132,7 @@ public class TeamManagementService {
             requireNoActiveTimers(team, "Stop active timers before archiving the team");
             team.setArchivedAt(clock.instant().truncatedTo(ChronoUnit.MICROS));
             teams.saveAndFlush(team);
-            members.findMembers(teamId, false, org.springframework.data.domain.Pageable.unpaged()).forEach(member -> {
+            members.findMembers(teamId, false, Pageable.unpaged()).forEach(member -> {
                 if (!member.userId().equals(actorId)) users.findById(member.userId()).ifPresent(person -> mail.sendArchived(person, team.getName()));
             });
         }
@@ -156,7 +158,7 @@ public class TeamManagementService {
 
     /** Changes the logo (owners and admins of a team that is not archived); a null {@code updatedAt} means removed. */
     @Transactional
-    public void changeLogo(UUID actorId, UUID teamId, java.time.Instant updatedAt, Runnable store) {
+    public void changeLogo(UUID actorId, UUID teamId, Instant updatedAt, Runnable store) {
         var team = lockedTeam(teamId);
         managerRole(actorId, teamId);
         requireNotArchived(team);
@@ -166,8 +168,8 @@ public class TeamManagementService {
 
     /** Only active members see what belongs to a team; anyone else gets "not found". */
     @Transactional(readOnly = true)
-    public void requireActiveMember(UUID actorId, UUID teamId) {
-        activeMember(teamId, actorId);
+    public void requireActiveMember(UUID teamId, UUID actorId) {
+        TeamAccess.member(members, teamId, actorId);
     }
 
     /** Removal of an abusive team by the instance operator: everything goes, running timers included. */
@@ -199,7 +201,7 @@ public class TeamManagementService {
         if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         // Writes take the same team lock as membership, project and time writes, so checks and changes are serialized.
         var team = lockedTeam(teamId);
-        if (activeMember(teamId, actorId).getRole() != TeamRole.OWNER) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        if (TeamAccess.member(members, teamId, actorId).getRole() != TeamRole.OWNER) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         return team;
     }
 
@@ -210,7 +212,7 @@ public class TeamManagementService {
 
     private TeamRole managerRole(UUID actorId, UUID teamId) {
         if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        var role = activeMember(teamId, actorId).getRole();
+        var role = TeamAccess.member(members, teamId, actorId).getRole();
         if (!role.canManage()) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         return role;
     }
@@ -219,10 +221,6 @@ public class TeamManagementService {
         return teams.findLockedById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 
-    private TeamMember activeMember(UUID teamId, UUID userId) {
-        return members.findByTeamIdAndUserId(teamId, userId).filter(member -> member.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-    }
 
     private void requireNoActiveTimers(Team team, String message) {
         if (entries.existsByTeamIdAndEntryTypeAndEndedAtIsNull(team.getId(), EntryType.TIMER)) {

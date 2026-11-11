@@ -10,6 +10,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import jakarta.persistence.PrePersist;
 import pl.macieserafin.hourforge.team.Team;
@@ -51,7 +52,7 @@ public class TeamInvite {
 
     @PrePersist
     void initializeCreatedAt() {
-        if (createdAt == null) createdAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        if (createdAt == null) createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 
     public TeamInvite(Team team, User creator, String hash, Integer maxUses, Instant expiresAt, Instant createdAt) {

@@ -15,7 +15,7 @@ import pl.macieserafin.hourforge.jira.JiraConnectionRepository;
 import pl.macieserafin.hourforge.tag.Tag;
 import pl.macieserafin.hourforge.tag.TagRepository;
 import pl.macieserafin.hourforge.team.Team;
-import pl.macieserafin.hourforge.team.TeamMember;
+import pl.macieserafin.hourforge.team.TeamAccess;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
 import pl.macieserafin.hourforge.user.User;
@@ -28,6 +28,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -62,23 +63,27 @@ public class TimeEntryService {
 
     @Transactional(readOnly = true)
     public TimeEntryHistoryResponse history(UUID userId, UUID teamId, UUID projectId,
-                                            LocalDate from, LocalDate to, int page, int size) {
-        return history(userId, teamId, projectId, from, to, page, size, false, null);
-    }
-
-    @Transactional(readOnly = true)
-    public TimeEntryHistoryResponse history(UUID userId, UUID teamId, UUID projectId,
-                                            LocalDate from, LocalDate to, int page, int size, boolean undated) {
-        return history(userId, teamId, projectId, from, to, page, size, undated, null);
-    }
-
-    @Transactional(readOnly = true)
-    public TimeEntryHistoryResponse history(UUID userId, UUID teamId, UUID projectId,
                                             LocalDate from, LocalDate to, int page, int size, boolean undated,
                                             String text) {
-        if (!users.existsById(userId)) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        }
+        if (!users.existsById(userId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        var search = validSearch(text, from, to, undated, page, size);
+        TeamAccess.member(members, teamId, userId);
+        return historyOf(userId, teamId, projectId, from, to, page, size, undated, search);
+    }
+
+    /** The entries of one member of the team, for the owner or an admin who corrects them; former members included. */
+    @Transactional(readOnly = true)
+    public TimeEntryHistoryResponse memberHistory(UUID actorId, UUID teamId, UUID memberId, UUID projectId,
+                                                  LocalDate from, LocalDate to, int page, int size, boolean undated, String text) {
+        if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        TeamAccess.manager(members, teamId, actorId);
+        members.findByTeamIdAndUserId(teamId, memberId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        var search = validSearch(text, from, to, undated, page, size);
+        return historyOf(memberId, teamId, projectId, from, to, page, size, undated, search);
+    }
+
+    /** The stripped search text, once it, the page and the date range are acceptable; undated work has no date range. */
+    private static String validSearch(String text, LocalDate from, LocalDate to, boolean undated, int page, int size) {
         var search = text == null ? "" : text.strip();
         if (search.length() > DescriptionSearch.MAX_LENGTH) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Search text is too long");
@@ -87,24 +92,7 @@ public class TimeEntryService {
                 || (from != null && to != null && from.isAfter(to)) || (undated && (from != null || to != null))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date range or pagination");
         }
-        members.findByTeamIdAndUserId(teamId, userId).filter(member -> member.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        return historyOf(userId, teamId, projectId, from, to, page, size, undated, search);
-    }
-
-    /** The entries of one member of the team, for the owner or an admin who corrects them. */
-    @Transactional(readOnly = true)
-    public TimeEntryHistoryResponse memberHistory(UUID actorId, UUID teamId, UUID memberId, UUID projectId,
-                                                  LocalDate from, LocalDate to, int page, int size, boolean undated, String text) {
-        if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        requireManager(teamId, actorId);
-        members.findByTeamIdAndUserId(teamId, memberId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        var search = text == null ? "" : text.strip();
-        if (search.length() > DescriptionSearch.MAX_LENGTH || page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE
-                || (from != null && to != null && from.isAfter(to)) || (undated && (from != null || to != null))) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid search, date range or pagination");
-        }
-        return historyOf(memberId, teamId, projectId, from, to, page, size, undated, search);
+        return search;
     }
 
     private TimeEntryHistoryResponse historyOf(UUID userId, UUID teamId, UUID projectId, LocalDate from, LocalDate to,
@@ -152,24 +140,23 @@ public class TimeEntryService {
     }
 
     @Transactional
-    public TimeEntryResponse start(UUID userId, StartTimerRequest request) {
-        return start(userId, request, null);
-    }
-
-    @Transactional
     public TimeEntryResponse start(UUID userId, StartTimerRequest request, IssueLink link) {
         var user = lockUser(userId);
         var project = projectForTimer(userId, request.teamId(), request.projectId());
         if (activeEntry(userId).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A timer is already running");
         }
+        return response(save(newTimer(user, project, request, link), link));
+    }
+
+    /** A timer running from now, dated by the team's time zone. */
+    private TimeEntry newTimer(User user, Project project, StartTimerRequest request, IssueLink link) {
         var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         var workDate = now.atZone(ZoneId.of(project.getTeam().getTimezone())).toLocalDate();
-        var entry = new TimeEntry(user, project.getTeam(), project, EntryType.TIMER, workDate,
-                now, null, null, request.description());
+        var entry = new TimeEntry(user, project.getTeam(), project, EntryType.TIMER, workDate, now, null, null, request.description());
         entry.setJiraIssue(link);
         entry.setTag(tagFor(project.getTeam().getId(), request.tagId(), null));
-        return response(save(entry, link));
+        return entry;
     }
 
     @Transactional
@@ -188,14 +175,12 @@ public class TimeEntryService {
         if (seconds < 1 || seconds > Integer.MAX_VALUE) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Timer duration must fit a positive number of whole seconds");
         }
-        var finalDescription = description != null ? (description.isBlank() ? null : description) : entry.getDescription();
+        var finalDescription = description == null ? entry.getDescription() : blankToNull(description);
         requireTeamRules(entry.getTeam(), finalDescription, entry.getTag(), entry.getJiraIssueId() != null);
         completePause(entry, now);
         entry.setEndedAt(now);
         entry.setDurationSeconds((int) seconds);
-        if (description != null) {
-            entry.setDescription(description.isBlank() ? null : description);
-        }
+        entry.setDescription(finalDescription);
         return entry;
     }
 
@@ -220,12 +205,7 @@ public class TimeEntryService {
         var running = unfinishedTimer(userId, stop.entryId());
         var project = projectForTimer(userId, start.teamId(), start.projectId());
         var stopped = entries.saveAndFlush(finish(running, stop.description()));
-        var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-        var workDate = now.atZone(ZoneId.of(project.getTeam().getTimezone())).toLocalDate();
-        var next = new TimeEntry(user, project.getTeam(), project, EntryType.TIMER, workDate, now, null, null, start.description());
-        next.setJiraIssue(link);
-        next.setTag(tagFor(project.getTeam().getId(), start.tagId(), null));
-        return new SwitchTimerResponse(response(stopped), response(save(next, link)));
+        return new SwitchTimerResponse(response(stopped), response(save(newTimer(user, project, start, link), link)));
     }
 
     @Transactional
@@ -278,8 +258,12 @@ public class TimeEntryService {
         }
     }
 
-    private void updateDescription(TimeEntry entry, String description) {
-        if (description != null) entry.setDescription(description.isBlank() ? null : description);
+    private static void updateDescription(TimeEntry entry, String description) {
+        if (description != null) entry.setDescription(blankToNull(description));
+    }
+
+    private static String blankToNull(String text) {
+        return text.isBlank() ? null : text;
     }
 
     @Transactional(readOnly = true)
@@ -288,11 +272,6 @@ public class TimeEntryService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
         return activeEntry(userId).map(this::response);
-    }
-
-    @Transactional
-    public TimeEntryResponse createManual(UUID userId, ManualTimeEntryRequest request) {
-        return createManual(userId, request, null);
     }
 
     @Transactional
@@ -307,11 +286,6 @@ public class TimeEntryService {
         entry.setTag(tagFor(project.getTeam().getId(), request.tagId(), null));
         requireTeamRules(project.getTeam(), request.description(), entry.getTag(), link != null);
         return response(save(entry, link));
-    }
-
-    @Transactional
-    public TimeEntryResponse update(UUID userId, UUID entryId, UpdateTimeEntryRequest request) {
-        return update(userId, entryId, request, null);
     }
 
     /** A null link removes the entry's link to Jira. */
@@ -339,14 +313,14 @@ public class TimeEntryService {
         if (entry.getEntryType() == EntryType.TIMER && request.workDate() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Timer entries require a work date");
         }
-        if (!java.util.Objects.equals(entry.getWorkDate(), request.workDate())) {
+        if (!Objects.equals(entry.getWorkDate(), request.workDate())) {
             requireWorkDateInWindow(request.workDate(), entry.getTeam().getTimezone());
         }
-        boolean changed = !project.getId().equals(entry.getProject().getId()) || !java.util.Objects.equals(entry.getWorkDate(), request.workDate())
-                || !entry.getDurationSeconds().equals(durationSeconds) || !java.util.Objects.equals(entry.getDescription(), request.description())
-                || !java.util.Objects.equals(entry.getJiraIssueId(), link == null ? null : link.issueId());
+        boolean changed = !project.getId().equals(entry.getProject().getId()) || !Objects.equals(entry.getWorkDate(), request.workDate())
+                || !entry.getDurationSeconds().equals(durationSeconds) || !Objects.equals(entry.getDescription(), request.description())
+                || !Objects.equals(entry.getJiraIssueId(), link == null ? null : link.issueId());
         var tag = tagFor(entry.getTeam().getId(), request.tagId(), entry.getTag());
-        changed |= !java.util.Objects.equals(entry.getTag() == null ? null : entry.getTag().getId(), tag == null ? null : tag.getId());
+        changed |= !Objects.equals(entry.getTag() == null ? null : entry.getTag().getId(), tag == null ? null : tag.getId());
         if (enforceRules) requireTeamRules(entry.getTeam(), request.description(), tag, link != null);
         entry.setTag(tag);
         entry.setProject(project);
@@ -369,12 +343,11 @@ public class TimeEntryService {
     public TimeEntryResponse createFor(UUID actorId, UUID teamId, UUID memberId, UpdateTimeEntryRequest request) {
         requireNoJiraLink(request);
         var actor = users.findById(actorId).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-        requireManager(teamId, actorId);
+        TeamAccess.manager(members, teamId, actorId);
         var member = lockUser(memberId);
         var team = teams.findLockedById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        requireManager(teamId, actorId);
-        members.findByTeamIdAndUserId(teamId, memberId).filter(m -> m.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        TeamAccess.manager(members, teamId, actorId);
+        TeamAccess.member(members, teamId, memberId);
         if (team.isArchived()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived teams cannot receive new time entries");
         var project = projects.findByIdAndTeamId(request.projectId(), teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
@@ -409,22 +382,15 @@ public class TimeEntryService {
         }
     }
 
-    private TeamMember requireManager(UUID teamId, UUID actorId) {
-        var member = members.findByTeamIdAndUserId(teamId, actorId).filter(m -> m.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (!member.getRole().canManage()) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        return member;
-    }
-
     /** Takes the same locks as the owner's own edit (person, then team) and checks the actor under them. */
     private TimeEntry correctableEntry(UUID actorId, UUID teamId, UUID entryId) {
         if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-        requireManager(teamId, actorId);
+        TeamAccess.manager(members, teamId, actorId);
         var ownerId = entries.findById(entryId).filter(found -> found.getTeam().getId().equals(teamId))
                 .map(found -> found.getUser().getId()).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         lockUser(ownerId);
         var team = teams.findLockedById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        requireManager(teamId, actorId);
+        TeamAccess.manager(members, teamId, actorId);
         var entry = entries.findByIdAndUserId(entryId, ownerId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (team.isArchived()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Entries of an archived team cannot be changed");
         if (entry.getEntryType() == EntryType.TIMER && entry.getEndedAt() == null) {
@@ -448,8 +414,7 @@ public class TimeEntryService {
             }
         }
         var team = teams.findLockedById(request.teamId()).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        members.findByTeamIdAndUserId(request.teamId(), userId).filter(member -> member.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        TeamAccess.member(members, request.teamId(), userId);
         if (team.isArchived()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived teams cannot receive new time entries");
         if (request.fromDate().equals(request.toDate())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a different day to copy to");
         requireWorkDateInWindow(request.toDate(), team.getTimezone());
@@ -458,7 +423,7 @@ public class TimeEntryService {
         if (source.size() > MAX_COPIED_ENTRIES) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Too many entries to copy at once");
         long total = 0;
         // Every copy is a new manual entry and has to pass what a new manual entry has to pass, before anything is saved.
-        var copies = new java.util.ArrayList<TimeEntry>();
+        var copies = new ArrayList<TimeEntry>();
         for (var original : source) {
             requireManualDuration(original.getDurationSeconds());
             if (original.getProject().getArchivedAt() != null) {
@@ -476,7 +441,7 @@ public class TimeEntryService {
         entries.flush();
         var result = new CopyDayResponse(source.size(), total);
         if (request.requestId() != null) {
-            copyDayOperations.saveAndFlush(new CopyDayOperation(userId, request, result, clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS)));
+            copyDayOperations.saveAndFlush(new CopyDayOperation(userId, request, result, clock.instant().truncatedTo(ChronoUnit.MICROS)));
         }
         return result;
     }
@@ -541,9 +506,7 @@ public class TimeEntryService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         var team = teams.findLockedById(entry.getTeam().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        members.findByTeamIdAndUserId(entry.getTeam().getId(), userId)
-                .filter(member -> member.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        TeamAccess.member(members, entry.getTeam().getId(), userId);
         if (team.isArchived()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Entries of an archived team cannot be changed");
         }
@@ -574,8 +537,7 @@ public class TimeEntryService {
         // Same team lock as project and team archiving: checking archivedAt and inserting are atomic with it.
         var team = teams.findLockedById(teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        members.findByTeamIdAndUserId(teamId, userId).filter(member -> member.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        TeamAccess.member(members, teamId, userId);
         if (team.isArchived()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived teams cannot receive new time entries");
         }

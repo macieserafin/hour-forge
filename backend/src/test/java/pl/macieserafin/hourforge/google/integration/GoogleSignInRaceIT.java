@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 /**
- * Two first sign-ins with Google at the same moment (C13). Real commits, so no test transaction: a table lock held by
+ * Two first sign-ins with Google at the same moment. Real commits, so no test transaction: a table lock held by
  * the test makes both requests pass their checks and wait at the insert, then lets them race on the unique indexes.
  */
 @Transactional(propagation = Propagation.NOT_SUPPORTED)

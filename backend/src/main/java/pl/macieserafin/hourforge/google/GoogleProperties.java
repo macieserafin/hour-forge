@@ -25,7 +25,7 @@ public record GoogleProperties(String clientId, String clientSecret, String redi
         return clientId != null;
     }
 
-    /** Stops the start-up when the integration is on but cannot work (A13-D15). */
+    /** Stops the start-up when the integration is on but cannot work. */
     public void requireComplete() {
         if (!enabled()) return;
         if (clientSecret == null) {

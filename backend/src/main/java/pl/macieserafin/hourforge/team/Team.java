@@ -2,11 +2,14 @@ package pl.macieserafin.hourforge.team;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 
@@ -40,7 +43,7 @@ public class Team {
     @Column(name = "require_tag_or_issue", nullable = false)
     private boolean requireTagOrIssue;
 
-    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Enumerated(EnumType.STRING)
     @Column(name = "week_start", nullable = false, length = 10)
     private pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart weekStart = pl.macieserafin.hourforge.preferences.UserPreferences.WeekStart.MONDAY;
 
@@ -55,25 +58,25 @@ public class Team {
     private boolean weeklyReportEnabled;
 
     @Column(name = "weekly_report_sent_for")
-    private java.time.LocalDate weeklyReportSentFor;
+    private LocalDate weeklyReportSentFor;
 
     public boolean isWeeklyReportEnabled() { return weeklyReportEnabled; }
     public void setWeeklyReportEnabled(boolean weeklyReportEnabled) { this.weeklyReportEnabled = weeklyReportEnabled; }
-    public java.time.LocalDate getWeeklyReportSentFor() { return weeklyReportSentFor; }
-    public void setWeeklyReportSentFor(java.time.LocalDate weeklyReportSentFor) { this.weeklyReportSentFor = weeklyReportSentFor; }
+    public LocalDate getWeeklyReportSentFor() { return weeklyReportSentFor; }
+    public void setWeeklyReportSentFor(LocalDate weeklyReportSentFor) { this.weeklyReportSentFor = weeklyReportSentFor; }
 
-    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Enumerated(EnumType.STRING)
     @Column(name = "color", length = 20)
     private pl.macieserafin.hourforge.project.ProjectColor color;
 
     @Column(name = "logo_updated_at")
-    private java.time.Instant logoUpdatedAt;
+    private Instant logoUpdatedAt;
 
     public pl.macieserafin.hourforge.project.ProjectColor getColor() { return color; }
     public void setColor(pl.macieserafin.hourforge.project.ProjectColor color) { this.color = color; }
     /** When the logo last changed (also its cache key); null when the team has none. */
-    public java.time.Instant getLogoUpdatedAt() { return logoUpdatedAt; }
-    public void setLogoUpdatedAt(java.time.Instant logoUpdatedAt) { this.logoUpdatedAt = logoUpdatedAt; }
+    public Instant getLogoUpdatedAt() { return logoUpdatedAt; }
+    public void setLogoUpdatedAt(Instant logoUpdatedAt) { this.logoUpdatedAt = logoUpdatedAt; }
 
     protected Team() {
     }

@@ -2,6 +2,8 @@ package pl.macieserafin.hourforge.project;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -35,7 +37,7 @@ public class Project {
     @Column(name = "repository_url", length = 2048)
     private String repositoryUrl;
 
-    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Enumerated(EnumType.STRING)
     @Column(name = "color")
     private ProjectColor color;
 

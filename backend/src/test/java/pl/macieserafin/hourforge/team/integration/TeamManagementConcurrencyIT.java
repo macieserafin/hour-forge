@@ -78,7 +78,7 @@ class TeamManagementConcurrencyIT extends IntegrationTestSupport {
     @Test
     void deletionAndTimerStartNeverLeaveAnOrphanedTimer() throws Exception {
         var outcomes = concurrently(() -> status(() -> management.delete(owner.getId(), team.getId())),
-                () -> status(() -> timeEntries.start(member.getId(), new StartTimerRequest(team.getId(), project.getId(), null))));
+                () -> status(() -> timeEntries.start(member.getId(), new StartTimerRequest(team.getId(), project.getId(), null), null)));
         assertThat(outcomes).isIn(List.of(200, 404), List.of(409, 200));
         int teamsLeft = jdbc.queryForObject("select count(*) from teams where id = ?", Integer.class, team.getId());
         int timers = jdbc.queryForObject("select count(*) from time_entries where team_id = ?", Integer.class, team.getId());

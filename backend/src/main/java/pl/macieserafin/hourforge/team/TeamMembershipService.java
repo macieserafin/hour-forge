@@ -29,7 +29,7 @@ public class TeamMembershipService {
     @Transactional(readOnly = true)
     public TeamMembersResponse list(UUID actorId, UUID teamId, boolean includeFormer, int page, int size) {
         requireUser(actorId);
-        var actor = activeMember(teamId, actorId);
+        var actor = TeamAccess.member(members, teamId, actorId);
         if (includeFormer) requireManager(actor);
         if (page < 0 || size < 1 || size > 100 || (long) page * size > Integer.MAX_VALUE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid pagination");
@@ -44,7 +44,7 @@ public class TeamMembershipService {
     public void remove(UUID actorId, UUID teamId, UUID targetUserId) {
         requireUser(actorId);
         lockTeam(teamId);
-        var actor = activeMember(teamId, actorId);
+        var actor = TeamAccess.member(members, teamId, actorId);
         requireManager(actor);
         var target = members.findByTeamIdAndUserId(teamId, targetUserId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
@@ -62,7 +62,7 @@ public class TeamMembershipService {
     public void updateProfile(UUID actorId, UUID teamId, MemberProfileRequest request) {
         requireUser(actorId);
         var team = teams.findLockedById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        var member = activeMember(teamId, actorId);
+        var member = TeamAccess.member(members, teamId, actorId);
         if (team.isArchived()) throw new ResponseStatusException(HttpStatus.CONFLICT, "The profile of an archived team cannot be changed");
         member.setProfile(request.jobTitle(), request.ftePercent());
         members.save(member);
@@ -72,7 +72,7 @@ public class TeamMembershipService {
     public void leave(UUID actorId, UUID teamId) {
         requireUser(actorId);
         lockTeam(teamId);
-        endMembership(activeMember(teamId, actorId), false);
+        endMembership(TeamAccess.member(members, teamId, actorId), false);
     }
 
     private void endMembership(TeamMember member, boolean removed) {
@@ -95,11 +95,6 @@ public class TeamMembershipService {
 
     private void requireUser(UUID actorId) {
         if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
-    }
-
-    private TeamMember activeMember(UUID teamId, UUID userId) {
-        return members.findByTeamIdAndUserId(teamId, userId).filter(member -> member.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 
     private void requireManager(TeamMember member) {

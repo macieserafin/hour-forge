@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * parallel. This instance remembers whom it already recorded today and skips them until the next day, so the database
  * sees about one update per person per day and instance. Nothing is kept in the session: parallel first requests of
  * a new session would all try to add the same session attribute, and every one but the first failed on the unique key
- * of the stored attributes (HF-W-012).
+ * of the stored attributes.
  */
 public class ActivityFilter extends OncePerRequestFilter {
     /** More people than this on one day and the memory starts over; they are then only recorded once more. */

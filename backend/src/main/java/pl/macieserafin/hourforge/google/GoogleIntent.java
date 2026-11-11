@@ -4,11 +4,12 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * What the person asked for when leaving for Google: sign in (or sign up) or, from the account page, link Google
- * (A13 K3). It travels inside the stored authorization request, so it comes back only with a matching {@code state}.
+ * What the person asked for when leaving for Google: sign in (or sign up) or, from the account page, link Google.
+ * It travels inside the stored authorization request, so it comes back only with a matching {@code state}.
  * Only strings are stored, which keeps sessions saved by Spring Session readable across versions.
  */
 public record GoogleIntent(Mode mode, boolean remembered, String returnTo) {
@@ -36,7 +37,7 @@ public record GoogleIntent(Mode mode, boolean remembered, String returnTo) {
     private static final int MAX_RETURN_TO = 512;
     private static final Pattern INVITATION = Pattern.compile("/invite/[A-Za-z0-9_-]{1,255}");
     private static final Pattern QUERY = Pattern.compile("[A-Za-z0-9_.~%=&+-]*");
-    private static final java.util.Set<String> PAGES = java.util.Set.of("/dashboard", "/teams", "/projects", "/time", "/integrations", "/whats-new");
+    private static final Set<String> PAGES = Set.of("/dashboard", "/teams", "/projects", "/time", "/integrations", "/whats-new");
 
     static GoogleIntent fromStart(HttpServletRequest request) {
         var mode = Mode.parse(request.getParameter("mode"));

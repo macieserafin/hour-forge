@@ -24,7 +24,7 @@ import pl.macieserafin.hourforge.user.User;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** Real commits on PostgreSQL: a message about a change leaves only once the change is stored (HF-AUD-017). */
+/** Real commits on PostgreSQL: a message about a change leaves only once the change is stored. */
 @TestPropertySource(properties = "test.mail.after-commit=true")
 class MailAfterCommitIT extends IntegrationTestSupport {
     @Autowired TeamManagementService management;

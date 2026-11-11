@@ -6,6 +6,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,7 +66,7 @@ public class LongTimerReminderService {
         return sent;
     }
 
-    private boolean remindIfDue(java.util.UUID entryId, Instant now) {
+    private boolean remindIfDue(UUID entryId, Instant now) {
         var entry = entries.findById(entryId).orElse(null);
         if (entry == null || entry.getEndedAt() != null || entry.getPausedAt() != null || entry.getLongTimerRemindedAt() != null) return false;
         var own = preferences.findById(entry.getUser().getId()).orElse(null);

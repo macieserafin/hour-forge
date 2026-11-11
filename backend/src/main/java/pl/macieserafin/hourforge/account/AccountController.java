@@ -84,7 +84,7 @@ public class AccountController {
     public ResponseEntity<Void> delete(@AuthenticationPrincipal AppUserPrincipal principal, @RequestBody DeleteAccountRequest request,
                                        Authentication authentication, HttpServletRequest httpRequest, HttpServletResponse response) {
         if (request.byEmail()) {
-            // D8: the link is sent; the account and this session stay until it is opened.
+            // The link is sent; the account and this session stay until it is opened.
             data.requestDeletionByEmail(principal.getUserId());
             return ResponseEntity.accepted().build();
         }

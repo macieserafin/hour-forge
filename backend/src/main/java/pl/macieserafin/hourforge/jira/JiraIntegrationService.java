@@ -1,13 +1,7 @@
 package pl.macieserafin.hourforge.jira;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
-import java.util.Base64;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -16,8 +10,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.team.Team;
-import pl.macieserafin.hourforge.team.TeamMember;
 import pl.macieserafin.hourforge.entrytemplate.EntryTemplateRepository;
+import pl.macieserafin.hourforge.security.Tokens;
+import pl.macieserafin.hourforge.team.TeamAccess;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
 import pl.macieserafin.hourforge.timeentry.TimeEntryRepository;
@@ -41,7 +36,6 @@ public class JiraIntegrationService {
     public record CallbackResult(Outcome outcome, UUID teamId) {
     }
 
-    private final SecureRandom random = new SecureRandom();
     private final JiraAtlassianClient atlassian;
     private final JiraTokenService tokens;
     private final JiraConnectionRepository connections;
@@ -81,7 +75,7 @@ public class JiraIntegrationService {
 
     @Transactional(readOnly = true)
     public Status status(UUID userId, UUID teamId) {
-        var member = activeMember(teamId, userId);
+        var member = TeamAccess.member(members, teamId, userId);
         var connection = connections.findByTeamId(teamId);
         var connected = connection.isPresent()
                 && authorizations.findByUserIdAndCloudId(userId, connection.get().getCloudId()).isPresent();
@@ -92,7 +86,7 @@ public class JiraIntegrationService {
     /** Creates a one-time state bound to the person, the session and the team, and returns the Atlassian consent URL. */
     @Transactional
     public String startAuthorization(UUID userId, UUID teamId, OAuthState.Intent intent, String sessionId) {
-        var member = activeMember(teamId, userId);
+        var member = TeamAccess.member(members, teamId, userId);
         if (intent == OAuthState.Intent.SITE) {
             if (!member.getRole().canManage()) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
             requireNotArchived(teamId);
@@ -101,10 +95,8 @@ public class JiraIntegrationService {
         }
         var now = clock.instant();
         states.deleteExpired(now.minus(Duration.ofDays(1)));
-        var bytes = new byte[32];
-        random.nextBytes(bytes);
-        var state = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        states.save(new OAuthState(hash(state), hash(sessionId), users.getReferenceById(userId), teamId, intent,
+        var state = Tokens.random();
+        states.save(new OAuthState(Tokens.sha256(state), Tokens.sha256(sessionId), users.getReferenceById(userId), teamId, intent,
                 now.plus(STATE_LIFETIME)));
         return atlassian.authorizationUrl(state);
     }
@@ -116,10 +108,10 @@ public class JiraIntegrationService {
     @Transactional
     public CallbackResult complete(UUID userId, String sessionId, String code, String state, String error) {
         if (state == null || state.isBlank() || state.length() > 200) return new CallbackResult(Outcome.INVALID_STATE, null);
-        var stored = states.findByStateHash(hash(state)).orElse(null);
+        var stored = states.findByStateHash(Tokens.sha256(state)).orElse(null);
         var now = clock.instant();
         if (stored == null || stored.getUsedAt() != null || !stored.getExpiresAt().isAfter(now)
-                || !stored.getUser().getId().equals(userId) || !stored.getSessionHash().equals(hash(sessionId))) {
+                || !stored.getUser().getId().equals(userId) || !stored.getSessionHash().equals(Tokens.sha256(sessionId))) {
             return new CallbackResult(Outcome.INVALID_STATE, null);
         }
         stored.markUsed(now);
@@ -166,13 +158,13 @@ public class JiraIntegrationService {
     /** The sites the owner's last consent covered, read live from Atlassian. */
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public List<SiteChoice> sites(UUID userId, UUID teamId) {
-        requireOwner(teamId, userId);
+        TeamAccess.manager(members, teamId, userId);
         return ownerSites(userId).stream().map(site -> new SiteChoice(site.id(), site.name(), site.url())).toList();
     }
 
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public void selectSite(UUID userId, UUID teamId, String cloudId) {
-        requireOwner(teamId, userId);
+        TeamAccess.manager(members, teamId, userId);
         requireNotArchived(teamId);
         var site = ownerSites(userId).stream().filter(candidate -> candidate.id().equals(cloudId)).findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Site not available to you"));
@@ -181,14 +173,14 @@ public class JiraIntegrationService {
 
     @Transactional
     public void disconnectUser(UUID userId, UUID teamId) {
-        activeMember(teamId, userId);
+        TeamAccess.member(members, teamId, userId);
         connections.findByTeamId(teamId).ifPresent(connection -> authorizations.deleteByUserIdAndCloudId(userId, connection.getCloudId()));
         cache.evictUser(userId);
     }
 
     @Transactional
     public void disconnectSite(UUID userId, UUID teamId) {
-        requireOwner(teamId, userId);
+        TeamAccess.manager(members, teamId, userId);
         requireNotArchived(teamId);
         connections.findByTeamId(teamId).ifPresent(connection -> {
             removeConnection(connection, teamId);
@@ -234,26 +226,9 @@ public class JiraIntegrationService {
         return connections.existsByCloudId(cloudId);
     }
 
-    private TeamMember activeMember(UUID teamId, UUID userId) {
-        return members.findByTeamIdAndUserId(teamId, userId).filter(member -> member.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-    }
-
     /** The site of an archived team is frozen together with its time entries. */
     private void requireNotArchived(UUID teamId) {
         var team = teams.findLockedById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (team.isArchived()) throw new ResponseStatusException(HttpStatus.CONFLICT, "The team is archived");
-    }
-
-    private void requireOwner(UUID teamId, UUID userId) {
-        if (!activeMember(teamId, userId).getRole().canManage()) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-    }
-
-    static String hash(String value) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException(exception);
-        }
     }
 }

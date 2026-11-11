@@ -2,6 +2,7 @@ package pl.macieserafin.hourforge.jobs;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.TemporalAdjusters;
@@ -76,7 +77,7 @@ public class WeeklyReportService {
         return deliver(team, thisMonday.minusWeeks(1));
     }
 
-    private boolean deliver(Team team, java.time.LocalDate from) {
+    private boolean deliver(Team team, LocalDate from) {
         var recipients = members.findActiveByTeamId(team.getId()).stream()
                 .filter(member -> member.getRole().canManage() && member.getUser().getDeletedAt() == null)
                 .filter(member -> notifications.allows(member.getUser().getId(), NotificationKind.WEEKLY_REPORT)).toList();

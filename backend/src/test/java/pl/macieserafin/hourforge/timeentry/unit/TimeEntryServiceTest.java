@@ -66,7 +66,7 @@ class TimeEntryServiceTest {
     @Test void startsAtServerTimeUsingTheTeamWorkDate() {
         writeAccess();
         when(entries.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
-        var response = service.start(actor.getId(), new StartTimerRequest(team.getId(), project.getId(), "Work"));
+        var response = service.start(actor.getId(), new StartTimerRequest(team.getId(), project.getId(), "Work"), null);
         assertThat(response.startedAt()).isEqualTo(NOW);
         assertThat(response.workDate()).isEqualTo(NOW.atZone(ZoneId.of(team.getTimezone())).toLocalDate());
     }
@@ -111,7 +111,7 @@ class TimeEntryServiceTest {
         timer.setDurationSeconds(120);
         writeAccess();
         when(entries.saveAndFlush(timer)).thenReturn(timer);
-        var response = service.update(actor.getId(), timer.getId(), new UpdateTimeEntryRequest(project.getId(), LocalDate.of(2026, 10, 18), BigDecimal.valueOf(60), null));
+        var response = service.update(actor.getId(), timer.getId(), new UpdateTimeEntryRequest(project.getId(), LocalDate.of(2026, 10, 18), BigDecimal.valueOf(60), null), null);
         assertThat(response.durationSeconds()).isEqualTo(60);
         assertThat(response.startedAt()).isEqualTo(NOW.minusSeconds(120));
         assertThat(response.endedAt()).isEqualTo(NOW);
@@ -121,7 +121,7 @@ class TimeEntryServiceTest {
     void acceptsManualEntriesAtTheDurationAndWorkDateLimits(LocalDate workDate, int seconds) {
         writeAccess();
         when(entries.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
-        var response = service.createManual(actor.getId(), new ManualTimeEntryRequest(team.getId(), project.getId(), workDate, seconds, null));
+        var response = service.createManual(actor.getId(), new ManualTimeEntryRequest(team.getId(), project.getId(), workDate, seconds, null), null);
         assertThat(response.workDate()).isEqualTo(workDate);
         assertThat(response.durationSeconds()).isEqualTo(seconds);
     }
@@ -129,7 +129,7 @@ class TimeEntryServiceTest {
     @CsvSource({"2026-10-20, 60", "2024-10-18, 60", "2026-10-19, 86401"})
     void rejectsManualEntriesOutsideTheDurationAndWorkDateLimits(LocalDate workDate, int seconds) {
         writeAccess();
-        assertThatThrownBy(() -> service.createManual(actor.getId(), new ManualTimeEntryRequest(team.getId(), project.getId(), workDate, seconds, null)))
+        assertThatThrownBy(() -> service.createManual(actor.getId(), new ManualTimeEntryRequest(team.getId(), project.getId(), workDate, seconds, null), null))
                 .isInstanceOfSatisfying(ResponseStatusException.class, error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
         verify(entries, never()).saveAndFlush(any());
     }
@@ -143,7 +143,7 @@ class TimeEntryServiceTest {
         when(entries.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
         // 10:00 UTC on 2026-10-19 is already 2026-10-20 in UTC+14.
         var tomorrowInUtc = LocalDate.of(2026, 10, 20);
-        assertThat(service.createManual(actor.getId(), new ManualTimeEntryRequest(ahead.getId(), aheadProject.getId(), tomorrowInUtc, 60, null))
+        assertThat(service.createManual(actor.getId(), new ManualTimeEntryRequest(ahead.getId(), aheadProject.getId(), tomorrowInUtc, 60, null), null)
                 .workDate()).isEqualTo(tomorrowInUtc);
     }
     @Test void correctionMayKeepOldValuesOutsideTheLimitsButCannotIntroduceThem() {
@@ -153,11 +153,11 @@ class TimeEntryServiceTest {
         timer.setDurationSeconds(108_000);
         writeAccess();
         when(entries.saveAndFlush(timer)).thenReturn(timer);
-        var kept = service.update(actor.getId(), timer.getId(), new UpdateTimeEntryRequest(project.getId(), LocalDate.of(2023, 1, 1), BigDecimal.valueOf(108_000), "Only text"));
+        var kept = service.update(actor.getId(), timer.getId(), new UpdateTimeEntryRequest(project.getId(), LocalDate.of(2023, 1, 1), BigDecimal.valueOf(108_000), "Only text"), null);
         assertThat(kept.description()).isEqualTo("Only text");
-        assertThatThrownBy(() -> service.update(actor.getId(), timer.getId(), new UpdateTimeEntryRequest(project.getId(), LocalDate.of(2023, 1, 1), BigDecimal.valueOf(90_000), null)))
+        assertThatThrownBy(() -> service.update(actor.getId(), timer.getId(), new UpdateTimeEntryRequest(project.getId(), LocalDate.of(2023, 1, 1), BigDecimal.valueOf(90_000), null), null))
                 .isInstanceOf(ResponseStatusException.class);
-        assertThatThrownBy(() -> service.update(actor.getId(), timer.getId(), new UpdateTimeEntryRequest(project.getId(), LocalDate.of(2023, 1, 2), BigDecimal.valueOf(108_000), null)))
+        assertThatThrownBy(() -> service.update(actor.getId(), timer.getId(), new UpdateTimeEntryRequest(project.getId(), LocalDate.of(2023, 1, 2), BigDecimal.valueOf(108_000), null), null))
                 .isInstanceOf(ResponseStatusException.class);
         assertThat(timer.getDurationSeconds()).isEqualTo(108_000);
         assertThat(timer.getWorkDate()).isEqualTo(LocalDate.of(2023, 1, 1));

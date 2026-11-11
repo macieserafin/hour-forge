@@ -4,6 +4,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import pl.macieserafin.hourforge.team.TeamAccess;
 import pl.macieserafin.hourforge.team.TeamMember;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
 import pl.macieserafin.hourforge.team.TeamRepository;
@@ -37,7 +38,7 @@ public class ProjectService {
 
     @Transactional(readOnly = true)
     public List<ProjectResponse> list(UUID userId, UUID teamId, boolean includeArchived) {
-        requireMember(userId, teamId, false);
+        requireMember(teamId, userId, false);
         var result = includeArchived ? projects.findByTeamIdOrderByCreatedAtDescIdAsc(teamId)
                 : projects.findByTeamIdAndArchivedAtIsNullOrderByCreatedAtDescIdAsc(teamId);
         return result.stream().map(this::response).toList();
@@ -45,13 +46,13 @@ public class ProjectService {
 
     @Transactional(readOnly = true)
     public ProjectResponse get(UUID userId, UUID teamId, UUID projectId) {
-        requireMember(userId, teamId, false);
+        requireMember(teamId, userId, false);
         return response(findProject(teamId, projectId));
     }
 
     @Transactional
     public ProjectResponse create(UUID userId, UUID teamId, ProjectRequest request) {
-        var membership = requireMember(userId, teamId, true);
+        var membership = requireMember(teamId, userId, true);
         var project = new Project(membership.getTeam(), request.name(), request.description());
         project.setRepositoryUrl(request.repositoryUrl());
         project.setColor(request.color());
@@ -61,7 +62,7 @@ public class ProjectService {
 
     @Transactional
     public ProjectResponse update(UUID userId, UUID teamId, UUID projectId, ProjectRequest request) {
-        requireMember(userId, teamId, true);
+        requireMember(teamId, userId, true);
         var project = findProject(teamId, projectId);
         if (project.getArchivedAt() != null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Archived projects cannot be edited");
@@ -75,7 +76,7 @@ public class ProjectService {
 
     @Transactional
     public ProjectResponse archive(UUID userId, UUID teamId, UUID projectId) {
-        requireMember(userId, teamId, true);
+        requireMember(teamId, userId, true);
         var project = findProject(teamId, projectId);
         if (project.getArchivedAt() == null) {
             if (entries.existsByProjectIdAndEntryTypeAndEndedAtIsNull(projectId, EntryType.TIMER)) {
@@ -89,7 +90,7 @@ public class ProjectService {
 
     @Transactional
     public ProjectResponse restore(UUID userId, UUID teamId, UUID projectId) {
-        requireMember(userId, teamId, true);
+        requireMember(teamId, userId, true);
         var project = findProject(teamId, projectId);
         project.setArchivedAt(null);
         return response(projects.saveAndFlush(project));
@@ -97,7 +98,7 @@ public class ProjectService {
 
     @Transactional
     public void delete(UUID userId, UUID teamId, UUID projectId) {
-        requireMember(userId, teamId, true);
+        requireMember(teamId, userId, true);
         var project = findProject(teamId, projectId);
         if (entries.existsByProjectId(projectId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Only empty projects can be deleted");
@@ -108,19 +109,15 @@ public class ProjectService {
         projects.flush();
     }
 
-    private TeamMember requireMember(UUID userId, UUID teamId, boolean ownerRequired) {
+    /** Reads need only membership; changes take the team lock and need the owner or an admin of a team that is not archived. */
+    private TeamMember requireMember(UUID teamId, UUID userId, boolean manage) {
         if (!users.existsById(userId)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
         // Use the same team lock as membership changes to serialize project writes and authorization.
-        var team = ownerRequired ? teams.findLockedById(teamId)
+        var team = manage ? teams.findLockedById(teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND)) : null;
-        var membership = members.findByTeamIdAndUserId(teamId, userId)
-                .filter(member -> member.getLeftAt() == null)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (ownerRequired && !membership.getRole().canManage()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        }
+        var membership = manage ? TeamAccess.manager(members, teamId, userId) : TeamAccess.member(members, teamId, userId);
         if (team != null && team.isArchived()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Projects of an archived team cannot be changed");
         }
