@@ -1,11 +1,11 @@
 package pl.macieserafin.hourforge.auth;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import pl.macieserafin.hourforge.mail.EmailSender;
+import pl.macieserafin.hourforge.mail.MailContent;
+import pl.macieserafin.hourforge.mail.Mailer;
 import pl.macieserafin.hourforge.security.RateLimitProperties;
 import pl.macieserafin.hourforge.security.RateLimiter;
 import pl.macieserafin.hourforge.security.TooManyRequestsException;
@@ -19,22 +19,20 @@ import java.util.UUID;
 public class EmailVerificationService {
     private final UserRepository users;
     private final EmailTokenService tokens;
-    private final EmailSender sender;
+    private final Mailer mailer;
     private final RateLimiter limiter;
     private final RateLimitProperties limits;
     private final Clock clock;
-    private final String frontendUrl;
 
-    public EmailVerificationService(UserRepository users, EmailTokenService tokens, EmailSender sender,
+    public EmailVerificationService(UserRepository users, EmailTokenService tokens, Mailer mailer,
                                     RateLimiter limiter,
-                                    RateLimitProperties limits, Clock clock, @Value("${app.frontend-url}") String frontendUrl) {
+                                    RateLimitProperties limits, Clock clock) {
         this.users = users;
         this.tokens = tokens;
-        this.sender = sender;
+        this.mailer = mailer;
         this.limiter = limiter;
         this.limits = limits;
         this.clock = clock;
-        this.frontendUrl = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
     }
 
     /** Sends a confirmation link to a new, still unconfirmed account. */
@@ -42,9 +40,15 @@ public class EmailVerificationService {
     public void sendConfirmation(User user) {
         if (user.isEmailVerified()) return;
         var token = tokens.issue(user, EmailTokenPurpose.VERIFY_EMAIL, null);
-        sender.send(user.getEmail(), "Potwierdź adres e-mail w HourForge",
-                "Cześć " + user.getDisplayName() + ",\n\npotwierdź swój adres e-mail, otwierając link (ważny 24 godziny):\n"
-                        + frontendUrl + "/verify-email/" + token + "\n\nJeśli to nie Ty zakładałeś konto, zignoruj tę wiadomość.\n");
+        mailer.send(user.getEmail(), MailContent.builder("Potwierdź adres e-mail w HourForge")
+                .title("Potwierdź adres e-mail")
+                .preheader("Jeden klik i możesz zacząć mierzyć czas. Link jest ważny przez 24 godziny.")
+                .greeting(user.getDisplayName())
+                .paragraph("Dziękujemy za założenie konta w HourForge. Zostało jeszcze potwierdzenie adresu e-mail.")
+                .action("Potwierdź swój adres e-mail, otwierając link (ważny 24 godziny):", "Potwierdź adres e-mail",
+                        mailer.url("/verify-email/" + token))
+                .note("Jeśli to nie Ty zakładałeś konto, zignoruj tę wiadomość.")
+                .build());
     }
 
     @Transactional

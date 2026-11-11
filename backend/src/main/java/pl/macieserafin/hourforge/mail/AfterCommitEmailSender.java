@@ -16,24 +16,15 @@ public class AfterCommitEmailSender implements EmailSender, DisposableBean {
     }
 
     @Override
-    public void send(String to, String subject, String body) {
-        afterCommit(() -> delegate.send(to, subject, body));
-    }
-
-    @Override
-    public void sendWithAttachment(String to, String subject, String body, String filename, byte[] content, String contentType) {
-        afterCommit(() -> delegate.sendWithAttachment(to, subject, body, filename, content, contentType));
-    }
-
-    private static void afterCommit(Runnable delivery) {
+    public void send(Email email) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            delivery.run();
+            delegate.send(email);
             return;
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                delivery.run();
+                delegate.send(email);
             }
         });
     }

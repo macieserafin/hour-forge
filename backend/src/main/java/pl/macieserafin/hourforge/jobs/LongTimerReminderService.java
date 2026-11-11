@@ -6,13 +6,14 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import pl.macieserafin.hourforge.mail.EmailSender;
+import pl.macieserafin.hourforge.mail.MailContent;
+import pl.macieserafin.hourforge.mail.MailContent.Detail;
+import pl.macieserafin.hourforge.mail.Mailer;
 import pl.macieserafin.hourforge.preferences.UserPreferences;
 import pl.macieserafin.hourforge.preferences.UserPreferencesRepository;
 import pl.macieserafin.hourforge.timeentry.TimeEntry;
@@ -27,24 +28,21 @@ public class LongTimerReminderService {
 
     private final JobsProperties properties;
     private final TimeEntryRepository entries;
-    private final EmailSender sender;
+    private final Mailer mailer;
     private final UserPreferencesRepository preferences;
-    private final String frontendUrl;
     private final pl.macieserafin.hourforge.notification.NotificationService notifications;
     private final TransactionTemplate transaction;
 
-    public LongTimerReminderService(JobsProperties properties, TimeEntryRepository entries, EmailSender sender,
+    public LongTimerReminderService(JobsProperties properties, TimeEntryRepository entries, Mailer mailer,
                                     UserPreferencesRepository preferences,
-                                    @Value("${app.frontend-url}") String frontendUrl,
                                     pl.macieserafin.hourforge.notification.NotificationService notifications,
                                     PlatformTransactionManager transactionManager) {
         this.transaction = new TransactionTemplate(transactionManager);
         this.notifications = notifications;
         this.properties = properties;
         this.entries = entries;
-        this.sender = sender;
+        this.mailer = mailer;
         this.preferences = preferences;
-        this.frontendUrl = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
     }
 
     /**
@@ -89,12 +87,17 @@ public class LongTimerReminderService {
         var user = entry.getUser();
         var zone = ZoneId.of(entry.getTeam().getTimezone());
         long hours = worked.toHours();
-        sender.send(user.getEmail(), "Twój timer w HourForge działa od ponad " + hours + " godz.",
-                "Cześć " + user.getDisplayName() + ",\n\nTwój timer w projekcie " + entry.getProject().getName() + " (zespół "
-                        + entry.getTeam().getName() + ") został uruchomiony " + entry.getStartedAt().atZone(zone).format(STARTED)
-                        + " i działa już " + hours + " godz. czystej pracy. Jeśli o nim zapomniałeś, zatrzymaj go i popraw czas wpisu:\n"
-                        + frontendUrl + "/time?team=" + entry.getTeam().getId()
-                        + "\n\nTo jedyne przypomnienie o tym timerze. Jeśli pracujesz dalej, nic nie musisz robić.\n"
-                        + notifications.footer(user, pl.macieserafin.hourforge.notification.NotificationKind.LONG_TIMER));
+        var team = entry.getTeam();
+        var kind = pl.macieserafin.hourforge.notification.NotificationKind.LONG_TIMER;
+        mailer.notify(user.getEmail(), MailContent.builder("Twój timer w HourForge działa od ponad " + hours + " godz.")
+                .title("Timer działa od ponad " + hours + " godz.")
+                .preheader("Jeśli o nim zapomniałeś, zatrzymaj go i popraw czas wpisu.")
+                .greeting(user.getDisplayName())
+                .paragraph("Twój timer działa już " + hours + " godz. czystej pracy:")
+                .details(List.of(new Detail("Projekt", entry.getProject().getName()), new Detail("Zespół", team.getName()),
+                        new Detail("Start", entry.getStartedAt().atZone(zone).format(STARTED))))
+                .action("Jeśli o nim zapomniałeś, zatrzymaj go i popraw czas wpisu:", "Otwórz timer", mailer.url("/time?team=" + team.getId()))
+                .note("To jedyne przypomnienie o tym timerze. Jeśli pracujesz dalej, nic nie musisz robić.")
+                .build(), notifications.unsubscribeLinks(user, kind));
     }
 }

@@ -13,6 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import pl.macieserafin.hourforge.mail.Email;
 import pl.macieserafin.hourforge.mail.EmailSender;
 import pl.macieserafin.hourforge.support.IntegrationTestSupport;
 import pl.macieserafin.hourforge.team.Team;
@@ -81,7 +82,7 @@ class MailAfterCommitIT extends IntegrationTestSupport {
 
     @Test
     void mailSentOutsideAnyTransactionLeavesAtOnce() {
-        sender.send("someone@example.test", "Subject", "Body");
+        sender.send(plain());
 
         assertThat(mail.sent()).hasSize(1);
     }
@@ -89,7 +90,7 @@ class MailAfterCommitIT extends IntegrationTestSupport {
     @Test
     void mailSentInATransactionThatRollsBackIsDropped() {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-            sender.send("someone@example.test", "Subject", "Body");
+            sender.send(plain());
             status.setRollbackOnly();
         });
 
@@ -105,5 +106,9 @@ class MailAfterCommitIT extends IntegrationTestSupport {
         var user = fixtures.user(UUID.randomUUID() + "@mail-after-commit.local", "Mail Test");
         userIds.add(user.getId());
         return user;
+    }
+
+    private static Email plain() {
+        return new Email("someone@example.test", "Subject", "Body", "<p>Body</p>", Email.Category.TRANSACTIONAL, null, null);
     }
 }

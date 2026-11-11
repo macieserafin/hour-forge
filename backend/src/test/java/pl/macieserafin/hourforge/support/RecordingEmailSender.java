@@ -1,5 +1,6 @@
 package pl.macieserafin.hourforge.support;
 
+import pl.macieserafin.hourforge.mail.Email;
 import pl.macieserafin.hourforge.mail.EmailSender;
 
 import java.util.ArrayList;
@@ -8,26 +9,28 @@ import java.util.regex.Pattern;
 
 /** Keeps sent messages in memory so tests can read the one-time links. */
 public class RecordingEmailSender implements EmailSender {
-    public record Message(String to, String subject, String body) {
+    /** {@code body} is the plain-text version; {@code email} holds the HTML, category and headers' data too. */
+    public record Message(String to, String subject, String body, Email email) {
+        public String html() {
+            return email.html();
+        }
     }
 
     private final List<Message> sent = new ArrayList<>();
     private final List<String> attachments = new ArrayList<>();
 
     @Override
-    public synchronized void sendWithAttachment(String to, String subject, String body, String filename, byte[] content, String contentType) {
-        if (content.length == 0) throw new IllegalStateException("empty attachment");
-        attachments.add(to + ":" + filename + ":" + contentType);
-        sent.add(new Message(to, subject, body));
+    public synchronized void send(Email email) {
+        var file = email.attachment();
+        if (file != null) {
+            if (file.content().length == 0) throw new IllegalStateException("empty attachment");
+            attachments.add(email.to() + ":" + file.filename() + ":" + file.contentType());
+        }
+        sent.add(new Message(email.to(), email.subject(), email.text(), email));
     }
 
     public synchronized List<String> attachments() {
         return List.copyOf(attachments);
-    }
-
-    @Override
-    public synchronized void send(String to, String subject, String body) {
-        sent.add(new Message(to, subject, body));
     }
 
     public synchronized List<Message> sent() {

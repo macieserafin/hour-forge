@@ -29,6 +29,7 @@ import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.google.GoogleSignIn;
+import pl.macieserafin.hourforge.notification.NotificationController;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
 import pl.macieserafin.hourforge.security.LoginAttemptService;
 import pl.macieserafin.hourforge.security.SessionVersionFilter;
@@ -71,7 +72,9 @@ public class SecurityConfig {
         return http
                 .headers(headers -> headers.referrerPolicy(policy -> policy.policy(
                         org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
-                .csrf(csrf -> csrf.csrfTokenRepository(csrfTokens).sessionAuthenticationStrategy(new StoreNewCsrfTokenAtSignIn(csrfTokens)))
+                .csrf(csrf -> csrf.csrfTokenRepository(csrfTokens).sessionAuthenticationStrategy(new StoreNewCsrfTokenAtSignIn(csrfTokens))
+                        // Posted by mail providers (RFC 8058), never by a browser session; the random token in the address is the permission.
+                        .ignoringRequestMatchers(NotificationController.ONE_CLICK_PATH))
                 .authorizeHttpRequests(authorize -> authorize
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf", "/api/config").permitAll()
@@ -80,7 +83,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/email-verification/confirm",
                                 "/api/auth/email-verification/resend", "/api/auth/password-reset/request",
-                                "/api/auth/password-reset/confirm", "/api/auth/email-change/confirm", "/api/notifications/unsubscribe", "/api/auth/two-factor",
+                                "/api/auth/password-reset/confirm", "/api/auth/email-change/confirm", "/api/notifications/unsubscribe", NotificationController.ONE_CLICK_PATH, "/api/auth/two-factor",
                                 "/api/account/delete/confirm").permitAll()
                         .anyRequest().authenticated())
                 .requestCache(cache -> cache.disable())

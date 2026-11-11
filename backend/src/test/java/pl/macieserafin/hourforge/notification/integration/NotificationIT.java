@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import pl.macieserafin.hourforge.auth.AccountMailService;
+import pl.macieserafin.hourforge.mail.Email;
 import pl.macieserafin.hourforge.preferences.UserPreferencesRepository;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
 import pl.macieserafin.hourforge.support.ApiIntegrationTestSupport;
@@ -26,6 +28,7 @@ class NotificationIT extends ApiIntegrationTestSupport {
 
     @Autowired MockMvc mvc;
     @Autowired UserPreferencesRepository preferences;
+    @Autowired AccountMailService accountMail;
 
     private User owner;
     private User worker;
@@ -68,6 +71,43 @@ class NotificationIT extends ApiIntegrationTestSupport {
         mail.clear();
         mvc.perform(as(owner, delete("/api/teams/" + team.getId() + "/members/" + other.getId()))).andExpect(status().isNoContent());
         assertThat(mail.sent()).hasSize(1);
+    }
+
+    @Test
+    void optionalMailsCarryAOneClickUnsubscribeThatMailProvidersCanPostWithoutASession() throws Exception {
+        removeWorker();
+        var email = mail.last().email();
+        assertThat(email.category()).isEqualTo(Email.Category.NOTIFICATION);
+        var address = java.net.URI.create(email.oneClickUnsubscribe());
+        assertThat(address.getPath()).isEqualTo("/api/notifications/unsubscribe/one-click");
+        assertThat(address.getQuery()).contains("kind=TEAM_EVENTS");
+        assertThat(mail.last().html()).contains("Wypisz się jednym kliknięciem");
+
+        // What Gmail and others send (RFC 8058): a form post, no cookies, no CSRF token.
+        mvc.perform(post(address.getPath() + "?" + address.getQuery()).contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .content("List-Unsubscribe=One-Click")).andExpect(status().isNoContent());
+        var stored = preferences.findById(worker.getId()).orElseThrow();
+        assertThat(stored.isTeamEventEmails()).isFalse();
+        assertThat(stored.isWeeklyReportEmail()).isTrue();
+        assertThat(stored.isLongTimerEmail()).isTrue();
+    }
+
+    @Test
+    void oneClickUnsubscribeRefusesUnknownAndMalformedAddresses() throws Exception {
+        var path = "/api/notifications/unsubscribe/one-click";
+        mvc.perform(post(path + "?token=" + "A".repeat(43) + "&kind=WEEKLY_REPORT")).andExpect(status().isNotFound());
+        mvc.perform(post(path + "?token=short&kind=WEEKLY_REPORT")).andExpect(status().isBadRequest());
+        mvc.perform(post(path + "?token=" + "A".repeat(43) + "&kind=PASSWORD_RESET")).andExpect(status().isBadRequest());
+        mvc.perform(post(path + "?kind=WEEKLY_REPORT")).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void securityMailsAreTransactionalAndCannotBeUnsubscribed() throws Exception {
+        accountMail.sendTwoFactorChanged(worker, true);
+        var email = mail.last().email();
+        assertThat(email.category()).isEqualTo(Email.Category.TRANSACTIONAL);
+        assertThat(email.oneClickUnsubscribe()).isNull();
+        assertThat(mail.last().body()).doesNotContain("/unsubscribe/");
     }
 
     @Test

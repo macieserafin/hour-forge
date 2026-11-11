@@ -12,7 +12,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import pl.macieserafin.hourforge.mail.EmailSender;
+import pl.macieserafin.hourforge.mail.Email;
+import pl.macieserafin.hourforge.mail.MailContent;
+import pl.macieserafin.hourforge.mail.Mailer;
 import pl.macieserafin.hourforge.notification.NotificationKind;
 import pl.macieserafin.hourforge.notification.NotificationService;
 import pl.macieserafin.hourforge.report.ReportExportService;
@@ -31,18 +33,18 @@ public class WeeklyReportService {
     private final TeamMemberRepository members;
     private final ReportExportService exports;
     private final NotificationService notifications;
-    private final EmailSender sender;
+    private final Mailer mailer;
     private final TransactionTemplate transaction;
 
     public WeeklyReportService(TeamRepository teams, TeamMemberRepository members, ReportExportService exports,
-                               NotificationService notifications, EmailSender sender,
+                               NotificationService notifications, Mailer mailer,
                                PlatformTransactionManager transactionManager) {
         this.transaction = new TransactionTemplate(transactionManager);
         this.teams = teams;
         this.members = members;
         this.exports = exports;
         this.notifications = notifications;
-        this.sender = sender;
+        this.mailer = mailer;
     }
 
     /**
@@ -84,11 +86,17 @@ public class WeeklyReportService {
         var pdf = exports.pdf(recipients.get(0).getUser().getId(), team.getId(), filter, false);
         for (var recipient : recipients) {
             var person = recipient.getUser();
-            sender.sendWithAttachment(person.getEmail(), "Raport tygodniowy zespołu " + team.getName() + " (" + from + " – " + to + ")",
-                    "Cześć " + person.getDisplayName() + ",\n\nw załączniku raport czasu pracy zespołu „" + team.getName() + "” za tydzień "
-                            + from + " – " + to + ". Wysyłamy go w poniedziałek rano właścicielowi i administratorom; wyłącza go właściciel w ustawieniach zespołu.\n"
-                            + notifications.footer(person, NotificationKind.WEEKLY_REPORT),
-                    pdf.filename(), pdf.content(), "application/pdf");
+            mailer.notify(person.getEmail(), MailContent.builder("Raport tygodniowy zespołu " + team.getName() + " (" + from + " – " + to + ")")
+                            .title("Raport tygodniowy zespołu „" + team.getName() + "”")
+                            .preheader("Czas pracy zespołu za tydzień " + from + " – " + to + " w załączniku PDF.")
+                            .greeting(person.getDisplayName())
+                            .paragraph("W załączniku raport czasu pracy zespołu „" + team.getName() + "” za tydzień " + from + " – " + to + ".")
+                            .link("Szczegóły i filtry znajdziesz w raporcie zespołu:", mailer.url("/dashboard?view=team&team=" + team.getId()
+                                    + "&from=" + from + "&to=" + to))
+                            .note("Wysyłamy go w poniedziałek rano właścicielowi i administratorom; wyłącza go właściciel w ustawieniach zespołu.")
+                            .build(),
+                    notifications.unsubscribeLinks(person, NotificationKind.WEEKLY_REPORT),
+                    new Email.Attachment(pdf.filename(), pdf.content(), "application/pdf"));
         }
         return true;
     }
