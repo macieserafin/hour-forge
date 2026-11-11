@@ -1,0 +1,41 @@
+/* HourForge "Kuźnia" tokens (direction chosen 2026-11-11). Contrast pairs are checked in tests/unit/contrast.test.ts. */
+:root {
+  color-scheme: light;
+  --font-head: 'Space Grotesk Variable', system-ui, sans-serif;
+  --font-body: 'Inter Variable', system-ui, sans-serif;
+  --font-num: 'Space Grotesk Variable', system-ui, sans-serif;
+
+  --text-xs: 12px; --text-sm: 14px; --text-md: 16px; --text-lg: 20px; --text-xl: 24px; --text-2xl: 32px;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
+  --radius: 12px; --radius-sm: 8px; --radius-full: 999px;
+  --tap: 44px;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --fast: 120ms; --base: 180ms; --slow: 280ms;
+
+  --primary: #5B21B6; --primary-strong: #4C1D95; --primary-soft: #EDE7FA; --primary-fill: #5B21B6; --primary-fill-hover: #4C1D95; --on-primary: #FFFFFF;
+  --accent: #B45309; --accent-strong: #92400E; --accent-soft: #FEF3C7; --accent-fill: #B45309; --accent-fill-hover: #92400E; --on-accent: #FFFFFF;
+  --third: #0F766E; --third-soft: #DDF3EF;
+  --bg: #F6F4F1; --surface: #FFFFFF; --surface-2: #F1EDE8; --surface-3: #E9E3DC; --line: #E4DED6; --line-strong: #CFC6BB; --field-border: #857A70;
+  --text: #1C1917; --muted: #5F564D; --subtle: #847A70;
+  --danger: #B42318; --danger-soft: #FDECEA; --success: #1E7A43; --success-soft: #E5F4EA; --warning: #9A5B00; --warning-soft: #FFF3D6;
+  --nav-bg: #1B1530; --nav-text: #D9D2EE; --nav-muted: #9E95B8; --nav-active: #FFFFFF; --nav-active-bg: rgba(255, 255, 255, .1);
+  --brand-mark: #FFFFFF; --brand-spark-1: #F59E0B; --brand-spark-2: #FBBF24; --brand-spark-3: #2DD4BF;
+  --focus: color-mix(in srgb, var(--primary) 50%, transparent);
+  --shadow-1: 0 1px 2px rgba(28, 25, 23, .06);
+  --shadow-2: 0 10px 30px rgba(28, 25, 23, .14);
+  --glow: radial-gradient(120% 90% at 100% 0%, rgba(245, 158, 11, .26), transparent 60%);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --primary: #A78BFA; --primary-strong: #C4B5FD; --primary-soft: rgba(139, 92, 246, .16); --primary-fill: #7C3AED; --primary-fill-hover: #6D28D9; --on-primary: #FFFFFF;
+  --accent: #F59E0B; --accent-strong: #FBBF24; --accent-soft: rgba(245, 158, 11, .14); --accent-fill: #F59E0B; --accent-fill-hover: #FBBF24; --on-accent: #1C1917;
+  --third: #2DD4BF; --third-soft: rgba(45, 212, 191, .12);
+  --bg: #121016; --surface: #1C1922; --surface-2: #25212D; --surface-3: #2E2938; --line: #322D3B; --line-strong: #4A4357; --field-border: #7D7590;
+  --text: #F2EFF7; --muted: #B4ACC2; --subtle: #8F879E;
+  --danger: #F97066; --danger-soft: rgba(249, 112, 102, .12); --success: #47CD89; --success-soft: rgba(71, 205, 137, .12); --warning: #FDB022; --warning-soft: rgba(253, 176, 34, .12);
+  --nav-bg: #0B0910;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-2: 0 12px 34px rgba(0, 0, 0, .5);
+  --glow: radial-gradient(120% 90% at 100% 0%, rgba(245, 158, 11, .2), transparent 60%);
+}

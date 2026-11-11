@@ -1,0 +1,10 @@
+.start { max-width: 960px; }
+.start-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.start-choice { display: grid; align-content: start; gap: var(--space-2); padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); text-align: left; transition: border-color var(--base) var(--ease), box-shadow var(--base) var(--ease), transform var(--fast) var(--ease); }
+.start-choice:hover { border-color: var(--field-border); }
+.start-choice:active { transform: scale(.99); }
+.start-choice[aria-pressed='true'] { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.start-choice b { font: 600 var(--text-lg) var(--font-head); }
+.start-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--radius-sm); background: var(--primary-soft); color: var(--primary); margin-bottom: var(--space-2); }
+.start-form { max-width: 560px; animation: rise var(--slow) var(--ease); }
+@media (max-width: 560px) { .start-choices { grid-template-columns: 1fr; } }

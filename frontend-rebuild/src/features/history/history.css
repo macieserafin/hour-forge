@@ -1,0 +1,39 @@
+.week-nav { display: flex; align-items: center; gap: var(--space-2); }
+.week-label { font: 600 var(--text-lg) var(--font-head); min-width: 150px; text-align: center; }
+.grid-card { padding: 0; overflow-x: auto; }
+.week-grid { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.week-grid th, .week-grid td { padding: 6px; border-bottom: 1px solid var(--line); text-align: center; }
+.week-grid thead th { position: sticky; top: 0; background: var(--surface); color: var(--muted); font-weight: 600; white-space: nowrap; padding: var(--space-3) 6px; }
+.week-grid th[scope='row'] { text-align: left; padding-left: var(--space-4); min-width: 200px; }
+.week-grid tfoot th, .week-grid tfoot td { font-weight: 700; border-bottom: 0; padding: var(--space-3) 6px; }
+.week-grid .is-today { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
+.week-grid thead .is-today { color: var(--accent-strong); }
+.row-total { font-weight: 700; white-space: nowrap; padding-right: var(--space-4) !important; }
+.cell-project { display: flex; align-items: center; gap: var(--space-2); }
+.cell-project span { display: grid; min-width: 0; }
+.cell-project small { color: var(--muted); font-size: 12px; }
+.cell { width: 100%; min-width: 64px; min-height: 40px; border: 1px dashed transparent; border-radius: var(--radius-sm); background: transparent; color: var(--subtle); font: 600 13px var(--font-num); transition: background var(--base) var(--ease), border-color var(--base) var(--ease); }
+.cell.has-time { color: var(--text); background: var(--primary-soft); }
+.cell:hover:not(:disabled) { border-color: var(--primary); color: var(--text); }
+.cell:disabled { opacity: .3; }
+.grid-empty { padding: 0 var(--space-4) var(--space-4); }
+.week-days { display: none; list-style: none; margin: 0; padding: 0; gap: var(--space-2); }
+.week-days > li { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.week-days > li.is-today { border-color: var(--accent); }
+.week-days summary { display: flex; justify-content: space-between; align-items: center; min-height: 52px; padding: 0 var(--space-4); cursor: pointer; }
+.week-days details > ul { list-style: none; margin: 0; padding: 0 var(--space-4); }
+.week-days details > ul button { display: flex; width: 100%; align-items: center; gap: var(--space-2); min-height: 48px; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; }
+.week-days details > ul button span { flex: 1; display: grid; }
+.week-days details > ul small { color: var(--muted); font-size: 12px; }
+.week-days details > .btn { margin: var(--space-3) var(--space-4) var(--space-4); }
+.filters { display: grid; grid-template-columns: 2fr 1.4fr 1fr 1fr auto; gap: var(--space-3); align-items: end; padding: var(--space-4); }
+.day-group { padding: var(--space-4) var(--space-5); }
+.day-group .card-head { margin-bottom: var(--space-2); }
+@media (max-width: 1000px) { .filters { grid-template-columns: 1fr 1fr; } .filters-actions { grid-column: 1 / -1; } }
+@media (max-width: 720px) {
+  .grid-card { display: none; }
+  .week-days { display: grid; }
+  .filters { grid-template-columns: 1fr; }
+  .entries li { flex-wrap: wrap; }
+  .row-actions { width: 100%; justify-content: flex-end; }
+}

@@ -1,0 +1,16 @@
+.stack-sm { display: grid; gap: var(--space-2); }
+.inline-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); font-size: var(--text-sm); }
+.inline-form { display: grid; grid-template-columns: 1fr auto; gap: var(--space-2); align-items: end; }
+.jira-chosen { display: flex; align-items: center; gap: var(--space-2); min-height: var(--tap); padding: 4px 4px 4px 12px; border: 1px solid var(--field-border); border-radius: var(--radius-sm); min-width: 0; }
+.jira-chosen span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.jira-search { display: grid; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-sm); background: var(--surface-2); }
+.jira-filters { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+.jira-results { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 260px; overflow-y: auto; }
+.jira-results button { width: 100%; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+.jira-results button:hover { border-color: var(--primary); }
+.jira-results small { color: var(--muted); }
+.jira-key { font: 600 13px var(--font-num); color: var(--primary); }
+.jira-key-wrap { position: relative; }
+.jira-tooltip { position: absolute; z-index: 15; left: 0; top: calc(100% + 6px); width: max-content; max-width: 280px; display: grid; gap: 2px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--text); color: var(--surface); font-size: 13px; box-shadow: var(--shadow-2); }
+.details-toggle { justify-self: start; }
+@media (max-width: 720px) { .jira-filters, .inline-form { grid-template-columns: 1fr; } }
