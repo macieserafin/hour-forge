@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 /**
  * Light, dark or following the system. Until the account stores it the choice lives in this browser;
- * index.html applies it before the first paint so the page does not flash.
+ * public/theme-init.js (loaded from index.html) applies it before the first paint so the page does not flash.
  */
 export type ThemeChoice = 'system' | 'light' | 'dark'
 const storageKey = 'hourforge:theme'

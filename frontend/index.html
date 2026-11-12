@@ -5,14 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>HourForge</title>
-    <script>
-      // Applies the saved theme before the first paint (src/app/theme.ts keeps it in sync later).
-      try {
-        var choice = localStorage.getItem('hourforge:theme') || 'system'
-        var dark = choice === 'dark' || (choice === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
-        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-      } catch (error) { /* Light until the app starts. */ }
-    </script>
+    <!-- A separate file, not inline: the Content-Security-Policy allows only scripts from this site. -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>
