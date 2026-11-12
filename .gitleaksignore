@@ -1,0 +1,5 @@
+# Test-only values that look like keys (reviewed): a sample token in the mail preview, the fixed two-step sign-in key of
+# the test profile and an RFC 6238 test secret. Real secrets never belong in the repository.
+eea980641182ef2d3de808648fdfc77b4e8383e8:backend/src/test/java/pl/macieserafin/hourforge/mail/preview/MailPreviewSend.java:generic-api-key:58
+a1c2a93257f2f59ade7270fb4e887c63694ab17a:backend/src/test/resources/application-test.properties:generic-api-key:14
+a1c2a93257f2f59ade7270fb4e887c63694ab17a:backend/src/test/java/pl/macieserafin/hourforge/twofactor/unit/TotpTest.java:generic-api-key:14

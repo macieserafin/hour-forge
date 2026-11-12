@@ -1,0 +1,23 @@
+# Weekly update proposals for every kind of dependency, including base images (by digest) and the CI actions.
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /backend
+    schedule: {interval: weekly}
+    open-pull-requests-limit: 5
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule: {interval: weekly}
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+  - package-ecosystem: docker
+    directories: [/backend, /frontend, /deploy/backup]
+    schedule: {interval: weekly}
+  - package-ecosystem: docker-compose
+    directories: [/deploy, /backend]
+    schedule: {interval: weekly}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}

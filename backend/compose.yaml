@@ -2,7 +2,7 @@ name: hour-forge
 
 services:
   postgres:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:9ba53c7d41ea093baf5c1ba635ba5434c4f979880527d49bb7d9237d3193085b
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME:-hourforge}
@@ -22,7 +22,7 @@ services:
       start_period: 10s
 
   postgres-init:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:9ba53c7d41ea093baf5c1ba635ba5434c4f979880527d49bb7d9237d3193085b
     restart: "no"
     depends_on:
       postgres:
@@ -40,7 +40,7 @@ services:
 
   # Development mail server (required by the backend): SMTP on 1025, inbox in the browser on 8025.
   mailpit:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
     restart: unless-stopped
     ports:
       - "127.0.0.1:${MAIL_SMTP_PORT:-1025}:1025"

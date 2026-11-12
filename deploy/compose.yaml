@@ -18,7 +18,7 @@ x-hardening: &hardening
 services:
   caddy:
     <<: *hardening
-    image: caddy:2.10-alpine
+    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
     depends_on:
       frontend:
         condition: service_healthy
@@ -113,7 +113,7 @@ services:
 
   postgres:
     <<: *hardening
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:9ba53c7d41ea093baf5c1ba635ba5434c4f979880527d49bb7d9237d3193085b
     environment:
       POSTGRES_DB: ${DB_NAME:-hourforge}
       POSTGRES_USER: postgres
@@ -133,7 +133,7 @@ services:
 
   # Creates or updates the database accounts (migration and application), then exits.
   postgres-init:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:9ba53c7d41ea093baf5c1ba635ba5434c4f979880527d49bb7d9237d3193085b
     restart: "no"
     depends_on:
       postgres:
