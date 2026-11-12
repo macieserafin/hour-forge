@@ -2,7 +2,7 @@
 # Backend image: built from this directory (docker build -t hourforge-backend backend).
 # Tests are not run here; they run before the image is built (locally or in CI).
 
-FROM eclipse-temurin:21-jdk-noble@sha256:06c1f157dacf6b68198bd9a4186dd4c34ef24e65d7bbbe2a0cf8e62571ad38c9 AS build
+FROM eclipse-temurin:24-jdk-noble@sha256:dacac8e9a0df0d2bd24e702b4431132875c249930b70555ebd7ca285b5bee684 AS build
 WORKDIR /src
 COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
@@ -15,7 +15,7 @@ RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q -DskipTests package \
 # Layers ordered from the least to the most often changed, so an update of the code alone reuses the dependency layers.
 RUN java -Djarmode=tools -jar /app.jar extract --layers --destination /extracted
 
-FROM eclipse-temurin:21-jre-noble@sha256:0d57a8e90c2bb844c5a8e1b2b71e11eff06dad7edcfd803cd21ed4ae203b2515
+FROM eclipse-temurin:24-jre-noble@sha256:b416d02335e702b0403ff280de9475a3348e29382285969c9d4e17862ce632e7
 RUN groupadd --system --gid 10001 hourforge \
     && useradd --system --uid 10001 --gid hourforge --home-dir /app --shell /usr/sbin/nologin hourforge
 WORKDIR /app
