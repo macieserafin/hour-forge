@@ -1,0 +1,71 @@
+# Alerts of the production stack. Thresholds are starting points; adjust them to real traffic after the first weeks.
+groups:
+  - name: hourforge
+    rules:
+      - alert: BackendDown
+        expr: up{job="backend"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: The backend does not answer its health and metrics port.
+          description: Check "docker compose ps" and "docker compose logs backend". Users cannot sign in or record time.
+
+      - alert: HighServerErrorRate
+        expr: |
+          sum(rate(http_server_requests_seconds_count{job="backend", status=~"5.."}[5m]))
+            / sum(rate(http_server_requests_seconds_count{job="backend"}[5m])) > 0.05
+          and sum(rate(http_server_requests_seconds_count{job="backend"}[5m])) > 0.05
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: More than 5% of API requests end with a server error.
+          description: Look for "level":"ERROR" lines in the backend log; each has a requestId that the proxy log shares.
+
+      - alert: DiskSpaceLow
+        expr: |
+          node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}
+            / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"} < 0.15
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "Less than 15% free space on {{ $labels.mountpoint }}."
+          description: The database, backups and logs grow on this disk. Free space before PostgreSQL stops writing.
+
+      - alert: DiskSpaceCritical
+        expr: |
+          node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}
+            / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"} < 0.05
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Less than 5% free space on {{ $labels.mountpoint }}."
+
+      - alert: BackupTooOld
+        # Backups run every 6 hours; two missed runs and a margin.
+        expr: time() - hourforge_backup_last_success_timestamp_seconds > 13 * 3600
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: No successful database backup for more than 13 hours.
+          description: See "docker compose logs backup". The recovery point grows with every hour without a backup.
+
+      - alert: BackupStatusMissing
+        expr: absent(hourforge_backup_last_success_timestamp_seconds)
+        for: 1h
+        labels: {severity: critical}
+        annotations:
+          summary: The backup service has never reported a successful backup.
+
+      - alert: MailNotDelivered
+        expr: hourforge_mail_outbox{status="failed"} > 0
+        labels: {severity: warning}
+        annotations:
+          summary: E-mails could not be sent after all attempts.
+          description: Check the SMTP settings and the provider; the messages stay in outgoing_emails for a week.
+
+      - alert: MailBacklog
+        expr: hourforge_mail_outbox{status="pending"} > 50
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: E-mails are waiting longer than usual; the mail server may refuse or be slow.

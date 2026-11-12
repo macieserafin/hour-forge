@@ -152,6 +152,94 @@ services:
     entrypoint: ["/bin/sh", "/create-app-user.sh"]
     networks: [data]
 
+  # Encrypted database backups every 6 hours into a restic repository (local volume by default; another server or object
+  # storage through BACKUP_REPOSITORY). Restore and restore test: docs/operations/restore.md.
+  backup:
+    <<: *hardening
+    image: ${BACKUP_IMAGE:-hourforge-backup:local}
+    build: ./backup
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGDATABASE: ${DB_NAME:-hourforge}
+      # The migration account owns every table, so it can read all of them.
+      PGUSER: ${MIGRATION_DB_USERNAME:-hourforge_migrator}
+      PGPASSWORD: ${MIGRATION_DB_PASSWORD:?Set MIGRATION_DB_PASSWORD in .env}
+      RESTIC_REPOSITORY: ${BACKUP_REPOSITORY:-/repository}
+      RESTIC_PASSWORD: ${BACKUP_PASSWORD:?Set BACKUP_PASSWORD in .env}
+      RESTIC_CACHE_DIR: /scratch/cache
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-21600}
+      # For an S3-compatible repository (s3:https://...): the provider's keys.
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:-}
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - backup_repository:/repository
+      - backup_scratch:/scratch
+      - backup_status:/status
+    cap_drop: [ALL]
+    # data: the database; edge: an off-site repository on the internet.
+    networks: [data, edge]
+    mem_limit: ${BACKUP_MEMORY:-512m}
+    cpus: ${BACKUP_CPUS:-0.5}
+
+  # Optional monitoring ("docker compose --profile monitoring up -d"): metrics, alert rules and e-mail alerts.
+  # Needs monitoring/alertmanager.yml (copy the .example). The web pages listen on this server only (SSH tunnel).
+  prometheus:
+    <<: *hardening
+    profiles: [monitoring]
+    image: prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9091:9090"
+    read_only: true
+    cap_drop: [ALL]
+    networks: [edge]
+    mem_limit: ${PROMETHEUS_MEMORY:-256m}
+
+  alertmanager:
+    <<: *hardening
+    profiles: [monitoring]
+    image: prom/alertmanager:v0.35.0@sha256:e638797febd034838eca8b98cdbd46f951e9bf7f178777aa8669167406a9946c
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    read_only: true
+    cap_drop: [ALL]
+    networks: [edge]
+    mem_limit: 64m
+
+  node-exporter:
+    <<: *hardening
+    profiles: [monitoring]
+    image: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    command:
+      - --path.rootfs=/host
+      - --collector.textfile.directory=/backup-status
+    volumes:
+      - /:/host:ro,rslave
+      - backup_status:/backup-status:ro
+    pid: host
+    read_only: true
+    cap_drop: [ALL]
+    networks: [edge]
+    mem_limit: 64m
+
 networks:
   # Caddy, frontend and backend; the backend reaches the internet from here (SMTP, Google, Jira, Turnstile).
   edge: {}
@@ -163,3 +251,8 @@ volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+  backup_repository:
+  backup_scratch:
+  backup_status:
+  prometheus_data:
+  alertmanager_data:

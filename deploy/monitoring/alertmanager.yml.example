@@ -1,0 +1,21 @@
+# Copy to alertmanager.yml next to this file and fill in; never commit the filled-in file (it holds an SMTP password).
+# Alertmanager does not read environment variables, so the values are written here.
+global:
+  smtp_smarthost: smtp.example.com:587
+  smtp_from: HourForge alerts <alerts@mail.example.com>
+  smtp_auth_username: alerts@mail.example.com
+  smtp_auth_password: change_me
+  smtp_require_tls: true
+
+route:
+  receiver: operator
+  group_by: [alertname]
+  group_wait: 1m
+  group_interval: 10m
+  repeat_interval: 4h
+
+receivers:
+  - name: operator
+    email_configs:
+      - to: operator@example.com
+        send_resolved: true

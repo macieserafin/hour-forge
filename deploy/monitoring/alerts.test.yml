@@ -1,0 +1,64 @@
+# Unit tests of alerts.yml: docker run --rm -v "$PWD:/c" --entrypoint promtool prom/prometheus test rules /c/alerts.test.yml
+rule_files:
+  - alerts.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{job="backend"}'
+        values: '1 1 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: BackendDown
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: BackendDown
+        exp_alerts:
+          - exp_labels: {severity: critical, job: backend}
+            exp_annotations:
+              summary: The backend does not answer its health and metrics port.
+              description: Check "docker compose ps" and "docker compose logs backend". Users cannot sign in or record time.
+
+  - interval: 1m
+    input_series:
+      # The status file keeps saying: last success at t=0.
+      - series: 'hourforge_backup_last_success_timestamp_seconds{job="node"}'
+        values: '0x900'
+    alert_rule_test:
+      - eval_time: 12h
+        alertname: BackupTooOld
+        exp_alerts: []
+      - eval_time: 14h
+        alertname: BackupTooOld
+        exp_alerts:
+          - exp_labels: {severity: critical, job: node}
+            exp_annotations:
+              summary: No successful database backup for more than 13 hours.
+              description: See "docker compose logs backup". The recovery point grows with every hour without a backup.
+
+  - interval: 1m
+    input_series:
+      - series: 'hourforge_mail_outbox{job="backend", status="failed"}'
+        values: '0 0 1'
+      - series: 'http_server_requests_seconds_count{job="backend", status="200"}'
+        values: '0+60x20'
+      - series: 'http_server_requests_seconds_count{job="backend", status="500"}'
+        values: '0+10x20'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: MailNotDelivered
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: MailNotDelivered
+        exp_alerts:
+          - exp_labels: {severity: warning, job: backend, status: failed}
+            exp_annotations:
+              summary: E-mails could not be sent after all attempts.
+              description: Check the SMTP settings and the provider; the messages stay in outgoing_emails for a week.
+      - eval_time: 16m
+        alertname: HighServerErrorRate
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: More than 5% of API requests end with a server error.
+              description: Look for "level":"ERROR" lines in the backend log; each has a requestId that the proxy log shares.
