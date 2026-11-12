@@ -28,6 +28,7 @@ import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
 import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.security.web.header.writers.StaticHeadersWriter;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.google.GoogleSignIn;
 import pl.macieserafin.hourforge.notification.NotificationController;
@@ -71,8 +72,11 @@ public class SecurityConfig {
         // Spring's default token store, shared with the sign-in strategy below.
         var csrfTokens = new HttpSessionCsrfTokenRepository();
         return http
-                .headers(headers -> headers.referrerPolicy(policy -> policy.policy(
-                        ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER)))
+                .headers(headers -> headers
+                        .referrerPolicy(policy -> policy.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER))
+                        // Same policy as the frontend's: the API never needs these browser features either.
+                        .addHeaderWriter(new StaticHeadersWriter("Permissions-Policy",
+                                "camera=(), microphone=(), geolocation=(), payment=(), usb=()")))
                 .csrf(csrf -> csrf.csrfTokenRepository(csrfTokens).sessionAuthenticationStrategy(new StoreNewCsrfTokenAtSignIn(csrfTokens))
                         // Posted by mail providers (RFC 8058), never by a browser session; the random token in the address is the permission.
                         .ignoringRequestMatchers(NotificationController.ONE_CLICK_PATH))
