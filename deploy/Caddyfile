@@ -1,0 +1,49 @@
+# A public name gets a Let's Encrypt certificate; "localhost" gets one from Caddy's local authority (for trying it out).
+{$HOURFORGE_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	# Pictures (profile photo, team logo) are up to 2 MB; every other request body is far below 1 MB
+	# (the backend itself refuses more than 256 KB outside file uploads).
+	@pictures path /api/account/avatar /api/teams/*/logo
+	handle @pictures {
+		request_body {
+			max_size 3MB
+		}
+		reverse_proxy backend:8080
+	}
+
+	handle /api/* {
+		request_body {
+			max_size 1MB
+		}
+		reverse_proxy backend:8080
+	}
+
+	handle {
+		request_body {
+			max_size 1MB
+		}
+		reverse_proxy frontend:8080
+	}
+
+	# Access log without secrets: links carry one-time tokens in the path (invitations, password reset, e-mail
+	# confirmations, unsubscribe) and sign-in returns carry codes in the query, so both are masked. Cookie and
+	# Authorization headers are already left out by Caddy.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			request>uri regexp "(/(?:invite|api/invites|reset-password|verify-email|confirm-email-change|confirm-account-deletion|unsubscribe)/|[?&][^=&]*=)[^/?&]+" "${1}REDACTED"
+		}
+	}
+}
+
+# www.<domain> leads to the application address.
+www.{$HOURFORGE_DOMAIN} {
+	redir https://{$HOURFORGE_DOMAIN}{uri} permanent
+}
