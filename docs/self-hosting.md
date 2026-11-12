@@ -53,10 +53,13 @@ people:
 1. Fill in your details in [`frontend/src/content/instance.ts`](../frontend/src/content/instance.ts): your name or
    company, address, contact e-mail, and the providers for hosting, backups and mail. The images are built from this
    file, so rebuild them after the change.
-2. Read the texts in [`frontend/src/content/legal.ts`](../frontend/src/content/legal.ts) and have a lawyer check them
-   for your situation. They describe what HourForge does with data, not legal advice. Change retention periods or
-   providers there if your setup differs, for example when you turn Google sign-in, Jira or the bot check on or off.
-3. Prepare for incidents with [Handling a data breach](operations/data-breach.md).
+2. Read the texts in [`frontend/src/content/legal.ts`](../frontend/src/content/legal.ts) and make them match your
+   setup: retention periods, providers, and the optional features you turn on (Google sign-in, Jira, the bot check).
+   They describe what HourForge does with data and follow the information duties of the GDPR (Article 13) and the
+   Polish act on electronic services. They are not legal advice; if your situation is unusual, for example you process
+   data for a company's employees, get advice.
+3. Fill in the [record of processing activities](operations/processing-register.md) and prepare for incidents with
+   [Handling a data breach](operations/data-breach.md).
 
 ## Settings
 

@@ -6,6 +6,8 @@ export const instance = {
   /** Person or company that runs the service and decides what happens with the data. */
   operatorName: 'Maciej Serafin',
   operatorAddress: '[operator address]',
+  /** Tax or company registration number (NIP, KRS) when the operator runs a business; leave empty otherwise. */
+  businessId: '',
   /** Address for privacy requests and for notices about the service. */
   contactEmail: '[contact e-mail]',
   /** Date of the latest change to the legal texts, as YYYY-MM-DD. */

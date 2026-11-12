@@ -92,6 +92,7 @@ To run HourForge on a server, follow [Running HourForge yourself](docs/self-host
 | [Backups and restoring](docs/operations/restore.md) | Schedule, retention, recovery time, restore test. |
 | [Rotating secrets](docs/operations/secrets-rotation.md) | Database, backup and encryption keys. |
 | [Monitoring and alerts](docs/operations/monitoring.md) | Metrics, alert rules, what each alert means. |
+| [Record of processing](docs/operations/processing-register.md) | The GDPR record to fill in, with the measures in place. |
 | [Handling a data breach](docs/operations/data-breach.md) | Detect, contain, assess, report within 72 hours. |
 | [E-mail that arrives](docs/email-deliverability.md) | Sender domain, SPF, DKIM, DMARC. |
 

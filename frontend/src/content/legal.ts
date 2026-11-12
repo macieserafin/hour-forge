@@ -1,7 +1,7 @@
 import type { Locale } from './i18n'
 import type { Instance } from './instance'
 
-/** The three public documents. Texts describe what HourForge does today; a lawyer reviews them before launch. */
+/** The three public documents. Texts describe what HourForge does today and follow GDPR Article 13 and the Polish act on electronic services. */
 export type LegalKind = 'privacy' | 'terms' | 'subprocessors'
 
 export interface LegalTable {
@@ -48,6 +48,11 @@ export const legalLabels: Record<Locale, Record<LegalKind | 'updated' | 'back' |
   },
 }
 
+/** Name, address and, when the operator runs a business, its registration number. */
+function who(i: Instance) {
+  return [i.operatorName, i.operatorAddress, i.businessId].filter(Boolean).join(', ')
+}
+
 export function legalDocument(locale: Locale, kind: LegalKind, i: Instance): LegalDocument {
   return (locale === 'pl' ? polish : english)(i)[kind]
 }
@@ -64,8 +69,8 @@ function polish(i: Instance): Documents {
         {
           title: '1. Kto odpowiada za Twoje dane',
           paragraphs: [
-            `Administratorem danych konta jest ${i.operatorName}, ${i.operatorAddress}. Pytania o dane osobowe i wnioski kieruj na adres ${i.contactEmail}.`,
-            'Jeśli Twój pracodawca lub organizacja założyła zespół, ta organizacja decyduje o tym, jakie wpisy czasu pracy w nim zapisujecie. Odpowiada wtedy za te dane wobec Ciebie i może wymagać od Ciebie dodatkowych informacji.',
+            `Administratorem danych konta jest ${who(i)}. Pytania o dane osobowe i wnioski kieruj na adres ${i.contactEmail}.`,
+            'Jeśli Twój pracodawca lub organizacja założyła zespół, ta organizacja decyduje o tym, jakie wpisy czasu pracy w nim zapisujecie. Odpowiada wtedy za te dane wobec Ciebie i może wymagać od Ciebie dodatkowych informacji. W takim przypadku operator przetwarza te dane na jej polecenie; organizacja może zawrzeć z operatorem umowę powierzenia, o którą wystarczy napisać na adres kontaktowy.',
           ],
         },
         {
@@ -88,12 +93,15 @@ function polish(i: Instance): Documents {
             'Obowiązki prawne (art. 6 ust. 1 lit. c RODO): odpowiedzi na wnioski o prawa osób i zgłaszanie naruszeń ochrony danych.',
             'Zgoda (art. 6 ust. 1 lit. a RODO): logowanie przez Google i połączenie z Jira włączasz sam i możesz je odłączyć w każdej chwili.',
           ],
+          paragraphs: [
+            'Podanie danych konta jest dobrowolne, ale bez nich nie założysz konta ani nie skorzystasz z usługi. Nie podejmujemy wobec Ciebie decyzji w sposób zautomatyzowany i nie tworzymy Twojego profilu.',
+          ],
         },
         {
           title: '4. Komu przekazujemy dane',
           paragraphs: [
             'Dane trafiają tylko do dostawców potrzebnych do działania usługi: hostingu, przechowywania kopii zapasowych i wysyłki poczty. Pełna lista z miejscem przetwarzania jest na stronie „Podprocesorzy”.',
-            'Dostawcy opcjonalnych funkcji (Google, Atlassian, kontrola botów przy rejestracji) dostają dane tylko wtedy, gdy z tych funkcji korzystasz.',
+            'Dostawcy opcjonalnych funkcji (Google, Atlassian, kontrola botów przy rejestracji) dostają dane tylko wtedy, gdy z tych funkcji korzystasz. Mogą przetwarzać je poza Europejskim Obszarem Gospodarczym; opierają się wtedy na standardowych klauzulach umownych albo na decyzji Komisji Europejskiej o odpowiednim stopniu ochrony (np. Data Privacy Framework). Dane z głównej usługi (serwer, kopie zapasowe, poczta) zostają w Unii Europejskiej.',
             'Członkowie Twojego zespołu widzą to, co pozwalają im role: właściciel i administratorzy widzą czas pracy w zespole, członkowie widzą swoją pracę. Twój adres e-mail nie jest pokazywany innym członkom.',
           ],
         },
@@ -127,7 +135,8 @@ function polish(i: Instance): Documents {
           title: '6. Twoje prawa',
           paragraphs: [
             'Masz prawo dostępu do danych, ich sprostowania, usunięcia, ograniczenia przetwarzania, przenoszenia oraz sprzeciwu wobec przetwarzania opartego na prawnie uzasadnionym interesie.',
-            'Większość tych praw wykonasz sam: w ustawieniach konta zmienisz dane, pobierzesz kopię swoich danych w formacie JSON i usuniesz konto. W pozostałych sprawach napisz na adres z punktu 1.',
+            'Zgodę na logowanie przez Google lub połączenie z Jira możesz wycofać w każdej chwili, odłączając je w ustawieniach; wycofanie nie wpływa na zgodność z prawem wcześniejszego przetwarzania.',
+            'Większość tych praw wykonasz sam: w ustawieniach konta zmienisz dane, pobierzesz kopię swoich danych w formacie JSON i usuniesz konto. W pozostałych sprawach napisz na adres z punktu 1. Odpowiadamy w ciągu miesiąca.',
             'Skargę możesz złożyć do Prezesa Urzędu Ochrony Danych Osobowych (ul. Stawki 2, 00-193 Warszawa).',
           ],
         },
@@ -159,7 +168,7 @@ function polish(i: Instance): Documents {
         {
           title: '1. Usługa',
           paragraphs: [
-            `HourForge to aplikacja internetowa do rejestrowania czasu pracy. Usługę prowadzi ${i.operatorName}, ${i.operatorAddress} (dalej: operator). Kontakt: ${i.contactEmail}.`,
+            `HourForge to aplikacja internetowa do rejestrowania czasu pracy. Usługę prowadzi ${who(i)} (dalej: operator). Kontakt: ${i.contactEmail}.`,
             'Kod aplikacji jest dostępny na licencji MIT. Ten regulamin dotyczy instancji prowadzonej przez operatora, a nie samego kodu.',
           ],
         },
@@ -169,6 +178,7 @@ function polish(i: Instance): Documents {
             'Konto zakładasz, podając prawdziwy adres e-mail i potwierdzając go linkiem z wiadomości.',
             'Chronisz swoje hasło i urządzenia. Zalecamy włączenie logowania dwuetapowego.',
             'Jedna osoba ma jedno konto. Nie udostępniasz konta innym osobom.',
+            'Usługa jest dla osób pełnoletnich.',
             'Możesz usunąć konto w każdej chwili w ustawieniach. Jeśli jesteś właścicielem zespołu, najpierw przekaż własność albo usuń zespół.',
           ],
         },
@@ -195,6 +205,7 @@ function polish(i: Instance): Documents {
           paragraphs: [
             'Staramy się, aby usługa działała bez przerw, ale jej dostępność nie jest gwarantowana. Planowane prace i wdrożenia mogą powodować krótkie przerwy.',
             'Baza danych jest kopiowana co 6 godzin. W razie awarii możemy utracić zmiany z ostatnich kilku godzin.',
+            'Do korzystania z usługi potrzebujesz aktualnej przeglądarki z włączoną obsługą JavaScript i plików cookie oraz dostępu do internetu. Korzystanie z internetu wiąże się z ryzykiem, np. złośliwym oprogramowaniem; chroń swoje urządzenia i hasło.',
           ],
         },
         {
@@ -210,7 +221,13 @@ function polish(i: Instance): Documents {
           ],
         },
         {
-          title: '8. Zmiany regulaminu i prawo właściwe',
+          title: '8. Reklamacje',
+          paragraphs: [
+            `Reklamację dotyczącą działania usługi wyślij na adres ${i.contactEmail}, opisując problem i podając adres e-mail konta. Odpowiadamy w ciągu 14 dni.`,
+          ],
+        },
+        {
+          title: '9. Zmiany regulaminu i prawo właściwe',
           paragraphs: [
             'O zmianach regulaminu informujemy w aplikacji i e-mailem z wyprzedzeniem. Do regulaminu stosuje się prawo polskie, z zachowaniem praw konsumenta wynikających z bezwzględnie obowiązujących przepisów.',
           ],
@@ -269,8 +286,8 @@ function english(i: Instance): Documents {
         {
           title: '1. Who is responsible for your data',
           paragraphs: [
-            `The controller of account data is ${i.operatorName}, ${i.operatorAddress}. Send questions and requests about personal data to ${i.contactEmail}.`,
-            'If your employer or organisation created a team, that organisation decides which work-time entries you record in it. It is then responsible to you for that data and may ask you for further information.',
+            `The controller of account data is ${who(i)}. Send questions and requests about personal data to ${i.contactEmail}.`,
+            'If your employer or organisation created a team, that organisation decides which work-time entries you record in it. It is then responsible to you for that data and may ask you for further information. In that case the operator processes the data on its instructions; the organisation can sign a data processing agreement with the operator by asking at the contact address.',
           ],
         },
         {
@@ -293,12 +310,15 @@ function english(i: Instance): Documents {
             'Legal obligations (Art. 6(1)(c) GDPR): answering data subject requests and reporting personal data breaches.',
             'Consent (Art. 6(1)(a) GDPR): you turn on sign-in with Google and the Jira connection yourself and can disconnect them at any time.',
           ],
+          paragraphs: [
+            'Giving your account data is voluntary, but without it you cannot create an account or use the service. We take no automated decisions about you and do not profile you.',
+          ],
         },
         {
           title: '4. Who receives your data',
           paragraphs: [
             'Data goes only to providers the service needs: hosting, backup storage and mail delivery. The "Subprocessors" page lists them with the place of processing.',
-            'Providers of optional features (Google, Atlassian, the bot check at registration) receive data only when you use those features.',
+            'Providers of optional features (Google, Atlassian, the bot check at registration) receive data only when you use those features. They may process it outside the European Economic Area; they then rely on standard contractual clauses or on a European Commission adequacy decision (for example the Data Privacy Framework). Data of the core service (server, backups, mail) stays in the European Union.',
             'Members of your team see what their roles allow: the owner and admins see work time in the team, members see their own work. Your e-mail address is not shown to other members.',
           ],
         },
@@ -329,7 +349,8 @@ function english(i: Instance): Documents {
           title: '6. Your rights',
           paragraphs: [
             'You have the right to access, rectify, erase, restrict and port your data, and to object to processing based on legitimate interest.',
-            'You can exercise most of these rights yourself: in the account settings you change your data, download a copy of your data as JSON and delete the account. For anything else write to the address in section 1.',
+            'You can exercise most of these rights yourself: in the account settings you change your data, download a copy of your data as JSON and delete the account. For anything else write to the address in section 1. We answer within one month.',
+            'You can withdraw consent to sign-in with Google or the Jira connection at any time by disconnecting it in the settings; withdrawal does not affect earlier processing.',
             'You may lodge a complaint with the President of the Personal Data Protection Office (UODO), ul. Stawki 2, 00-193 Warsaw, Poland, or with the authority in your country.',
           ],
         },
@@ -361,7 +382,7 @@ function english(i: Instance): Documents {
         {
           title: '1. The service',
           paragraphs: [
-            `HourForge is a web application for recording working time. ${i.operatorName}, ${i.operatorAddress} (the operator) runs the service. Contact: ${i.contactEmail}.`,
+            `HourForge is a web application for recording working time. ${who(i)} (the operator) runs the service. Contact: ${i.contactEmail}.`,
             'The application code is available under the MIT License. These terms cover the instance the operator runs, not the code itself.',
           ],
         },
@@ -371,6 +392,7 @@ function english(i: Instance): Documents {
             'You create an account with a real e-mail address and confirm it with the link in the message.',
             'You protect your password and your devices. We recommend turning on two-step sign-in.',
             'One person has one account. You do not share your account.',
+            'The service is for adults.',
             'You can delete your account at any time in the settings. If you own a team, hand over ownership or delete the team first.',
           ],
         },
@@ -397,6 +419,7 @@ function english(i: Instance): Documents {
           paragraphs: [
             'We aim to keep the service running without interruption, but we do not guarantee availability. Planned work and deployments can cause short outages.',
             'The database is backed up every 6 hours. After a failure we may lose changes from the last few hours.',
+            'To use the service you need a current browser with JavaScript and cookies enabled and an internet connection. The internet carries risks such as malware; protect your devices and your password.',
           ],
         },
         {
@@ -412,7 +435,13 @@ function english(i: Instance): Documents {
           ],
         },
         {
-          title: '8. Changes and governing law',
+          title: '8. Complaints',
+          paragraphs: [
+            `Send a complaint about how the service works to ${i.contactEmail}, describing the problem and giving the e-mail address of your account. We answer within 14 days.`,
+          ],
+        },
+        {
+          title: '9. Changes and governing law',
           paragraphs: [
             'We announce changes to these terms in advance, in the application and by e-mail. Polish law governs these terms, without affecting consumer rights that mandatory provisions give you.',
           ],
