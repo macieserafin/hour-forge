@@ -1,10 +1,15 @@
 # Weekly update proposals for every kind of dependency, including base images (by digest) and the CI actions.
+# Minor and patch updates arrive as one pull request per ecosystem; major jumps of the runtimes
+# (Java, Node) are moved by hand to the next LTS and are not proposed.
 version: 2
 updates:
   - package-ecosystem: maven
     directory: /backend
     schedule: {interval: weekly}
     open-pull-requests-limit: 5
+    groups:
+      maven-minor-and-patch:
+        update-types: [minor, patch]
   - package-ecosystem: npm
     directory: /frontend
     schedule: {interval: weekly}
@@ -12,12 +17,31 @@ updates:
     groups:
       dev-dependencies:
         dependency-type: development
+      npm-minor-and-patch:
+        update-types: [minor, patch]
   - package-ecosystem: docker
     directories: [/backend, /frontend, /deploy/backup]
     schedule: {interval: weekly}
+    open-pull-requests-limit: 5
+    groups:
+      docker-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: eclipse-temurin
+        update-types: ["version-update:semver-major"]
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker-compose
     directories: [/deploy, /backend]
     schedule: {interval: weekly}
+    open-pull-requests-limit: 5
+    groups:
+      compose-minor-and-patch:
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule: {interval: weekly}
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
