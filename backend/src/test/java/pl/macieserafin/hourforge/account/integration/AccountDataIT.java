@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import pl.macieserafin.hourforge.account.AccountExport;
 import pl.macieserafin.hourforge.support.BrowserSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
@@ -313,4 +314,45 @@ class AccountDataIT extends ApiIntegrationTestSupport {
     }
 
     @Autowired pl.macieserafin.hourforge.account.AccountDataService accountData;
+    @Autowired tools.jackson.databind.ObjectMapper json;
+
+    /**
+     * The entries are written from a database cursor rather than from the entities: the copy must still say exactly what
+     * the entities say, and carry every field of the export records (a field added later must not be left out).
+     */
+    @Test
+    void theStreamedCopyMatchesTheEntitiesAndHasEveryFieldOfTheRecords() throws Exception {
+        var tag = tagRows.saveAndFlush(new pl.macieserafin.hourforge.tag.Tag(team, "Review",
+                pl.macieserafin.hourforge.project.ProjectColor.values()[0]));
+        // A finished timer: only timers carry a pause.
+        var detailed = new TimeEntry(user, team, project, EntryType.TIMER, LocalDate.parse("2026-10-17"),
+                Instant.parse("2026-10-17T08:00:00Z"), Instant.parse("2026-10-17T08:30:01.500Z"), 1800, "Tagged and corrected");
+        detailed.setTag(tag);
+        detailed.setLastEditedBy(colleague);
+        detailed.setLastEditedAt(Instant.parse("2026-10-18T08:00:00.123456Z"));
+        detailed.setPausedDurationMicros(1_500_000);
+        entries.saveAndFlush(detailed);
+        manual(user, team, project, null, 300, "Undated \"quoted\" work");
+
+        var body = signIn().perform(get("/api/account/export")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        var copy = json.readTree(body);
+
+        assertThat(copy.propertyNames()).containsExactly(java.util.Arrays.stream(AccountExport.class.getRecordComponents())
+                .map(java.lang.reflect.RecordComponent::getName).toArray(String[]::new));
+        var expected = entries.findByUserIdOrderByCreatedAtAscIdAsc(user.getId()).stream()
+                .map(entry -> new AccountExport.Entry(entry.getId(), entry.getTeam().getId(), entry.getTeam().getName(),
+                        entry.getProject().getId(), entry.getProject().getName(), entry.getEntryType().name(),
+                        entry.getWorkDate(), entry.getStartedAt(), entry.getEndedAt(), entry.getDurationSeconds(),
+                        entry.getPausedDurationMicros() / 1_000_000.0, entry.getDescription(), entry.getCreatedAt(),
+                        entry.getUpdatedAt(), entry.getJiraIssueKey(),
+                        entry.getTag() == null ? null : entry.getTag().getName(), entry.getLastEditedAt(),
+                        entry.getLastEditedBy() == null ? null : entry.getLastEditedBy().getDisplayName())).toList();
+        assertThat(copy.get("timeEntries")).isEqualTo(json.valueToTree(expected));
+        var tagged = copy.get("timeEntries").get(0);
+        assertThat(tagged.propertyNames()).containsExactly(java.util.Arrays.stream(AccountExport.Entry.class.getRecordComponents())
+                .map(java.lang.reflect.RecordComponent::getName).toArray(String[]::new));
+        assertThat(tagged.get("tagName").asString()).isEqualTo("Review");
+        assertThat(tagged.get("lastEditedBy").asString()).isEqualTo("Colleague");
+        assertThat(tagged.get("pausedSeconds").asDouble()).isEqualTo(1.5);
+    }
 }

@@ -103,24 +103,17 @@ public class AccountDataService {
         this.clock = clock;
     }
 
-    /** Own entries from every team, including teams the user has left, as decided for former members. */
+    /**
+     * Everything in the copy of the person's data except the time entries, which {@link AccountExportWriter} streams
+     * from the database because there can be very many of them ({@code timeEntries} is null here).
+     */
     @Transactional(readOnly = true)
-    public AccountExport export(UUID userId) {
+    public AccountExport exportWithoutEntries(UUID userId) {
         var user = users.findById(userId).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-        limiter.tryAcquire("data-export:" + userId, limits.dataExport())
-                .ifPresent(retryAfter -> { throw new TooManyRequestsException(retryAfter); });
         var teamsOfUser = members.findAllByUserId(userId).stream()
                 .map(member -> new AccountExport.Membership(member.getTeam().getId(), member.getTeam().getName(),
                         member.getRole().name(), member.getJoinedAt(), member.getLeftAt(), member.getRemovedAt(),
                         member.getJobTitle(), member.getFtePercent())).toList();
-        var timeEntries = entries.findByUserIdOrderByCreatedAtAscIdAsc(userId).stream()
-                .map(entry -> new AccountExport.Entry(entry.getId(), entry.getTeam().getId(), entry.getTeam().getName(),
-                        entry.getProject().getId(), entry.getProject().getName(), entry.getEntryType().name(),
-                        entry.getWorkDate(), entry.getStartedAt(), entry.getEndedAt(), entry.getDurationSeconds(),
-                        entry.getPausedDurationMicros() / 1_000_000.0, entry.getDescription(), entry.getCreatedAt(),
-                        entry.getUpdatedAt(), entry.getJiraIssueKey(),
-                        entry.getTag() == null ? null : entry.getTag().getName(), entry.getLastEditedAt(),
-                        entry.getLastEditedBy() == null ? null : entry.getLastEditedBy().getDisplayName())).toList();
         var templates = entryTemplates.findByUserIdOrderByCreatedAtAscIdAsc(userId).stream()
                 .map(template -> new AccountExport.Template(template.getId(), template.getTeam().getId(), template.getTeam().getName(),
                         template.getName(), template.getProjectId(), template.getDescription(),
@@ -135,7 +128,7 @@ public class AccountDataService {
         return new AccountExport(clock.instant(),
                 new AccountExport.Profile(user.getId(), user.getEmail(), user.getDisplayName(), user.getCreatedAt(),
                         user.getEmailVerifiedAt(), images.avatar(userId).map(Base64.getEncoder()::encodeToString).orElse(null)),
-                teamsOfUser, timeEntries, preferences.get(userId),
+                teamsOfUser, null, preferences.get(userId),
                 logins.findByUserIdOrderByOccurredAtAsc(userId).stream()
                         .map(login -> new AccountExport.Login(login.getOccurredAt(), login.getOutcome().name(), login.getMethod().name(), login.getBrowser(),
                                 login.getSystem(), login.getAddress(), login.getLocation())).toList(),

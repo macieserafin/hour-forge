@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -26,6 +27,9 @@ import pl.macieserafin.hourforge.security.AppUserPrincipal;
 import pl.macieserafin.hourforge.session.DeviceSessions;
 import pl.macieserafin.hourforge.session.SessionConfig;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.util.List;
 
 @RestController
@@ -36,9 +40,16 @@ public class AccountController {
     private final DeviceSessions devices;
     private final OperatorAccess operators;
     private final SignInMethodLookup signInMethods;
+    private final ExportSlots exportSlots;
+    private final AccountExportWriter exportWriter;
+    private final Clock clock;
 
     public AccountController(AccountService account, AccountDataService data, DeviceSessions devices, OperatorAccess operators,
-                             SignInMethodLookup signInMethods) {
+                             SignInMethodLookup signInMethods, ExportSlots exportSlots, AccountExportWriter exportWriter,
+                             Clock clock) {
+        this.exportSlots = exportSlots;
+        this.exportWriter = exportWriter;
+        this.clock = clock;
         this.operators = operators;
         this.signInMethods = signInMethods;
         this.account = account;
@@ -71,13 +82,19 @@ public class AccountController {
         return ResponseEntity.noContent().build();
     }
 
+    /** The copy of the person's data (JSON), written as it is read: its size does not depend on memory. */
     @GetMapping("/export")
-    public ResponseEntity<AccountExport> export(@AuthenticationPrincipal AppUserPrincipal principal) {
-        var export = data.export(principal.getUserId());
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"hourforge-export-" + export.exportedAt().toString().substring(0, 10) + ".json\"")
-                .header(HttpHeaders.CACHE_CONTROL, "no-store")
-                .body(export);
+    public void export(@AuthenticationPrincipal AppUserPrincipal principal, HttpServletResponse response) throws IOException {
+        try (var slot = exportSlots.open(principal.getUserId())) {
+            var exportedAt = clock.instant();
+            response.setStatus(HttpServletResponse.SC_OK);
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+            response.setHeader(HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename=\"hourforge-export-" + exportedAt.toString().substring(0, 10) + ".json\"");
+            response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
+            exportWriter.write(principal.getUserId(), exportedAt, response.getOutputStream());
+        }
     }
 
     @PostMapping("/delete")
