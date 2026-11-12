@@ -12,6 +12,7 @@ import pl.macieserafin.hourforge.auth.AccountMailService;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.identity.PasswordNotSetException;
 import pl.macieserafin.hourforge.jira.TokenCipher;
+import pl.macieserafin.hourforge.logging.SecurityEvents;
 import pl.macieserafin.hourforge.security.PasswordChangeAttempts;
 import pl.macieserafin.hourforge.security.RateLimitProperties;
 import pl.macieserafin.hourforge.security.RateLimiter;
@@ -122,6 +123,7 @@ public class TwoFactorService {
         row.setLastUsedStep(step.getAsLong());
         var codes = replaceBackupCodes(userId);
         users.findById(userId).ifPresent(user -> mail.sendTwoFactorChanged(user, true));
+        SecurityEvents.record("two-factor.enabled", userId);
         return codes;
     }
 
@@ -131,12 +133,14 @@ public class TwoFactorService {
         if (!secrets.isEnabled(userId)) throw new ResponseStatusException(HttpStatus.CONFLICT, "Two-step sign-in is off");
         remove(userId);
         users.findById(userId).ifPresent(user -> mail.sendTwoFactorChanged(user, false));
+        SecurityEvents.record("two-factor.disabled", userId);
     }
 
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public BackupCodes renewBackupCodes(UUID userId, String password) {
         requirePassword(userId, password);
         if (!secrets.isEnabled(userId)) throw new ResponseStatusException(HttpStatus.CONFLICT, "Two-step sign-in is off");
+        SecurityEvents.record("two-factor.backup-codes-renewed", userId);
         return replaceBackupCodes(userId);
     }
 

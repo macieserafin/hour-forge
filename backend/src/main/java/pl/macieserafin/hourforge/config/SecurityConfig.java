@@ -31,6 +31,7 @@ import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWrite
 import org.springframework.security.web.header.writers.StaticHeadersWriter;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.google.GoogleSignIn;
+import pl.macieserafin.hourforge.logging.SecurityEvents;
 import pl.macieserafin.hourforge.notification.NotificationController;
 import pl.macieserafin.hourforge.security.AppUserPrincipal;
 import pl.macieserafin.hourforge.security.LoginAttemptService;
@@ -83,6 +84,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf", "/api/config").permitAll()
+                        // Served only on the management port, which is never published or routed by the proxy; on the
+                        // API port these addresses do not exist (404).
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**", "/actuator/info",
+                                "/actuator/prometheus").permitAll()
                         // Sign-in with Google (start and return); handled by OAuth2 filters before this point when it is on.
                         .requestMatchers(HttpMethod.GET, GoogleSignIn.START_PATH, GoogleSignIn.CALLBACK_PATH).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
@@ -144,8 +149,12 @@ public class SecurityConfig {
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")
                         .deleteCookies(SessionConfig.COOKIE_NAME)
-                        .logoutSuccessHandler((request, response, authentication) ->
-                                response.setStatus(HttpServletResponse.SC_NO_CONTENT)))
+                        .logoutSuccessHandler((request, response, authentication) -> {
+                            if (authentication != null && authentication.getPrincipal() instanceof AppUserPrincipal principal) {
+                                SecurityEvents.record("sign-out", principal.getUserId());
+                            }
+                            response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+                        }))
                 .build();
     }
 

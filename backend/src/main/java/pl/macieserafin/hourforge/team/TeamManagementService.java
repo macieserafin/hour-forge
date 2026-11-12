@@ -11,6 +11,7 @@ import pl.macieserafin.hourforge.image.ImageStore;
 import pl.macieserafin.hourforge.jira.JiraConnectionRepository;
 import pl.macieserafin.hourforge.jira.JiraUserAuthorizationRepository;
 import pl.macieserafin.hourforge.jira.OAuthStateRepository;
+import pl.macieserafin.hourforge.logging.SecurityEvents;
 import pl.macieserafin.hourforge.project.ProjectRepository;
 import pl.macieserafin.hourforge.tag.TagRepository;
 import pl.macieserafin.hourforge.timeentry.EntryType;
@@ -89,6 +90,7 @@ public class TeamManagementService {
     /** Only the owner decides who is an admin; the owner role itself moves only by transferring ownership. */
     @Transactional
     public void changeRole(UUID actorId, UUID teamId, UUID targetUserId, TeamRole role) {
+        SecurityEvents.record("team.role-changed", actorId, "team", teamId, "user", targetUserId, "role", role);
         var team = ownedTeam(actorId, teamId);
         requireNotArchived(team);
         if (role == TeamRole.OWNER) {
@@ -107,6 +109,7 @@ public class TeamManagementService {
 
     @Transactional
     public void transferOwnership(UUID actorId, UUID teamId, UUID targetUserId) {
+        SecurityEvents.record("team.ownership-transferred", actorId, "team", teamId, "user", targetUserId);
         var team = ownedTeam(actorId, teamId);
         if (actorId.equals(targetUserId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose another active member");
@@ -126,6 +129,7 @@ public class TeamManagementService {
 
     @Transactional
     public TeamResponse archive(UUID actorId, UUID teamId) {
+        SecurityEvents.record("team.archived", actorId, "team", teamId);
         var team = lockedTeam(teamId);
         var role = managerRole(actorId, teamId);
         if (!team.isArchived()) {
@@ -151,6 +155,7 @@ public class TeamManagementService {
 
     @Transactional
     public void delete(UUID actorId, UUID teamId) {
+        SecurityEvents.record("team.deleted", actorId, "team", teamId);
         var team = ownedTeam(actorId, teamId);
         requireNoActiveTimers(team, "Stop active timers before deleting the team");
         remove(team);

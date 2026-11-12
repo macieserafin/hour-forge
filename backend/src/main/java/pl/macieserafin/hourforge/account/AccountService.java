@@ -9,6 +9,7 @@ import pl.macieserafin.hourforge.auth.PasswordPolicy;
 import pl.macieserafin.hourforge.auth.UserCredential;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.identity.PasswordNotSetException;
+import pl.macieserafin.hourforge.logging.SecurityEvents;
 import pl.macieserafin.hourforge.security.PasswordChangeAttempts;
 import pl.macieserafin.hourforge.user.User;
 import pl.macieserafin.hourforge.user.UserRepository;
@@ -62,11 +63,13 @@ public class AccountService {
         int version = credential.invalidateSessions();
         credentials.flush();
         attempts.reset(userId);
+        SecurityEvents.record("password.changed", userId);
         return version;
     }
 
     @Transactional
     public void signOutEverywhere(UUID userId) {
+        SecurityEvents.record("sessions.ended-all", userId);
         lockedCredential(userId).invalidateSessions();
         credentials.flush();
     }

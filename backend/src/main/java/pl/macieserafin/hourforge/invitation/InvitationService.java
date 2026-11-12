@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
+import pl.macieserafin.hourforge.logging.SecurityEvents;
 import pl.macieserafin.hourforge.security.Tokens;
 import pl.macieserafin.hourforge.team.Team;
 import pl.macieserafin.hourforge.team.TeamAccess;
@@ -56,6 +57,7 @@ public class InvitationService {
 
     @Transactional
     public InviteResponse create(UUID currentUserId, UUID teamId, CreateInviteRequest request) {
+        SecurityEvents.record("invitation.created", currentUserId, "team", teamId);
         var creator = users.findById(currentUserId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         var team = teams.findLockedById(teamId)
@@ -87,6 +89,7 @@ public class InvitationService {
 
     @Transactional
     public TeamResponse accept(UUID currentUserId, String token) {
+        SecurityEvents.record("invitation.accepted", currentUserId);
         var user = users.findById(currentUserId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         if (token == null || !token.matches("[A-Za-z0-9_-]{43}")) {
@@ -188,6 +191,7 @@ public class InvitationService {
 
     @Transactional
     public void revoke(UUID actorId, UUID teamId, UUID inviteId) {
+        SecurityEvents.record("invitation.revoked", actorId, "team", teamId, "invitation", inviteId);
         if (!users.existsById(actorId)) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         teams.findLockedById(teamId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         var team = requireManager(teamId, actorId);

@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import pl.macieserafin.hourforge.logging.SecurityEvents;
 import pl.macieserafin.hourforge.user.UserRepository;
 
 @Service
@@ -42,6 +43,7 @@ public class TeamMembershipService {
 
     @Transactional
     public void remove(UUID actorId, UUID teamId, UUID targetUserId) {
+        SecurityEvents.record("team.member-removed", actorId, "team", teamId, "user", targetUserId);
         requireUser(actorId);
         lockTeam(teamId);
         var actor = TeamAccess.member(members, teamId, actorId);
@@ -70,6 +72,7 @@ public class TeamMembershipService {
 
     @Transactional
     public void leave(UUID actorId, UUID teamId) {
+        SecurityEvents.record("team.member-left", actorId, "team", teamId);
         requireUser(actorId);
         lockTeam(teamId);
         endMembership(TeamAccess.member(members, teamId, actorId), false);

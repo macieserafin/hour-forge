@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import pl.macieserafin.hourforge.logging.SecurityEvents;
 
 /**
  * The signed-in devices of a person: one stored session each. A session is shown by a random handle, never by its
@@ -63,6 +64,7 @@ public class DeviceSessions {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sign out to end the current session");
         }
         sessions.deleteById(session.getId());
+        SecurityEvents.record("session.ended", userId);
     }
 
     /** Removes the stored sessions of the person, except the given one (may be null). */

@@ -5,6 +5,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import pl.macieserafin.hourforge.logging.SecurityEvents;
 import pl.macieserafin.hourforge.security.RateLimitProperties;
 import pl.macieserafin.hourforge.security.RateLimiter;
 import pl.macieserafin.hourforge.security.TooManyRequestsException;
@@ -68,5 +69,6 @@ public class PasswordResetService {
         // Opening the link proves control of the mailbox.
         if (!user.isEmailVerified()) user.setEmailVerifiedAt(clock.instant());
         credentials.flush();
+        SecurityEvents.record("password.reset", user.getId());
     }
 }

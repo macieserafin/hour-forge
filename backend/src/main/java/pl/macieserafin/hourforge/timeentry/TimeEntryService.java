@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import pl.macieserafin.hourforge.logging.SecurityEvents;
 import pl.macieserafin.hourforge.project.Project;
 import pl.macieserafin.hourforge.project.ProjectRepository;
 import pl.macieserafin.hourforge.jira.JiraConnectionRepository;
@@ -372,6 +373,7 @@ public class TimeEntryService {
 
     @Transactional
     public void deleteFor(UUID actorId, UUID teamId, UUID entryId) {
+        SecurityEvents.record("time-entry.deleted-for-member", actorId, "team", teamId, "entry", entryId);
         entries.delete(correctableEntry(actorId, teamId, entryId));
         entries.flush();
     }

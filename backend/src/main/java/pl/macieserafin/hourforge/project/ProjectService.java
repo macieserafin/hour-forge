@@ -4,6 +4,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import pl.macieserafin.hourforge.logging.SecurityEvents;
 import pl.macieserafin.hourforge.team.TeamAccess;
 import pl.macieserafin.hourforge.team.TeamMember;
 import pl.macieserafin.hourforge.team.TeamMemberRepository;
@@ -98,6 +99,7 @@ public class ProjectService {
 
     @Transactional
     public void delete(UUID userId, UUID teamId, UUID projectId) {
+        SecurityEvents.record("project.deleted", userId, "team", teamId, "project", projectId);
         requireMember(teamId, userId, true);
         var project = findProject(teamId, projectId);
         if (entries.existsByProjectId(projectId)) {

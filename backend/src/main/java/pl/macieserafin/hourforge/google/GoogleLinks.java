@@ -13,6 +13,7 @@ import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.identity.IdentityProvider;
 import pl.macieserafin.hourforge.identity.UserIdentity;
 import pl.macieserafin.hourforge.identity.UserIdentityRepository;
+import pl.macieserafin.hourforge.logging.SecurityEvents;
 import pl.macieserafin.hourforge.security.PasswordChangeAttempts;
 
 import java.time.Clock;
@@ -77,6 +78,7 @@ public class GoogleLinks {
         }
         identities.saveAndFlush(new UserIdentity(user, IdentityProvider.GOOGLE, claims.subject(), claims.emailForDisplay(), clock.instant()));
         mail.sendGoogleLinked(user, claims.emailForDisplay());
+        SecurityEvents.record("google.linked", user.getId());
         return GoogleOutcome.LINKED;
     }
 
@@ -97,6 +99,7 @@ public class GoogleLinks {
         credentials.flush();
         attempts.reset(userId);
         mail.sendGoogleUnlinked(credential.getUser(), identity.getEmail());
+        SecurityEvents.record("google.unlinked", userId);
         return version;
     }
 

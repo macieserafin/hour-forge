@@ -3,11 +3,23 @@
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
     <conversionRule conversionWord="redactInvites" class="pl.macieserafin.hourforge.security.InvitationTokenRedactor"/>
     <conversionRule conversionWord="redactOAuth" class="pl.macieserafin.hourforge.security.OAuthSecretRedactor"/>
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%redactOAuth(%redactInvites(${CONSOLE_LOG_PATTERN}){}){}%nopex</pattern>
-            <charset>UTF-8</charset>
-        </encoder>
-    </appender>
-    <root level="INFO"><appender-ref ref="CONSOLE"/></root>
+    <springProfile name="!prod">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%redactOAuth(%redactInvites(${CONSOLE_LOG_PATTERN}){}){}%nopex</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+        <root level="INFO"><appender-ref ref="CONSOLE"/></root>
+    </springProfile>
+    <!-- Production: one JSON object per line, with the request identifier and the same redaction (JsonLogFormatter). -->
+    <springProfile name="prod">
+        <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="org.springframework.boot.logging.logback.StructuredLogEncoder">
+                <format>pl.macieserafin.hourforge.logging.JsonLogFormatter</format>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+        <root level="INFO"><appender-ref ref="JSON"/></root>
+    </springProfile>
 </configuration>

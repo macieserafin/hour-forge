@@ -3,6 +3,7 @@ package pl.macieserafin.hourforge.session;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Component;
 import pl.macieserafin.hourforge.google.GoogleLinkIntent;
+import pl.macieserafin.hourforge.logging.SecurityEvents;
 
 import java.util.UUID;
 
@@ -38,11 +39,14 @@ public class SignInCompletion {
         var device = DeviceInfo.of(request, locator);
         devices.recordSignIn(request, device, remembered);
         logins.recordSuccess(userId, method, device);
+        SecurityEvents.record("sign-in.succeeded", userId, "method", method);
     }
 
     /** A wrong password for the given address (only existing accounts are recorded). */
     public void failPassword(HttpServletRequest request, String email) {
         logins.recordFailure(email, DeviceInfo.of(request, locator));
+        // Without the address: a mistyped one may be somebody's password.
+        SecurityEvents.record("sign-in.failed", null, "method", LoginEvent.Method.PASSWORD, "step", "password");
     }
 
     /** A wrong code in the second step, after a right password. */
@@ -53,5 +57,6 @@ public class SignInCompletion {
     /** A wrong code in the second step, after a right first step made with {@code method}. */
     public void failSecondStep(HttpServletRequest request, UUID userId, LoginEvent.Method method) {
         logins.recordFailure(userId, method, DeviceInfo.of(request, locator));
+        SecurityEvents.record("sign-in.failed", userId, "method", method, "step", "second");
     }
 }

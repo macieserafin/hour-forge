@@ -11,6 +11,7 @@ import pl.macieserafin.hourforge.auth.EmailTokenPurpose;
 import pl.macieserafin.hourforge.auth.EmailTokenService;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
 import pl.macieserafin.hourforge.identity.PasswordNotSetException;
+import pl.macieserafin.hourforge.logging.SecurityEvents;
 import pl.macieserafin.hourforge.security.PasswordChangeAttempts;
 import pl.macieserafin.hourforge.security.RateLimitProperties;
 import pl.macieserafin.hourforge.security.RateLimiter;
@@ -97,5 +98,6 @@ public class EmailChangeService {
         credentials.findLockedByUserId(user.getId()).ifPresent(credential -> credential.invalidateSessions());
         credentials.flush();
         mail.sendEmailChanged(oldEmail, newEmail);
+        SecurityEvents.record("email.changed", user.getId());
     }
 }

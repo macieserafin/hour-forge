@@ -10,6 +10,7 @@ import org.springframework.web.server.ResponseStatusException;
 import pl.macieserafin.hourforge.account.AccountDataService;
 import pl.macieserafin.hourforge.auth.AccountMailService;
 import pl.macieserafin.hourforge.auth.UserCredentialRepository;
+import pl.macieserafin.hourforge.logging.SecurityEvents;
 import pl.macieserafin.hourforge.session.DeviceSessions;
 import pl.macieserafin.hourforge.team.TeamManagementService;
 import pl.macieserafin.hourforge.twofactor.TwoFactorService;
@@ -131,6 +132,7 @@ public class OperatorService {
     /** Stops the account from signing in and ends all its sessions at once. */
     @Transactional
     public void block(UUID operatorId, UUID userId, String reason) {
+        SecurityEvents.record("operator.account-blocked", operatorId, "account", userId);
         if (operatorId.equals(userId)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operators cannot block themselves");
         var cleanReason = reason == null ? "" : reason.strip();
         if (cleanReason.isEmpty() || cleanReason.length() > 500) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Give a reason of up to 500 characters");
@@ -144,6 +146,7 @@ public class OperatorService {
 
     @Transactional
     public void unblock(UUID operatorId, UUID userId) {
+        SecurityEvents.record("operator.account-unblocked", operatorId, "account", userId);
         activeUser(userId).block(null, null);
         log.info("Operator unblocked an account: operatorId={}, userId={}", operatorId, userId);
     }
@@ -151,6 +154,7 @@ public class OperatorService {
     /** For a person who lost both the authenticator and the backup codes, after the operator confirmed who they are. */
     @Transactional
     public void turnOffTwoFactor(UUID operatorId, UUID userId) {
+        SecurityEvents.record("operator.two-factor-turned-off", operatorId, "account", userId);
         var user = activeUser(userId);
         if (!twoFactor.isEnabled(userId)) throw new ResponseStatusException(HttpStatus.CONFLICT, "Two-step sign-in is off");
         twoFactor.remove(userId);
@@ -160,6 +164,7 @@ public class OperatorService {
 
     @Transactional
     public void deleteAccount(UUID operatorId, UUID userId) {
+        SecurityEvents.record("operator.account-deleted", operatorId, "account", userId);
         if (operatorId.equals(userId)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operators delete their own account in the account settings");
         accounts.deleteWithoutPassword(userId);
         devices.endAllExcept(userId, null);
@@ -168,6 +173,7 @@ public class OperatorService {
 
     @Transactional
     public void deleteTeam(UUID operatorId, UUID teamId) {
+        SecurityEvents.record("operator.team-deleted", operatorId, "team", teamId);
         teams.deleteByOperator(teamId);
         log.info("Operator deleted a team: operatorId={}, teamId={}", operatorId, teamId);
     }

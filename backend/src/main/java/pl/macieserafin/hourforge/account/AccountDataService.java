@@ -18,6 +18,7 @@ import pl.macieserafin.hourforge.image.ImageStore;
 import pl.macieserafin.hourforge.invitation.TeamInviteRepository;
 import pl.macieserafin.hourforge.jira.JiraUserAuthorizationRepository;
 import pl.macieserafin.hourforge.jira.OAuthStateRepository;
+import pl.macieserafin.hourforge.logging.SecurityEvents;
 import pl.macieserafin.hourforge.preferences.PreferencesService;
 import pl.macieserafin.hourforge.preferences.UserPreferencesRepository;
 import pl.macieserafin.hourforge.security.PasswordChangeAttempts;
@@ -161,6 +162,7 @@ public class AccountDataService {
         }
         anonymize(userId);
         attempts.reset(userId);
+        SecurityEvents.record("account.deleted", userId, "confirmation", "password");
     }
 
     /**
@@ -193,6 +195,7 @@ public class AccountDataService {
     public UUID confirmDeletion(String rawToken) {
         var userId = emailTokens.redeem(rawToken, EmailTokenPurpose.DELETE_ACCOUNT).getUser().getId();
         anonymize(userId);
+        SecurityEvents.record("account.deleted", userId, "confirmation", "email-link");
         return userId;
     }
 
@@ -205,6 +208,8 @@ public class AccountDataService {
         var user = users.findById(userId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (user.getDeletedAt() != null) throw new ResponseStatusException(HttpStatus.CONFLICT, "The account is already deleted");
         anonymize(userId);
+        // By the instance operator (who is logged separately) or by the retention of unused accounts.
+        SecurityEvents.record("account.deleted", null, "account", userId, "confirmation", "none");
     }
 
     private void anonymize(UUID userId) {

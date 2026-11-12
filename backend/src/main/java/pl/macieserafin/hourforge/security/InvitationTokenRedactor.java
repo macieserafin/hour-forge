@@ -10,6 +10,10 @@ public class InvitationTokenRedactor extends CompositeConverter<ILoggingEvent> {
 
     @Override
     protected String transform(ILoggingEvent event, String text) {
+        return redact(text);
+    }
+
+    public static String redact(String text) {
         return TOKEN.matcher(text).replaceAll("[INVITATION_REDACTED]");
     }
 }

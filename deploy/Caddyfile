@@ -7,6 +7,10 @@
 		-Server
 	}
 
+	# One identifier per request, set here so a client cannot choose it. The backend writes it into each of its log lines
+	# (requestId) and returns it, so it also appears in this access log under the response headers.
+	request_header X-Request-Id {http.request.uuid}
+
 	# Pictures (profile photo, team logo) are up to 2 MB; every other request body is far below 1 MB
 	# (the backend itself refuses more than 256 KB outside file uploads).
 	@pictures path /api/account/avatar /api/teams/*/logo
