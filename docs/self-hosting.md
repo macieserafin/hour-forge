@@ -44,6 +44,20 @@ in to the database with an account that can read and write rows but never change
 separate account); HTTPS with HSTS, a strict content security policy and a `Secure` session cookie; logs as JSON lines
 without one-time tokens.
 
+## Legal texts
+
+The web app serves a privacy policy, terms of service and a list of subprocessors at `/privacy`, `/terms` and
+`/subprocessors`, and links them from the sign-in pages and the account menu. Before you open your instance to other
+people:
+
+1. Fill in your details in [`frontend/src/content/instance.ts`](../frontend/src/content/instance.ts): your name or
+   company, address, contact e-mail, and the providers for hosting, backups and mail. The images are built from this
+   file, so rebuild them after the change.
+2. Read the texts in [`frontend/src/content/legal.ts`](../frontend/src/content/legal.ts) and have a lawyer check them
+   for your situation. They describe what HourForge does with data, not legal advice. Change retention periods or
+   providers there if your setup differs, for example when you turn Google sign-in, Jira or the bot check on or off.
+3. Prepare for incidents with [Handling a data breach](operations/data-breach.md).
+
 ## Settings
 
 | Setting | Where | Notes |

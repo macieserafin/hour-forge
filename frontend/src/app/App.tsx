@@ -10,6 +10,7 @@ import { Button, Loading } from '../ui'
 import { UserProvider, useUser } from './session'
 import { Shell } from './Shell'
 import { LoginPage } from '../features/auth/LoginPage'
+import { LegalPage } from '../features/legal/Legal'
 import {
   ConfirmAccountDeletionPage,
   ConfirmEmailChangePage,
@@ -91,6 +92,9 @@ export function App() {
 
   return (
     <Routes>
+      <Route path="/privacy" element={<LegalPage kind="privacy" />} />
+      <Route path="/terms" element={<LegalPage kind="terms" />} />
+      <Route path="/subprocessors" element={<LegalPage kind="subprocessors" />} />
       <Route path="/login" element={user ? afterSignIn : <LoginPage />} />
       <Route path="/register" element={user ? afterSignIn : <RegisterPage />} />
       <Route path="/forgot-password" element={user ? <Navigate to={HOME} replace /> : <ForgotPasswordPage />} />

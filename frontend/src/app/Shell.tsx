@@ -21,6 +21,7 @@ import { useLogout } from '../lib/auth'
 import { timerElapsedSeconds, useActiveTimer } from '../lib/time'
 import { useUser } from './session'
 import { Announcement } from '../ui/Announcement'
+import { LegalLinks } from '../features/legal/Legal'
 import { EVENT, unseenCount } from '../content/releases'
 import './shell.css'
 
@@ -180,6 +181,7 @@ function AccountMenu({ user }: { user: User }) {
             {t('nav.whatsNew')}
             {unseen > 0 && <span className="count-badge">{unseen}</span>}
           </Link>
+          <LegalLinks className="legal-links menu-legal" />
           <hr />
           <div className="menu-row">
             <span id="menu-language">{t('nav.language')}</span>

@@ -36,7 +36,7 @@ What you get:
 
 - **Time entries** by timer or by hand, with a description, tags and reusable templates.
 - **Teams and projects.** Owners, admins and members, joining by invitation link, one person in several teams.
-- **Dashboards and reports** for one person and for a whole team, with charts, CSV and PDF export.
+- **Dashboards and reports** for one person and for a whole team, with charts and CSV, XLSX and PDF export.
 - **Accounts that protect themselves.** Confirmed e-mail addresses, two-step sign-in, optional sign-in with Google, a
   list of active sessions and structured security events in the server log.
 - **Your data stays yours.** Anyone can download a copy of their data or delete their account.
@@ -92,6 +92,7 @@ To run HourForge on a server, follow [Running HourForge yourself](docs/self-host
 | [Backups and restoring](docs/operations/restore.md) | Schedule, retention, recovery time, restore test. |
 | [Rotating secrets](docs/operations/secrets-rotation.md) | Database, backup and encryption keys. |
 | [Monitoring and alerts](docs/operations/monitoring.md) | Metrics, alert rules, what each alert means. |
+| [Handling a data breach](docs/operations/data-breach.md) | Detect, contain, assess, report within 72 hours. |
 | [E-mail that arrives](docs/email-deliverability.md) | Sender domain, SPF, DKIM, DMARC. |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>

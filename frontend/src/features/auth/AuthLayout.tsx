@@ -3,6 +3,7 @@ import { ArrowUpRight, Check } from 'lucide-react'
 import { AnvilMark } from '../../brand/Anvil'
 import { useI18n, type MessageKey } from '../../content/i18n'
 import { Announcement } from '../../ui/Announcement'
+import { LegalLinks } from '../legal/Legal'
 import authorPhoto from '../../assets/maciej-serafin.jpg'
 import './auth.css'
 
@@ -53,6 +54,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
           </span>
         </span>
         <div className="auth-form">{children}</div>
+        <LegalLinks className="legal-links auth-legal" />
         <AuthorCredit mobile />
       </main>
     </div>

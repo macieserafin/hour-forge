@@ -32,6 +32,11 @@ const messages = {
     'register.confirm': 'Powtórz hasło',
     'register.submit': 'Utwórz konto',
     'register.submitting': 'Tworzenie konta…',
+    'register.legal1': 'Tworząc konto, akceptujesz',
+    'register.terms': 'Regulamin',
+    'register.legal2': 'i potwierdzasz, że znasz',
+    'register.privacy': 'Politykę prywatności',
+    'register.legal3': '.',
     'register.botWait': 'Poczekaj, aż weryfikacja pod formularzem się zakończy.',
     'register.botFailed':
       'Nie udało się wczytać weryfikacji. Sprawdź połączenie lub blokadę skryptów i odśwież stronę.',
@@ -107,6 +112,11 @@ const messages = {
     'register.confirm': 'Repeat the password',
     'register.submit': 'Create account',
     'register.submitting': 'Creating the account…',
+    'register.legal1': 'By creating an account you accept the',
+    'register.terms': 'Terms of service',
+    'register.legal2': 'and confirm you have read the',
+    'register.privacy': 'Privacy policy',
+    'register.legal3': '.',
     'register.botWait': 'Wait until the check below the form finishes.',
     'register.botFailed': 'The check could not be loaded. Check your connection or script blocker and reload the page.',
     'register.haveAccount': 'Already have an account?',
@@ -348,6 +358,17 @@ export function RegisterPage() {
             </>
           )}
         </Button>
+        <p className="muted auth-legal-note">
+          {m('register.legal1')}{' '}
+          <Link className="text-link" to="/terms">
+            {m('register.terms')}
+          </Link>{' '}
+          {m('register.legal2')}{' '}
+          <Link className="text-link" to="/privacy">
+            {m('register.privacy')}
+          </Link>
+          {m('register.legal3')}
+        </p>
       </form>
       {config.data?.googleSignIn && <GoogleButton href={googleSignInUrl({ returnTo: search.get('returnTo') })} />}
       <p className="auth-alt">
