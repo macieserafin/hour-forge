@@ -107,7 +107,7 @@ jobs:
     needs: [backend, frontend]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: sbom-*
       - name: Scan the SBOMs
