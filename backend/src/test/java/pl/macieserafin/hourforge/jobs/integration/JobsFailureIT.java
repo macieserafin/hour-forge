@@ -16,6 +16,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import pl.macieserafin.hourforge.jobs.LongTimerReminderService;
 import pl.macieserafin.hourforge.jobs.WeeklyReportService;
 import pl.macieserafin.hourforge.project.Project;
+import pl.macieserafin.hourforge.mail.OutboxDelivery;
 import pl.macieserafin.hourforge.support.IntegrationTestSupport;
 import pl.macieserafin.hourforge.team.Team;
 import pl.macieserafin.hourforge.team.TeamRepository;
@@ -31,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Real commits on PostgreSQL: when the commit of one team or timer is rejected, the others are marked and mailed exactly
  * once, the rejected one is neither marked nor mailed, and a later run does not repeat anything.
  */
-@TestPropertySource(properties = "test.mail.after-commit=true")
+@TestPropertySource(properties = "test.mail.outbox=true")
 class JobsFailureIT extends IntegrationTestSupport {
     private static final Instant MONDAY_MORNING = Instant.parse("2026-10-19T06:30:00Z");
     private static final Instant NOW = Instant.parse("2026-10-21T20:00:00Z");
@@ -42,6 +43,7 @@ class JobsFailureIT extends IntegrationTestSupport {
     @Autowired TimeEntryRepository entries;
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactionManager;
+    @Autowired OutboxDelivery outbox;
 
     private final List<UUID> userIds = new ArrayList<>();
     private final List<UUID> teamIds = new ArrayList<>();
@@ -73,6 +75,7 @@ class JobsFailureIT extends IntegrationTestSupport {
 
         assertThat(reports.sendDue(MONDAY_MORNING)).isEqualTo(1);
         assertThat(reports.sendDue(MONDAY_MORNING.plus(15, ChronoUnit.MINUTES))).isZero();
+        outbox.deliverDue();
 
         assertThat(mail.sent()).extracting(m -> m.to()).containsExactly(ownerEmail(healthy));
         assertThat(sentFor(healthy)).isNotNull();
@@ -89,6 +92,7 @@ class JobsFailureIT extends IntegrationTestSupport {
 
         assertThat(reminders.remindDue(NOW)).isEqualTo(1);
         assertThat(reminders.remindDue(NOW.plus(15, ChronoUnit.MINUTES))).isZero();
+        outbox.deliverDue();
 
         assertThat(mail.sent()).extracting(m -> m.to()).containsExactly(healthy.getUser().getEmail());
         assertThat(entries.findById(healthy.getId()).orElseThrow().getLongTimerRemindedAt()).isNotNull();

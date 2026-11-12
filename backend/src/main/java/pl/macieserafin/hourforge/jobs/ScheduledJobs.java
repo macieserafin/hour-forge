@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import pl.macieserafin.hourforge.mail.OutboxDelivery;
 
 /**
  * The recurring jobs. One running instance is assumed (several would need a shared lock, see roadmap B8). A failure is
@@ -20,10 +21,12 @@ public class ScheduledJobs {
     private final LongTimerReminderService reminders;
     private final WeeklyReportService weeklyReports;
     private final InactiveAccountService inactiveAccounts;
+    private final OutboxDelivery outbox;
     private final Clock clock;
 
     public ScheduledJobs(RetentionService retention, LongTimerReminderService reminders, WeeklyReportService weeklyReports,
-                         InactiveAccountService inactiveAccounts, Clock clock) {
+                         InactiveAccountService inactiveAccounts, OutboxDelivery outbox, Clock clock) {
+        this.outbox = outbox;
         this.inactiveAccounts = inactiveAccounts;
         this.weeklyReports = weeklyReports;
         this.retention = retention;
@@ -34,6 +37,8 @@ public class ScheduledJobs {
     @Scheduled(cron = "0 30 3 * * *", zone = "UTC")
     public void purge() {
         try {
+            int failedMail = outbox.purgeFailed(clock.instant());
+            if (failedMail > 0) log.info("Retention job removed {} e-mails that could not be sent", failedMail);
             var purged = retention.purge(clock.instant());
             log.info("Retention job removed {} accounts, {} tokens, {} OAuth states, {} invitations, {} sign-ins",
                     purged.accounts(), purged.tokens(), purged.oauthStates(), purged.invitations(), purged.logins());

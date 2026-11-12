@@ -65,7 +65,13 @@ class MailPreviewSend {
         smtp.setPort(Integer.getInteger("mail.preview.port", 1025));
         var frontend = System.getProperty("mail.preview.frontend", "http://localhost:5173");
         var sender = new SmtpEmailSender(smtp, "HourForge <no-reply@localhost>");
-        var mailer = new Mailer(sender, frontend);
+        var mailer = new Mailer(email -> {
+            try {
+                sender.deliver(email);
+            } catch (Exception exception) {
+                throw new IllegalStateException("Mailpit did not take the message", exception);
+            }
+        }, frontend);
 
         var tokens = mock(EmailTokenService.class);
         when(tokens.issue(any(), any(), any())).thenReturn(TOKEN);
@@ -127,10 +133,6 @@ class MailPreviewSend {
         var deliver = WeeklyReportService.class.getDeclaredMethod("deliver", Team.class, LocalDate.class);
         deliver.setAccessible(true);
         deliver.invoke(weekly, team, LocalDate.now().minusWeeks(1).with(java.time.DayOfWeek.MONDAY));
-
-        // Delivery runs on the sender's own thread: let the queue empty before the JVM ends.
-        sender.destroy();
-        Thread.sleep(3000);
     }
 
     private static void setId(Object entity, UUID id) throws ReflectiveOperationException {

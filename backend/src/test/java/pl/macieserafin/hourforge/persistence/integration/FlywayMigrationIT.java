@@ -81,7 +81,8 @@ class FlywayMigrationIT {
                     assertThat(result.getString(1)).isEqualTo("email_tokens_purpose_check");
                     assertThat(result.next()).isFalse();
                 }
-                upgraded = Flyway.configure().dataSource(database.getJdbcUrl(), database.getUsername(), database.getPassword()).load();
+                upgraded = Flyway.configure().dataSource(database.getJdbcUrl(), database.getUsername(), database.getPassword())
+                        .target("38").load();
                 // V38 lets a link confirm the removal of an account without a password (DELETE_ACCOUNT).
                 assertThat(upgraded.migrate().migrationsExecuted).isOne();
                 statement.execute("""
@@ -146,6 +147,19 @@ class FlywayMigrationIT {
                     assertThat(result.next()).isTrue();
                     assertThat(result.getBoolean(1)).isTrue();
                 }
+                upgraded = Flyway.configure().dataSource(database.getJdbcUrl(), database.getUsername(), database.getPassword()).load();
+                // V39 adds the outbox of e-mails, empty; an attachment needs its name, type and content together.
+                assertThat(upgraded.migrate().migrationsExecuted).isOne();
+                try (var result = statement.executeQuery("SELECT count(*) FROM outgoing_emails")) {
+                    assertThat(result.next()).isTrue();
+                    assertThat(result.getInt(1)).isZero();
+                }
+                org.assertj.core.api.Assertions.assertThatThrownBy(() -> statement.execute("""
+                        INSERT INTO outgoing_emails (id, recipient, subject, text_body, html_body, category, attachment_name,
+                            next_attempt_at, created_at)
+                        VALUES (gen_random_uuid(), 'a@example.test', 's', 't', 'h', 'TRANSACTIONAL', 'report.pdf',
+                                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        """)).isInstanceOf(java.sql.SQLException.class).hasMessageContaining("ck_outgoing_emails_attachment");
                 upgraded.validate();
                 try (var result = statement.executeQuery("SELECT work_date, duration_seconds FROM time_entries")) {
                     assertThat(result.next()).isTrue();
