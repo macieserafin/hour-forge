@@ -1,0 +1,23 @@
+# Trying the production stack on your own computer, without a mail provider:
+#   docker compose -f compose.yaml -f compose.try-locally.yaml up -d
+# with HOURFORGE_DOMAIN=localhost in .env. Mail goes to Mailpit; its inbox is at http://127.0.0.1:8025.
+# Never use this file on a server.
+services:
+  mailpit:
+    image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+    networks: [edge]
+
+  backend:
+    depends_on:
+      mailpit:
+        condition: service_started
+    environment:
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: "1025"
+      SPRING_MAIL_USERNAME: ""
+      SPRING_MAIL_PASSWORD: ""
+      MAIL_STARTTLS: "false"
+      MAIL_FROM: HourForge <no-reply@localhost>
