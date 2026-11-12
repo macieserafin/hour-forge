@@ -17,7 +17,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /** The {@code prod} profile turns on the safe production values without any extra setting. */
 @ActiveProfiles({"test", "prod"})
-@TestPropertySource(properties = "DB_STATEMENT_TIMEOUT_MS=500")
+// The test database has no separate migration step, so this context migrates it itself.
+@TestPropertySource(properties = {"DB_STATEMENT_TIMEOUT_MS=500", "spring.flyway.enabled=true"})
 class ProdProfileIT extends ApiIntegrationTestSupport {
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;

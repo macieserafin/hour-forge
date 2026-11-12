@@ -63,7 +63,7 @@ services:
     build: ../backend
     # One instance only: background jobs assume a single running backend (several replicas: path B8).
     depends_on:
-      postgres-init:
+      migrate:
         condition: service_completed_successfully
     # Application settings (mail, sign-in providers, keys). Kept apart from .env so the backend never sees the
     # database administrator password.
@@ -86,6 +86,31 @@ services:
     mem_limit: ${BACKEND_MEMORY:-1g}
     cpus: ${BACKEND_CPUS:-1.5}
 
+  # Applies the database migrations with the account that owns the schema, then exits. The backend starts after it and
+  # signs in with an account that cannot change the schema.
+  migrate:
+    image: ${BACKEND_IMAGE:-hourforge-backend:local}
+    build: ../backend
+    restart: "no"
+    command: ["migrate"]
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-hourforge}
+      MIGRATION_DB_USERNAME: ${MIGRATION_DB_USERNAME:-hourforge_migrator}
+      MIGRATION_DB_PASSWORD: ${MIGRATION_DB_PASSWORD:?Set MIGRATION_DB_PASSWORD in .env}
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    networks: [data]
+    mem_limit: ${MIGRATE_MEMORY:-512m}
+
   postgres:
     <<: *hardening
     image: postgres:18-alpine
@@ -106,7 +131,7 @@ services:
     mem_limit: ${POSTGRES_MEMORY:-512m}
     cpus: ${POSTGRES_CPUS:-1}
 
-  # Creates or updates the application's database account, then exits.
+  # Creates or updates the database accounts (migration and application), then exits.
   postgres-init:
     image: postgres:18-alpine
     restart: "no"
@@ -120,6 +145,8 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       DB_USERNAME: ${DB_USERNAME:-hourforge}
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      MIGRATION_DB_USERNAME: ${MIGRATION_DB_USERNAME:-hourforge_migrator}
+      MIGRATION_DB_PASSWORD: ${MIGRATION_DB_PASSWORD:?Set MIGRATION_DB_PASSWORD in .env}
     volumes:
       - ../backend/docker/postgres/01-create-app-user.sh:/create-app-user.sh:ro
     entrypoint: ["/bin/sh", "/create-app-user.sh"]

@@ -31,4 +31,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=4 \
     CMD curl -fsS -o /dev/null http://127.0.0.1:8080/api/config || exit 1
 # Configuration comes only from environment variables (see .env.example); no .env file is copied into the image.
+# "docker run <image> migrate" applies the database migrations and exits (the deployment step before the application).
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
