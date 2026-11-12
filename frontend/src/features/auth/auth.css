@@ -45,7 +45,16 @@
   z-index: 1;
   display: grid;
   gap: var(--space-5);
-  max-width: 34rem;
+  width: 100%;
+  max-width: 38rem;
+  /* Wide panels centre the story instead of leaving it against the left edge. */
+  justify-self: center;
+  /* Sits a little above the true middle, where the eye expects it. */
+  margin-bottom: 6vh;
+}
+.auth-story-text p,
+.auth-credit p {
+  margin: 0;
 }
 .auth-kicker {
   display: inline-flex;
@@ -57,16 +66,16 @@
   color: var(--brand-spark-2);
 }
 .auth-tagline {
-  font: 600 clamp(38px, 3.8vw, 60px) / 1.04 var(--font-head);
+  font: 600 clamp(38px, 3.6vw, 64px) / 1.04 var(--font-head);
   letter-spacing: -0.025em;
   color: var(--nav-active);
   text-wrap: balance;
 }
 .auth-lead {
-  font-size: clamp(16px, 1.15vw, 18px);
+  font-size: clamp(16px, 1.1vw, 20px);
   line-height: 1.55;
   color: var(--nav-text);
-  max-width: 30rem;
+  max-width: 34rem;
 }
 .auth-points {
   list-style: none;
