@@ -2,7 +2,8 @@ package pl.macieserafin.hourforge.twofactor;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,7 +28,6 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -64,12 +64,10 @@ public class TwoFactorService {
     private final AccountMailService mail;
     private final Clock clock;
 
-    public TwoFactorService(@Value("${app.two-factor.encryption-key:}") String key,
-                            @Value("${app.two-factor.encryption-key-version:v1}") String keyVersion,
-                            UserTwoFactorRepository secrets, BackupCodeRepository backupCodes, UserRepository users,
+    public TwoFactorService(TwoFactorKeys keys, UserTwoFactorRepository secrets, BackupCodeRepository backupCodes, UserRepository users,
                             UserCredentialRepository credentials, PasswordEncoder encoder, PasswordChangeAttempts passwordAttempts,
                             RateLimiter limiter, RateLimitProperties limits, AccountMailService mail, Clock clock) {
-        this.cipher = cipher(key, keyVersion);
+        this.cipher = keys.cipher();
         this.secrets = secrets;
         this.backupCodes = backupCodes;
         this.users = users;
@@ -117,7 +115,7 @@ public class TwoFactorService {
         var row = secrets.findLocked(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Start the setup first"));
         if (row.isEnabled()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Two-step sign-in is already on");
-        var step = Totp.verify(cipher.decrypt(row.getSecret(), context(userId)), normalize(code), clock.instant(), null);
+        var step = Totp.verify(secretOf(row), normalize(code), clock.instant(), null);
         if (step.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The code is not valid");
         row.enable(clock.instant());
         row.setLastUsedStep(step.getAsLong());
@@ -175,7 +173,7 @@ public class TwoFactorService {
             log.error("Two-step sign-in is on for an account but TWO_FACTOR_ENCRYPTION_KEY is not set: userId={}", row.getUserId());
             return false;
         }
-        var step = Totp.verify(cipher.decrypt(row.getSecret(), context(row.getUserId())), answer, clock.instant(), row.getLastUsedStep());
+        var step = Totp.verify(secretOf(row), answer, clock.instant(), row.getLastUsedStep());
         step.ifPresent(row::setLastUsedStep);
         return step.isPresent();
     }
@@ -237,8 +235,33 @@ public class TwoFactorService {
         return "two-factor:" + userId;
     }
 
-    private static TokenCipher cipher(String key, String version) {
-        if (key == null || key.isBlank()) return null;
-        return new TokenCipher(version == null || version.isBlank() ? "v1" : version.strip(), key, Map.of());
+    /** Reads the secret and, if an older key wrote it, writes it again with the active key (the row is managed). */
+    private String secretOf(UserTwoFactor row) {
+        var secret = cipher.decrypt(row.getSecret(), context(row.getUserId()));
+        if (cipher.needsRewrap(row.getSecret())) row.setSecret(cipher.encrypt(secret, context(row.getUserId())));
+        return secret;
+    }
+
+    /**
+     * After a key rotation, writes every secret still encrypted with an older key again with the active one, so the old
+     * key can be removed after one start. A secret whose key is gone is left as it is and reported.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public int rewrapWithActiveKey() {
+        if (cipher == null) return 0;
+        int rewritten = 0;
+        for (var row : secrets.findAll()) {
+            if (!cipher.needsRewrap(row.getSecret())) continue;
+            try {
+                secretOf(row);
+                rewritten++;
+            } catch (IllegalArgumentException exception) {
+                log.error("Two-step sign-in secret cannot be read with the configured keys (version {}): userId={}",
+                        cipher.versionOf(row.getSecret()), row.getUserId());
+            }
+        }
+        if (rewritten > 0) log.info("Two-step sign-in secrets rewritten with key {}: {}", cipher.activeVersion(), rewritten);
+        return rewritten;
     }
 }
