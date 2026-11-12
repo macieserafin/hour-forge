@@ -1,7 +1,7 @@
 import type { Locale } from './i18n'
 import type { Instance } from './instance'
 
-/** The three public documents. Texts describe what HourForge does today and follow GDPR Article 13 and the Polish act on electronic services. */
+/** The three public documents; they follow GDPR Article 13 and the Polish act on electronic services. */
 export type LegalKind = 'privacy' | 'terms' | 'subprocessors'
 
 export interface LegalTable {

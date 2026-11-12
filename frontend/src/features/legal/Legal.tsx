@@ -96,7 +96,6 @@ export function LegalPage({ kind }: { kind: LegalKind }) {
   )
 }
 
-/** The three links shown at the foot of sign-in pages and in the account menu. */
 export function LegalLinks({ className }: { className?: string }) {
   const { locale } = useI18n()
   const labels = legalLabels[locale]
