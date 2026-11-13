@@ -10,10 +10,11 @@ export const instance = {
   businessId: '',
   contactEmail: 'macieserafin@gmail.com',
   /** Date of the latest change to the legal texts, as YYYY-MM-DD. */
-  legalUpdated: '2026-11-12',
+  legalUpdated: '2026-11-13',
   hosting: { name: 'OVHcloud', location: 'EU' },
-  backups: { name: 'OVHcloud (Object Storage)', location: 'EU' },
-  mail: { name: 'Brevo', location: 'EU' },
+  /** Encrypted copies kept on the same server for now; name the storage provider once copies leave the server. */
+  backups: { name: 'OVHcloud', location: 'EU' },
+  mail: { name: 'OVHcloud', location: 'EU' },
 } as const
 
 export type Instance = typeof instance

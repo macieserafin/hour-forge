@@ -1,0 +1,13 @@
+# Trying the production stack on your own computer with a real mail account instead of Mailpit:
+#   docker compose -f compose.yaml -f compose.try-smtp.yaml up -d --build
+# with HOURFORGE_DOMAIN=localhost in .env (links then open https://localhost) and the mail settings in ../.env.smtp
+# (copy ../.env.smtp.example). Only MAIL_ALLOWED_RECIPIENTS receive mail. Use instead of compose.try-locally.yaml,
+# not together with it. Never use this file on a server.
+services:
+  backend:
+    env_file:
+      - path: ../.env.smtp
+        required: true
+    environment:
+      # "smtp" refuses to start without MAIL_ALLOWED_RECIPIENTS and always uses STARTTLS with authentication.
+      SPRING_PROFILES_ACTIVE: prod,smtp

@@ -69,7 +69,7 @@ people:
 | `DB_PASSWORD`, `MIGRATION_DB_PASSWORD`, `POSTGRES_PASSWORD` | `.env` | Application, migration and administrator accounts of PostgreSQL. |
 | `BACKUP_PASSWORD`, `BACKUP_REPOSITORY` | `.env` | Encryption of the backups and where they go. |
 | `BACKEND_MEMORY`, `POSTGRES_MEMORY` … | `.env` | Container limits; defaults fit a 4 GB server. |
-| `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`, `MAIL_STARTTLS`, `MAIL_FROM` | `backend.env` | Required. |
+| `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`, `MAIL_STARTTLS`, `MAIL_FROM` | `backend.env` | Required. Port 587 with `MAIL_STARTTLS=true`; steps and DNS records in [e-mail deliverability](email-deliverability.md#smtp-settings). |
 | `TWO_FACTOR_ENCRYPTION_KEY`, `TWO_FACTOR_ENCRYPTION_KEY_VERSION` | `backend.env` | Without a key, two-step sign-in cannot be turned on. |
 | `OPERATOR_EMAILS` | `backend.env` | Comma-separated confirmed addresses allowed into `/operator`. |
 | `JIRA_INTEGRATION_ENABLED`, `JIRA_*` | `backend.env` | Optional, off by default. |
