@@ -23,12 +23,19 @@ public class MailConfig {
 
     @Bean
     MailTransport smtpMailTransport(ObjectProvider<JavaMailSender> mailSender, @Value("${app.mail.from}") String from,
-                                    @Value("${spring.mail.host:}") String host) {
+                                    @Value("${spring.mail.host:}") String host,
+                                    @Value("${app.mail.allowed-recipients:}") String allowedRecipients,
+                                    @Value("${app.mail.require-allowed-recipients:false}") boolean requireAllowedRecipients) {
+        if (requireAllowedRecipients && allowedRecipients.isBlank()) {
+            throw new IllegalStateException("Set MAIL_ALLOWED_RECIPIENTS to the address(es) that may receive test mail, "
+                    + "so older messages in the local outbox do not go out through a real mail server.");
+        }
         var sender = mailSender.getIfAvailable();
         if (sender == null || host.isBlank()) {
             throw new IllegalStateException("A mail server is required. Set SPRING_MAIL_HOST (and SPRING_MAIL_PORT); "
                     + "for local development start Mailpit with Docker Compose and use localhost:1025.");
         }
-        return new SmtpEmailSender(sender, from);
+        var smtp = new SmtpEmailSender(sender, from);
+        return allowedRecipients.isBlank() ? smtp : new AllowedRecipientsTransport(smtp, allowedRecipients);
     }
 }

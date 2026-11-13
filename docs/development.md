@@ -47,6 +47,69 @@ npm run dev
 Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://localhost:8080`; set `BACKEND_URL` to use another address.
 Register an account and read the confirmation e-mail in Mailpit.
 
+## Real e-mail instead of Mailpit
+
+Mailpit stays the default, and the tests never use a real server. To see real confirmation and reset messages in your
+own mailbox, switch the API to the `smtp` profile. It sends through your mail account, always over STARTTLS with a
+checked certificate, and only to the addresses you list.
+
+1. Copy the example and fill in the password and the address that may receive test mail. `.env.smtp` sits next to
+   `.env` in the repository root and stays out of Git (`git check-ignore -v .env.smtp` names the rule):
+
+   ```bash
+   cp .env.smtp.example .env.smtp
+   chmod 600 .env.smtp
+   ```
+
+   Then open `.env.smtp` in your editor and set `SPRING_MAIL_PASSWORD` and `MAIL_ALLOWED_RECIPIENTS`.
+   `MAIL_ALLOWED_RECIPIENTS` is required. Mail to any other address, including older test registrations still waiting
+   in the local outbox, never reaches the real server. It stays in the outbox like undelivered mail: switch back to
+   Mailpit within about two hours and it arrives there, later it is marked failed.
+
+2. Start the database and Mailpit as above, then start the API with the profile. The variables named after `env -u`
+   might still be exported in your shell, and an exported variable would win over `.env.smtp`:
+
+   ```bash
+   cd backend
+   env -u SPRING_MAIL_HOST -u SPRING_MAIL_PORT -u SPRING_MAIL_USERNAME -u SPRING_MAIL_PASSWORD -u MAIL_STARTTLS -u MAIL_FROM -u MAIL_ALLOWED_RECIPIENTS SPRING_PROFILES_ACTIVE=smtp ./mvnw spring-boot:run
+   ```
+
+   Start the web app with `npm run dev` and open <http://localhost:5173>. The links in the messages use `FRONTEND_URL` from
+   `.env` (`http://localhost:5173`).
+
+3. To go back to Mailpit, stop the API and start it the usual way, without `SPRING_PROFILES_ACTIVE=smtp`.
+
+**Check the log and the outbox.** Each failed attempt logs `E-mail delivery failed` with the subject and the error
+type, never the address. `RecipientNotAllowedException` means the address is not listed, `MailAuthenticationException`
+a wrong login or password, and `MailSendException` no connection, no STARTTLS or a certificate for another host name.
+The outbox is a table, and a sent message disappears from it:
+
+```bash
+docker compose exec postgres psql -U postgres -d hourforge -c "select recipient, subject, status, attempts, last_error, next_attempt_at from outgoing_emails order by created_at"
+```
+
+Run this from the repository root, where `.env` sets `COMPOSE_FILE`. To drop the old test messages that are still
+waiting, run `delete from outgoing_emails where status = 'PENDING'` the same way.
+
+**Test the flows** with an address from `MAIL_ALLOWED_RECIPIENTS`:
+
+1. Register at <http://localhost:5173/register>. The message "Potwierdź adres e-mail w HourForge" arrives within a few
+   seconds. Its link opens `http://localhost:5173/verify-email/…` and confirms the account.
+2. Sign out, choose "Nie pamiętasz hasła?" (<http://localhost:5173/forgot-password>) and enter the same address. The message "Reset hasła w HourForge" links to
+   `http://localhost:5173/reset-password/…`. Set a new password and sign in with it. The same link does not work twice.
+3. In the received message, "Show original" (Gmail) or the headers should show `SPF: PASS`, `DKIM: PASS` and
+   `DMARC: PASS` for the sender's domain.
+
+**The whole production stack** (Caddy, `https://localhost`) can use the same `.env.smtp` instead of Mailpit. In
+`deploy/`, with `HOURFORGE_DOMAIN=localhost` in `.env` and a filled-in `backend.env`, run:
+
+```bash
+docker compose -f compose.yaml -f compose.try-smtp.yaml up -d --build
+```
+
+The links then open `https://localhost`. Check with `docker compose logs backend` and switch back with
+`compose.try-locally.yaml` instead of `compose.try-smtp.yaml`.
+
 ## Optional integrations
 
 Jira, sign-in with Google, the bot check and two-step sign-in stay off until you set their variables. The names and
