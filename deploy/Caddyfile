@@ -28,6 +28,30 @@
 		reverse_proxy backend:8080
 	}
 
+	# For search engines: everything outside the API may be crawled, and the public pages are listed for this address.
+	handle /robots.txt {
+		header Content-Type "text/plain; charset=utf-8"
+		respond <<TXT
+			User-agent: *
+			Disallow: /api/
+			Sitemap: https://{$HOURFORGE_DOMAIN}/sitemap.xml
+			TXT 200
+	}
+
+	handle /sitemap.xml {
+		header Content-Type "application/xml; charset=utf-8"
+		respond <<XML
+			<?xml version="1.0" encoding="UTF-8"?>
+			<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+			  <url><loc>https://{$HOURFORGE_DOMAIN}/login</loc></url>
+			  <url><loc>https://{$HOURFORGE_DOMAIN}/register</loc></url>
+			  <url><loc>https://{$HOURFORGE_DOMAIN}/privacy</loc></url>
+			  <url><loc>https://{$HOURFORGE_DOMAIN}/terms</loc></url>
+			  <url><loc>https://{$HOURFORGE_DOMAIN}/subprocessors</loc></url>
+			</urlset>
+			XML 200
+	}
+
 	handle {
 		request_body {
 			max_size 1MB
