@@ -26,11 +26,11 @@ class RegistrationTransactionIT extends IntegrationTestSupport {
     private static final String PASSWORD = "Valid-password-2026!";
     private final String email = UUID.randomUUID() + "@registration.test";
     @Autowired RegistrationService registration;
-    @Autowired UserRepository users;
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager transactionManager;
+    @Autowired PasswordEncoder encoder;
+    @MockitoSpyBean UserRepository users;
     @MockitoSpyBean UserCredentialRepository credentials;
-    @MockitoSpyBean PasswordEncoder encoder;
 
     @AfterEach void cleanup() {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
@@ -49,12 +49,15 @@ class RegistrationTransactionIT extends IntegrationTestSupport {
     }
 
     @Test void concurrentCaseVariantsCreateOneCompleteAccountAndReturnOneConflict() throws Exception {
-        var ready = new CountDownLatch(2);
+        // Both registrations must find the address free before either inserts; otherwise the later one sees the new account
+        // and gets the neutral 201 meant for a taken address, which is correct but not the race this test checks.
+        var bothLookedUp = new CountDownLatch(2);
         doAnswer(call -> {
-            ready.countDown();
-            if (!ready.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("Registration barrier timeout");
-            return call.callRealMethod();
-        }).when(encoder).encode(PASSWORD);
+            var found = call.callRealMethod();
+            bothLookedUp.countDown();
+            if (!bothLookedUp.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("Registration barrier timeout");
+            return found;
+        }).when(users).findByNormalizedEmail(any());
         try (var executor = Executors.newFixedThreadPool(2)) {
             var futures = List.of(email, email.toUpperCase(java.util.Locale.ROOT)).stream().map(address -> executor.submit(() -> {
                 try { registration.register(new RegistrationRequest("User", address, PASSWORD, null)); return 201; }
