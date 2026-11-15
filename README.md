@@ -9,7 +9,7 @@ Time tracking for small teams. Start a timer or add hours by hand, describe the 
 [![CI](https://github.com/macieserafin/hour-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/macieserafin/hour-forge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[Run it yourself](docs/self-hosting.md) · [Develop](docs/development.md) · [Report a bug](https://github.com/macieserafin/hour-forge/issues/new?template=bug_report.md) · [Request a feature](https://github.com/macieserafin/hour-forge/issues/new?template=feature_request.md)
+**[Try it at hourforge.pl](https://hourforge.pl)** · [Run it yourself](docs/self-hosting.md) · [Develop](docs/development.md) · [Report a bug](https://github.com/macieserafin/hour-forge/issues/new?template=bug_report.md) · [Request a feature](https://github.com/macieserafin/hour-forge/issues/new?template=feature_request.md)
 
 </div>
 
@@ -43,8 +43,8 @@ What you get:
 - **Jira Cloud** (optional). Each person connects their own Jira account and links time entries to issues.
 - **An operator panel** for the person who runs the instance.
 
-You host HourForge on your own server. Everything runs in containers: HTTPS, web app, API, PostgreSQL and encrypted
-backups.
+Use the free public instance at [hourforge.pl](https://hourforge.pl), or host HourForge on your own server. Everything
+runs in containers: HTTPS, web app, API, PostgreSQL and encrypted backups.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
