@@ -1,5 +1,6 @@
 # Quality gates for every pull request and every push to main. A push to main also publishes the images to GHCR,
-# tagged with the commit SHA. Deployment stays manual (docs/operations/deploy.md).
+# tagged with the commit SHA, and the test counts to GitHub Pages (test-stats.json). Deployment stays manual
+# (docs/operations/deploy.md).
 name: CI
 
 on:
@@ -41,6 +42,14 @@ jobs:
         with:
           name: sbom-backend
           path: backend/target/bom.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: test-report-backend
+          path: |
+            backend/target/surefire-reports/TEST-*.xml
+            backend/target/failsafe-reports/TEST-*.xml
+          if-no-files-found: error
+          retention-days: 1
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
@@ -65,7 +74,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
+      - run: npm test -- --reporter=default --reporter=json --outputFile.json=test-stats/vitest.json
       - run: npm run build
       - name: Known vulnerabilities in production dependencies (High and Critical)
         run: npm audit --omit=dev --audit-level=high
@@ -75,6 +84,12 @@ jobs:
         with:
           name: sbom-frontend
           path: frontend/bom.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: test-report-vitest
+          path: frontend/test-stats/vitest.json
+          if-no-files-found: error
+          retention-days: 1
 
   e2e:
     name: End-to-end (desktop)
@@ -94,8 +109,16 @@ jobs:
       - run: npm ci
         working-directory: frontend
       # The suite starts its own PostgreSQL, Mailpit and backend (tests/support/global-setup.ts).
-      - run: npm run test:e2e -- --project=desktop
+      - run: npm run test:e2e -- --project=desktop --reporter=list,json
         working-directory: frontend
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: test-stats/playwright.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: test-report-playwright
+          path: frontend/test-stats/playwright.json
+          if-no-files-found: error
+          retention-days: 1
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
@@ -190,3 +213,41 @@ jobs:
             docker tag "hourforge-$name:ci" "$registry/hourforge-$name:$GITHUB_SHA"
             docker push "$registry/hourforge-$name:$GITHUB_SHA"
           done
+
+  # Test counts from the reports of this run, so nothing is typed by hand. Built on every run to check the reports;
+  # published only from main.
+  test-stats:
+    name: Test counts
+    needs: [backend, frontend, e2e]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: test-report-*
+          merge-multiple: true
+          path: reports
+      - run: python3 .github/scripts/test-stats.py reports "$GITHUB_SHA" site/test-stats.json
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  # https://<owner>.github.io/hour-forge/test-stats.json: public, no token, and GitHub Pages sends
+  # Access-Control-Allow-Origin: *, so other sites can read it from the browser.
+  pages:
+    name: Publish test counts
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test-stats]
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}test-stats.json
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5
