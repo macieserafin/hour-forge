@@ -143,14 +143,14 @@ After a green run on `main`, CI publishes the test counts of that run to
 
 ```json
 {
-  "generatedAt": "2026-11-26T17:44:48Z",
-  "commit": "a22e385",
-  "backend": { "total": 1037, "unit": 227, "integration": 810 },
-  "frontend": { "vitest": 640, "playwright": 95 }
+  "generatedAt": "2026-11-26T17:52:15Z",
+  "commit": "276b210",
+  "backend": { "total": 1070, "unit": 243, "integration": 827 },
+  "frontend": { "vitest": 207, "playwright": 6 }
 }
 ```
 
-The numbers above are only an example. Each one counts the tests that ran, skipped ones included: `unit` from the
+The numbers above come from one run and go out of date. Each one counts the tests that ran, skipped ones included: `unit` from the
 Surefire reports (`*Test`), `integration` from Failsafe (`*IT`), `vitest` from the Vitest JSON report and `playwright`
 from the desktop end-to-end run. `.github/scripts/test-stats.py` builds the file and stops when a report is missing.
 
