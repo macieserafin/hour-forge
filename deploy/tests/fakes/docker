@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Fake docker for deploy-test.sh: records every call in $FAKE_DIR/calls and answers from files in $FAKE_DIR.
+#   backup-fails   "compose run backup once" fails
+#   pull-fails     "compose pull" fails
+#   unhealthy      a SHA: containers running an image with it report "unhealthy"
+#   monitoring     the prometheus service is running
+# "compose up" remembers the image tags of .env (in the current directory) as the running images.
+set -euo pipefail
+echo "docker $*" >> "$FAKE_DIR/calls"
+
+case "$1" in
+compose)
+    shift
+    args=()
+    while (($#)); do
+        case "$1" in
+        --profile) shift 2 ;;
+        *) args+=("$1"); shift ;;
+        esac
+    done
+    set -- "${args[@]}"
+    case "$1" in
+    run)
+        if [[ " $* " == *" once "* ]]; then
+            if [[ -e $FAKE_DIR/backup-fails ]]; then
+                echo "backup: FAILED: pg_dump or restic did not finish" >&2
+                exit 1
+            fi
+            echo "2026-01-01T00:00:00Z backup: snapshot 4f3e2d1c done in 1s, dump 42 bytes"
+            exit 0
+        fi
+        if [[ " $* " == *" validate "* ]]; then
+            if grep -q INVALID Caddyfile; then exit 1; fi
+            exit 0
+        fi
+        ;;
+    pull) [[ ! -e $FAKE_DIR/pull-fails ]] ;;
+    up) grep -E '^(BACKEND|FRONTEND|BACKUP)_IMAGE=' .env > "$FAKE_DIR/running" || true ;;
+    ps) printf '%s\n' c-backend c-frontend c-backup c-caddy c-postgres ;;
+    esac
+    ;;
+inspect)
+    # One line per container in the format deploy.sh asks for: service|status|health|image.
+    for service in backend frontend backup caddy postgres; do
+        key="$(tr '[:lower:]' '[:upper:]' <<< "$service")_IMAGE"
+        image=$(grep -E "^$key=" "$FAKE_DIR/running" 2> /dev/null | cut -d= -f2- || true)
+        health=healthy
+        if [[ -e $FAKE_DIR/unhealthy && -n $image && $image == *"$(cat "$FAKE_DIR/unhealthy")"* ]]; then
+            health=unhealthy
+        fi
+        if [[ $service == backup ]]; then health=""; fi
+        echo "$service|running|$health|${image:-$service:local}"
+    done
+    ;;
+ps)
+    # "docker ps -q --filter label=com.docker.compose.service=<name>": every service of the stack runs, prometheus only
+    # with the monitoring profile.
+    if [[ " $* " == *"service=prometheus "* ]]; then
+        if [[ -e $FAKE_DIR/monitoring ]]; then echo c-prometheus; fi
+    else
+        echo c-running
+    fi
+    ;;
+esac

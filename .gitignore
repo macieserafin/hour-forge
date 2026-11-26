@@ -4,3 +4,7 @@
 !.env.example
 !.env.smtp.example
 **/.DS_Store
+
+# Local agent instructions
+/CLAUDE.md
+/AGENTS.md

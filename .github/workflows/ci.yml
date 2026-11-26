@@ -152,6 +152,12 @@ jobs:
           check-config /c/alertmanager.yml.example
       - name: Workflows
         run: docker run --rm -v "$PWD:/repo:ro" -w /repo rhysd/actionlint:1.7.12 -color
+      - name: Shell scripts
+        run: >
+          git ls-files -z '*.sh' deploy/tests/fakes | xargs -0
+          docker run --rm -v "$PWD:/repo:ro" -w /repo koalaman/shellcheck:v0.11.0
+      - name: Deployment script (fake docker and curl)
+        run: bash deploy/tests/deploy-test.sh
 
   images:
     name: Images (scan, publish from main)
