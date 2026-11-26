@@ -138,6 +138,22 @@ npm run test:e2e -- --project=desktop tests/e2e/flows.spec.ts
 CI runs the same checks on every pull request, plus a scan of dependencies, secrets and container images. See
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
 
+After a green run on `main`, CI publishes the test counts of that run to
+<https://macieserafin.github.io/hour-forge/test-stats.json> (GitHub Pages, readable from any site):
+
+```json
+{
+  "generatedAt": "2026-11-26T17:44:48Z",
+  "commit": "a22e385",
+  "backend": { "total": 1037, "unit": 227, "integration": 810 },
+  "frontend": { "vitest": 640, "playwright": 95 }
+}
+```
+
+The numbers above are only an example. Each one counts the tests that ran, skipped ones included: `unit` from the
+Surefire reports (`*Test`), `integration` from Failsafe (`*IT`), `vitest` from the Vitest JSON report and `playwright`
+from the desktop end-to-end run. `.github/scripts/test-stats.py` builds the file and stops when a report is missing.
+
 Write tests for observable behavior: results, errors, limits and permissions. Reproduce a bug in a test before you fix
 it. Tests that need a database use PostgreSQL, not an in-memory substitute.
 
