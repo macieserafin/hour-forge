@@ -62,3 +62,39 @@ tests:
             exp_annotations:
               summary: More than 5% of API requests end with a server error.
               description: Look for "level":"ERROR" lines in the backend log; each has a requestId that the proxy log shares.
+
+  - interval: 1m
+    input_series:
+      - series: 'hourforge_deploy_failed{job="node"}'
+        values: '0 0 1 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: DeploymentFailed
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: DeploymentFailed
+        exp_alerts:
+          - exp_labels: {severity: critical, job: node}
+            exp_annotations:
+              summary: The last deployment failed and was rolled back.
+              description: See "journalctl -u hourforge-auto-deploy" and docs/operations/deploy.md. The commit is not tried again by itself.
+
+  - interval: 1m
+    input_series:
+      # A green commit waits from t=600 s on; before that nothing waits.
+      - series: 'hourforge_deploy_pending_since_timestamp_seconds{job="node"}'
+        values: '0x9 600x60'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: DeploymentWaiting
+        exp_alerts: []
+      - eval_time: 39m
+        alertname: DeploymentWaiting
+        exp_alerts: []
+      - eval_time: 42m
+        alertname: DeploymentWaiting
+        exp_alerts:
+          - exp_labels: {severity: warning, job: node}
+            exp_annotations:
+              summary: A commit that passed CI has not been deployed for more than 30 minutes.
+              description: See "journalctl -u hourforge-auto-deploy" for what it waits for.

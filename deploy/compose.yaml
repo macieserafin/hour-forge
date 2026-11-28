@@ -231,6 +231,8 @@ services:
     command:
       - --path.rootfs=/host
       - --collector.textfile.directory=/backup-status
+      # Written by auto-deploy.sh on a server that uses it; without it the directory simply does not exist.
+      - --collector.textfile.directory=/host/var/lib/hourforge-metrics
     volumes:
       - /:/host:ro,rslave
       - backup_status:/backup-status:ro

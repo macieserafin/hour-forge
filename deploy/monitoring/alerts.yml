@@ -56,6 +56,22 @@ groups:
         annotations:
           summary: The backup service has never reported a successful backup.
 
+      - alert: DeploymentFailed
+        expr: hourforge_deploy_failed == 1
+        labels: {severity: critical}
+        annotations:
+          summary: The last deployment failed and was rolled back.
+          description: See "journalctl -u hourforge-auto-deploy" and docs/operations/deploy.md. The commit is not tried again by itself.
+
+      - alert: DeploymentWaiting
+        expr: |
+          time() - hourforge_deploy_pending_since_timestamp_seconds > 30 * 60
+          and hourforge_deploy_pending_since_timestamp_seconds > 0
+        labels: {severity: warning}
+        annotations:
+          summary: A commit that passed CI has not been deployed for more than 30 minutes.
+          description: See "journalctl -u hourforge-auto-deploy" for what it waits for.
+
       - alert: MailNotDelivered
         expr: hourforge_mail_outbox{status="failed"} > 0
         labels: {severity: warning}

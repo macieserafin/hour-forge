@@ -4,11 +4,19 @@
 #   pull-fails     "compose pull" fails
 #   unhealthy      a SHA: containers running an image with it report "unhealthy"
 #   monitoring     the prometheus service is running
+#   missing-image  an image reference (or a part of it) that "manifest inspect" does not find
 # "compose up" remembers the image tags of .env (in the current directory) as the running images.
 set -euo pipefail
 echo "docker $*" >> "$FAKE_DIR/calls"
 
 case "$1" in
+manifest)
+    if [[ -e $FAKE_DIR/missing-image && "$*" == *"$(cat "$FAKE_DIR/missing-image")"* ]]; then
+        echo "manifest unknown" >&2
+        exit 1
+    fi
+    echo '{}'
+    ;;
 compose)
     shift
     args=()

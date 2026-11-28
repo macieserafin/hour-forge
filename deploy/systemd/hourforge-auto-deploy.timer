@@ -1,0 +1,11 @@
+[Unit]
+Description=HourForge: look for a new version of main
+
+[Timer]
+OnBootSec=3min
+# Counted from the end of the previous run, so a long deployment is never followed at once by the next one.
+OnUnitInactiveSec=150s
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target

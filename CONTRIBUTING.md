@@ -35,7 +35,7 @@ A maintainer reviews each pull request. CI must pass before merge.
 | `frontend` | `npm run lint`, `npm run typecheck`, `npm test` and `npm run build` in `frontend` |
 | User flows | `npm run test:e2e -- --project=desktop <file>` for the flows you changed |
 | Database schema | A new Flyway migration; never edit one that is already on `main` |
-| `deploy`, `docs` | Check that commands and links still work |
+| `deploy`, `docs` | Check that commands and links still work; `bash deploy/tests/deploy-test.sh` and `bash deploy/tests/auto-deploy-test.sh` (Linux) |
 
 Do not weaken a test, a validation or a security setting to get a green result. If you think a check is wrong, say so
 in the pull request.

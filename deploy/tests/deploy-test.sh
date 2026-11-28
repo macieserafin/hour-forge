@@ -132,6 +132,8 @@ test_stops_when_the_backup_fails() {
     assert_eq "$(env_value BACKEND_IMAGE)" "ghcr.io/example/hourforge-backend:$C1" "BACKEND_IMAGE"
     assert_not_contains "$(calls)" "pull"
     assert_not_contains "$(calls)" "up -d"
+    # Recorded, so that auto-deploy.sh does not try this commit again.
+    assert_contains "$(cat "$DEPLOY_STATE_DIR/history.log")" "failed $C2 none"
 }
 
 test_stops_on_an_invalid_caddyfile() {

@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
-# Fake curl for deploy-test.sh: records the call; fails like "curl -f" on an error status when $FAKE_DIR/http-fails exists.
+# Fake curl for the deployment tests: records the call; fails like "curl -f" on an error status when
+# $FAKE_DIR/http-fails exists. A request to the GitHub API answers with $FAKE_DIR/api.json, and fails when
+# $FAKE_DIR/api-down exists.
 set -euo pipefail
 echo "curl $*" >> "$FAKE_DIR/calls"
+if [[ "$*" == *https://api.github.com/* ]]; then
+    if [[ -e $FAKE_DIR/api-down ]]; then exit 22; fi
+    cat "$FAKE_DIR/api.json"
+    exit 0
+fi
 if [[ -e $FAKE_DIR/http-fails ]]; then exit 22; fi
