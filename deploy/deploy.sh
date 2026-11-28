@@ -220,6 +220,7 @@ main() {
     local backup_output
     if ! backup_output=$(compose run --rm -T backup once 2>&1); then
         printf '%s\n' "$backup_output"
+        record failed
         die "the backup failed; nothing was changed"
     fi
     printf '%s\n' "$backup_output"

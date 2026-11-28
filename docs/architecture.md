@@ -80,5 +80,7 @@ the commands.
 ## Delivery
 
 GitHub Actions builds, tests and scans every change, then publishes images to GHCR tagged with the commit SHA when a
-change reaches `main`. Deployment stays manual and follows [Deploying a new version](operations/deploy.md).
+change reaches `main`. The production server checks for a new commit of `main` every few minutes and deploys it once
+its CI run has passed ([Deploying a new version](operations/deploy.md)); GitHub holds no key to the server, so merging a
+pull request into `main` is a deployment.
 Dependabot proposes dependency updates every week.

@@ -1,6 +1,7 @@
 # Quality gates for every pull request and every push to main. A push to main also publishes the images to GHCR,
-# tagged with the commit SHA, and the test counts to GitHub Pages (test-stats.json). Deployment stays manual
-# (docs/operations/deploy.md).
+# tagged with the commit SHA, and the test counts to GitHub Pages (test-stats.json). The production server deploys a
+# commit of main by itself once this workflow passed for it (deploy/auto-deploy.sh, docs/operations/deploy.md); GitHub
+# has no access to the server.
 name: CI
 
 on:
@@ -181,6 +182,8 @@ jobs:
           docker run --rm -v "$PWD:/repo:ro" -w /repo koalaman/shellcheck:v0.11.0
       - name: Deployment script (fake docker and curl)
         run: bash deploy/tests/deploy-test.sh
+      - name: Automatic deployment (fake curl, docker and deploy.sh)
+        run: bash deploy/tests/auto-deploy-test.sh
 
   images:
     name: Images (scan, publish from main)

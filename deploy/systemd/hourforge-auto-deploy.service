@@ -1,0 +1,17 @@
+# Deploys the newest green commit of main (../auto-deploy.sh). Installing and switching on:
+# docs/operations/deploy.md. The path assumes the repository in /opt/hourforge.
+[Unit]
+Description=HourForge: deploy the newest green commit of main
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Docker keeps its registry sign-in under the home directory.
+Environment=HOME=/root
+ExecStart=/opt/hourforge/deploy/auto-deploy.sh
+# A deployment that hangs is interrupted, and deploy.sh then has time to roll back.
+TimeoutStartSec=30min
+TimeoutStopSec=15min
+KillMode=mixed

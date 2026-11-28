@@ -27,6 +27,8 @@ The optional `monitoring` profile adds Prometheus, Alertmanager and node-exporte
 | `DiskSpaceLow` / `DiskSpaceCritical` | Less than 15% / 5% free on a disk of the server. |
 | `BackupTooOld` / `BackupStatusMissing` | No successful backup for 13 hours / never. |
 | `MailNotDelivered` / `MailBacklog` | E-mails failed after all attempts / more than 50 waiting for 30 minutes. |
+| `DeploymentFailed` | The last deployment failed and was rolled back ([deploy](deploy.md)). |
+| `DeploymentWaiting` | A commit of `main` passed CI more than 30 minutes ago and is still not deployed. |
 
 To switch it on:
 

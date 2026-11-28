@@ -39,6 +39,44 @@ to `history.log` in the same directory and prints the previous commit, which is 
 Running it again for the same commit is safe. The tests of the script (`bash deploy/tests/deploy-test.sh`, run in CI)
 use fake `docker` and `curl` commands.
 
+## Automatically after every green commit of `main`
+
+The server can deploy by itself: a systemd timer runs `deploy/auto-deploy.sh` every two and a half minutes. It fetches
+`main` and, when its newest commit is new, asks the public GitHub API (no token) whether the `CI` run of that push
+passed and checks that the three images of the commit are in GHCR. Then it runs `deploy.sh` with that commit. GitHub
+never connects to the server, so no key, port or secret of the server is on GitHub.
+
+- Only the newest commit of `main` is deployed; commits merged in between may be skipped.
+- CI still running: it waits and asks again on the next run. CI failed: the commit is never deployed.
+- Every commit is tried once. When `deploy.sh` fails (and rolls back), the commit is recorded in `history.log` and not
+  tried again: the next newer commit is, or you deploy by hand. A rollback made by hand stays until a newer commit
+  arrives.
+- From the moment it is switched on, **merging a pull request into `main` deploys it to production**. The checks in CI
+  and reading the diff before merging are the only gate.
+
+Install it once (as root, repository in `/opt/hourforge`):
+
+```bash
+sudo install -m 644 /opt/hourforge/deploy/systemd/hourforge-auto-deploy.service \
+  /opt/hourforge/deploy/systemd/hourforge-auto-deploy.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now hourforge-auto-deploy.timer
+```
+
+It deploys nothing until the switch file exists:
+
+```bash
+sudo install -d -m 755 /etc/hourforge
+sudo touch /etc/hourforge/auto-deploy.enabled   # on
+sudo rm /etc/hourforge/auto-deploy.enabled      # off: nothing new is deployed, no change in the repository needed
+```
+
+What it did and why it waits: `journalctl -u hourforge-auto-deploy`. When a commit changes the unit files, install them
+again with the commands above. The script also writes `/var/lib/hourforge-metrics/deploy.prom` (last successful
+deployment, the deployed commit, a failed deployment, a green commit that waits); with the monitoring profile
+node-exporter reads it and the alerts `DeploymentFailed` and `DeploymentWaiting` send an e-mail
+([monitoring](monitoring.md)).
+
 ## By hand (when the script cannot be used)
 
 Run in `deploy/`:
