@@ -51,13 +51,15 @@ class RegistrationTransactionIT extends IntegrationTestSupport {
     @Test void concurrentCaseVariantsCreateOneCompleteAccountAndReturnOneConflict() throws Exception {
         // Both registrations must find the address free before either inserts; otherwise the later one sees the new account
         // and gets the neutral 201 meant for a taken address, which is correct but not the race this test checks.
+        // The spy only delegates to the repository proxy, so the barrier must stub the method the service calls on it:
+        // the default findByEmailIgnoreCase runs on the proxy and its inner findByNormalizedEmail call never reaches the spy.
         var bothLookedUp = new CountDownLatch(2);
         doAnswer(call -> {
             var found = call.callRealMethod();
             bothLookedUp.countDown();
             if (!bothLookedUp.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("Registration barrier timeout");
             return found;
-        }).when(users).findByNormalizedEmail(any());
+        }).when(users).findByEmailIgnoreCase(any());
         try (var executor = Executors.newFixedThreadPool(2)) {
             var futures = List.of(email, email.toUpperCase(java.util.Locale.ROOT)).stream().map(address -> executor.submit(() -> {
                 try { registration.register(new RegistrationRequest("User", address, PASSWORD, null)); return 201; }
@@ -66,6 +68,7 @@ class RegistrationTransactionIT extends IntegrationTestSupport {
             assertThat(List.of(futures.get(0).get(15, TimeUnit.SECONDS), futures.get(1).get(15, TimeUnit.SECONDS)))
                     .containsExactlyInAnyOrder(201, 409);
         }
+        assertThat(bothLookedUp.getCount()).as("registrations held at the barrier").isZero();
         var user = users.findByEmailIgnoreCase(email).orElseThrow();
         assertThat(encoder.matches(PASSWORD, credentials.findById(user.getId()).orElseThrow().getPasswordHash())).isTrue();
         assertThat(jdbc.queryForObject("select count(*) from users where lower(email) = ?", Long.class, email)).isEqualTo(1L);
